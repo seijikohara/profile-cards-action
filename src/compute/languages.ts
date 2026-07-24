@@ -1,0 +1,47 @@
+/** Language share computation for the Languages card. */
+
+import type { LanguageSlice } from '../model.js';
+
+export interface LanguageShare {
+  readonly name: string;
+  readonly color: string | null;
+  readonly bytes: number;
+  /** Percentage with one decimal; all shares sum to exactly 100.0. */
+  readonly pct: number;
+}
+
+/**
+ * Keep the top `limit` languages and fold the tail into "Other"
+ * (categorical palettes must not run past ~8 hues). Percentages use
+ * largest-remainder rounding so the printed values total 100.0.
+ */
+export function languageShares(slices: readonly LanguageSlice[], limit = 8): LanguageShare[] {
+  const total = slices.reduce((sum, slice) => sum + slice.bytes, 0);
+  if (total === 0) return [];
+
+  const kept = slices.slice(0, limit);
+  const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0);
+  const entries: LanguageSlice[] =
+    otherBytes > 0 ? [...kept, { name: 'Other', color: null, bytes: otherBytes }] : [...kept];
+
+  // Largest-remainder rounding in tenths of a percent.
+  const exact = entries.map((entry) => (entry.bytes / total) * 1000);
+  const floors = exact.map((value) => Math.floor(value));
+  let remainder = 1000 - floors.reduce((sum, value) => sum + value, 0);
+  const order = exact
+    .map((value, index) => ({ index, frac: value - Math.floor(value) }))
+    .toSorted((a, b) => b.frac - a.frac || a.index - b.index);
+  for (const { index } of order) {
+    if (remainder <= 0) break;
+    const floor = floors[index];
+    if (floor !== undefined) {
+      floors[index] = floor + 1;
+      remainder -= 1;
+    }
+  }
+
+  return entries.map((entry, index) => ({
+    ...entry,
+    pct: (floors[index] ?? 0) / 10,
+  }));
+}

@@ -15,7 +15,14 @@
       "files": ["tests/**/*.ts", "**/*.test.ts", "**/*.spec.ts"],
       "rules": {
         "typescript/no-explicit-any": "off",
-        "typescript/no-unnecessary-type-assertion": "off"
+        "typescript/no-unnecessary-type-assertion": "off",
+        "typescript/no-non-null-assertion": "off"
+      }
+    },
+    {
+      "files": ["scripts/**"],
+      "rules": {
+        "no-console": "off"
       }
     }
   ]

@@ -1,40 +1,77 @@
 /**
- * @fileoverview Entry point for the Profile Cards GitHub Action.
+ * @fileoverview Action entry point.
  *
- * Skeleton stub: it reads a subset of action inputs, echoes the non-secret
- * configuration to the Actions log, and writes empty outputs. Card rendering is
- * not implemented yet; this file exists so the project type-checks, lints, and
- * bundles into dist/index.js.
+ * Read inputs -> fetch the profile via GraphQL -> compute -> resolve fonts ->
+ * render the selected cards (and any badges) -> write to the output directory ->
+ * optionally commit and push -> set outputs.
  */
 
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import * as core from '@actions/core';
+import { renderBadges } from './badges.js';
+import { renderCard } from './cards.js';
+import { computeStreaks } from './compute/streaks.js';
+import { resolveFonts } from './fonts.js';
+import { fetchProfile } from './github/fetch-profile.js';
+import { changedPaths, commitAndPush } from './git.js';
+import { readInputs } from './inputs.js';
+import type { ProfileData } from './model.js';
+import { DARK, LIGHT, type Theme } from './theme.js';
 
-/**
- * Read action inputs, log the resolved configuration, and set placeholder outputs.
- */
-export async function run(): Promise<void> {
-  const githubToken = core.getInput('github-token', { required: true });
+const THEME_BY_ID: Record<'light' | 'dark', Theme> = { light: LIGHT, dark: DARK };
+
+async function run(): Promise<void> {
+  const inputs = readInputs();
   // Mask the token so no later log line can accidentally surface it.
-  core.setSecret(githubToken);
+  core.setSecret(inputs.token);
 
-  const username = core.getInput('username') || process.env['GITHUB_REPOSITORY_OWNER'] || '';
-  const cards = core.getInput('cards');
-  const outputDir = core.getInput('output-dir');
+  const fetched = await fetchProfile(inputs.token, inputs.username);
+  const data: ProfileData = { ...fetched, generatedAt: new Date().toISOString() };
+  const streaks = computeStreaks(data.lifetimeDays);
+  const fontFaceCss = await resolveFonts(inputs.font, inputs.monoFont);
+  const themes = inputs.themeIds.map((id) => THEME_BY_ID[id]);
 
-  core.info(`Rendering profile cards for "${username || '(repository owner)'}"`);
-  core.info(`Requested cards: ${cards}`);
-  core.info(`Output directory: ${outputDir}`);
+  // Relative path -> SVG. Cards first, then badges under `badges/`.
+  const files = new Map<string, string>();
+  for (const theme of themes) {
+    for (const card of inputs.cards) {
+      files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss));
+    }
+  }
+  for (const [name, svg] of renderBadges(inputs.badges, themes)) {
+    files.set(join('badges', name), svg);
+  }
 
-  // Rendering is not implemented yet; report a no-op result so downstream steps
-  // (and the committer) treat this run as "nothing changed".
-  core.setOutput('changed', 'false');
-  core.setOutput('files', '[]');
+  const written: string[] = [];
+  for (const [rel, svg] of files) {
+    const path = join(inputs.outputDir, rel);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, `${svg}\n`, 'utf8');
+    written.push(path);
+  }
+  core.info(
+    `Generated ${written.length} files for @${data.login} in ${inputs.outputDir} ` +
+      `(${inputs.cards.length} cards x ${themes.length} themes, ${inputs.badges.length} badges)`
+  );
+
+  let changed: boolean;
+  if (inputs.commit) {
+    const result = await commitAndPush({
+      dir: inputs.outputDir,
+      message: inputs.commitMessage,
+      token: inputs.token,
+    });
+    changed = result.changed;
+    core.info(result.changed ? `Committed ${result.files.length} changed files` : 'No changes to commit');
+  } else {
+    changed = (await changedPaths(inputs.outputDir)).length > 0;
+  }
+
+  core.setOutput('changed', String(changed));
+  core.setOutput('files', JSON.stringify(written));
 }
 
-// `run` reports its own failures once wired up, but keep a catch here so a stray
-// rejection surfaces as an action failure instead of an unhandled rejection the
-// runner only logs.
 run().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : 'Unknown error occurred';
-  core.setFailed(message);
+  core.setFailed(error instanceof Error ? error.message : String(error));
 });
