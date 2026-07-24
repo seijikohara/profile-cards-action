@@ -1,0 +1,5 @@
+# Packages allowed to run install scripts (pnpm 11 blocks build scripts by default).
+# lefthook's postinstall installs its platform binary, which `prepare` (lefthook
+# install) needs. No other dependency requires a build script.
+allowBuilds:
+  lefthook: true

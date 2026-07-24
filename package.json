@@ -1,0 +1,60 @@
+{
+  "name": "profile-cards-action",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Render GitHub profile README cards (SVG) from the GitHub GraphQL API, configurable via inputs.",
+  "keywords": [
+    "actions",
+    "github",
+    "profile",
+    "readme",
+    "svg"
+  ],
+  "homepage": "https://github.com/seijikohara/profile-cards-action#readme",
+  "bugs": {
+    "url": "https://github.com/seijikohara/profile-cards-action/issues"
+  },
+  "license": "MIT",
+  "author": "Seiji Kohara (https://github.com/seijikohara)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seijikohara/profile-cards-action.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --type-aware",
+    "lint:fix": "oxlint --type-aware --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "pnpm run build && node scripts/generate-licenses.mjs",
+    "prepare": "lefthook install",
+    "deps:update": "taze -w && pnpm install",
+    "deps:check": "taze"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0",
+    "simple-icons": "^16.27.0",
+    "subset-font": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "lefthook": "^2.1.10",
+    "oxfmt": "^0.60.0",
+    "oxlint": "^1.75.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "taze": "^19.16.0",
+    "tsdown": "^0.22.13",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.15.1"
+}

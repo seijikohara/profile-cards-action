@@ -1,0 +1,84 @@
+{
+  // Shared Renovate policy for this seijikohara GitHub Action.
+  // Schema: https://docs.renovatebot.com/renovate-schema.json
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    // Maintainer-recommended superset of config:recommended. Pins GitHub Action
+    // and Docker digests, enables config migration, dev-dependency pinning,
+    // weekly lock file maintenance, and the npm minimum-release-age cooldown.
+    'config:best-practices',
+    // Conventional Commits with a unified `chore(deps): ...` subject.
+    ':semanticCommits',
+    ':semanticCommitTypeAll(chore)',
+    ':semanticCommitScope(deps)',
+    // Keep npm semver ranges (the committed lockfile gives reproducibility); overrides
+    // best-practices dev-dependency pinning. Action digest pinning is unaffected.
+    ':preserveSemverRanges',
+  ],
+  dependencyDashboard: true,
+  timezone: 'Asia/Tokyo',
+  schedule: ['before 9am on monday'],
+  labels: ['dependencies'],
+  // This repository is a JavaScript (Node.js) GitHub Action.
+  enabledManagers: ['npm', 'github-actions'],
+  // Keep update branches rebased on main and merge via rebase once CI passes.
+  rebaseWhen: 'behind-base-branch',
+  platformAutomerge: true,
+  automergeStrategy: 'rebase',
+  // Hold every release for 3 days so a hijacked publish cannot ride automerge on day zero.
+  minimumReleaseAge: '3 days',
+  // Auto-merge the weekly lock file refresh together with regular updates.
+  lockFileMaintenance: { automerge: true },
+  packageRules: [
+    {
+      description: 'Auto-merge non-major updates once CI passes',
+      matchUpdateTypes: ['minor', 'patch', 'pin', 'pinDigest', 'digest'],
+      automerge: true,
+    },
+    {
+      description: 'Hold major updates for manual review via the dependency dashboard',
+      matchUpdateTypes: ['major'],
+      automerge: false,
+      dependencyDashboardApproval: true,
+      addLabels: ['major'],
+    },
+    {
+      description: 'Group and label GitHub Actions updates',
+      matchManagers: ['github-actions'],
+      groupName: 'github-actions',
+      addLabels: ['github-actions'],
+    },
+    {
+      description: 'Group npm dependencies',
+      matchManagers: ['npm'],
+      groupName: 'npm dependencies',
+    },
+    {
+      description: 'Group linting and formatting tools',
+      groupName: 'linting and formatting',
+      matchPackageNames: ['oxlint', 'oxfmt', 'oxlint-tsgolint', '@oxlint/*'],
+    },
+    {
+      description: 'Group the test toolchain',
+      groupName: 'testing',
+      matchPackageNames: ['vitest', '@vitest/*'],
+    },
+    {
+      description: 'Group the build toolchain',
+      groupName: 'build toolchain',
+      matchPackageNames: ['typescript', 'tsdown', 'lefthook', 'taze'],
+    },
+    {
+      description: 'Group TypeScript type definitions',
+      groupName: 'type definitions',
+      matchPackageNames: ['@types/*', '@tsconfig/*'],
+    },
+  ],
+  vulnerabilityAlerts: {
+    description: 'Raise security fixes immediately and require manual review',
+    schedule: ['at any time'],
+    minimumReleaseAge: null,
+    addLabels: ['security'],
+    automerge: false,
+  },
+}

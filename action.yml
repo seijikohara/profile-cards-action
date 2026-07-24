@@ -1,0 +1,54 @@
+name: 'Profile Cards'
+description: 'Render GitHub profile README cards (SVG) from the GitHub API: overview, contribution history, streaks, composition, activity rhythm, and a language treemap.'
+author: 'Seiji Kohara (https://github.com/seijikohara)'
+branding:
+  icon: 'bar-chart-2'
+  color: 'blue'
+inputs:
+  github-token:
+    description: 'Token for the GitHub GraphQL API and, when committing, for pushing generated files.'
+    required: true
+  username:
+    description: 'GitHub login to render. Defaults to the repository owner (GITHUB_REPOSITORY_OWNER).'
+    required: false
+    default: ''
+  cards:
+    description: 'Cards to render (comma/space/newline separated).'
+    required: false
+    default: 'overview,lifetime,contributions,composition,rhythm,languages'
+  output-dir:
+    description: 'Directory to write card SVGs into.'
+    required: false
+    default: 'assets'
+  themes:
+    description: 'Themes to render (comma separated): light, dark.'
+    required: false
+    default: 'light,dark'
+  font:
+    description: 'Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.'
+    required: false
+    default: 'Roboto'
+  mono-font:
+    description: 'Google Fonts monospace family.'
+    required: false
+    default: 'Roboto Mono'
+  badges:
+    description: 'Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to <output-dir>/badges/.'
+    required: false
+    default: ''
+  commit:
+    description: 'Commit changed files back to the repository.'
+    required: false
+    default: 'true'
+  commit-message:
+    description: 'Commit subject used when commit is true.'
+    required: false
+    default: 'chore(profile): refresh generated cards [skip ci]'
+outputs:
+  changed:
+    description: 'Whether any generated file changed ("true"/"false").'
+  files:
+    description: 'JSON array of written file paths.'
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
