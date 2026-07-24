@@ -7,6 +7,9 @@ export default defineConfig({
   dts: false,
   sourcemap: true,
   fixedExtension: false,
+  // Bundled deps (subset-font's Emscripten/harfbuzz wasm loader) reference
+  // CommonJS `__dirname`, which is undefined in the ESM output; inject shims.
+  shims: true,
   deps: {
     alwaysBundle: [/.*/],
   },

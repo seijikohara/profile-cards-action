@@ -1,13 +1,14 @@
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import path, { dirname, join } from "node:path";
 import * as os$1 from "os";
 import os, { EOL } from "os";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import { constants, promises } from "fs";
-import * as path from "path";
+import * as path$1 from "path";
 import * as events from "events";
+import { fileURLToPath } from "node:url";
 import { StringDecoder } from "string_decoder";
 import * as child from "child_process";
 import { setTimeout as setTimeout$1 } from "timers";
@@ -18,6 +19,14 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esmMin = (fn, res, err) => () => {
+	if (err) throw err[0];
+	try {
+		return fn && (res = fn(fn = 0)), res;
+	} catch (e) {
+		throw err = [e], e;
+	}
+};
 var __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod), cb = null), mod.exports);
 var __exportAll = (all, no_symbols) => {
 	let target = {};
@@ -16185,7 +16194,7 @@ function tryGetExecutablePath(filePath, extensions) {
 		}
 		if (stats && stats.isFile()) {
 			if (IS_WINDOWS$1) {
-				const upperExt = path.extname(filePath).toUpperCase();
+				const upperExt = path$1.extname(filePath).toUpperCase();
 				if (extensions.some((validExt) => validExt.toUpperCase() === upperExt)) return filePath;
 			} else if (isUnixExecutable(stats)) return filePath;
 		}
@@ -16201,10 +16210,10 @@ function tryGetExecutablePath(filePath, extensions) {
 			if (stats && stats.isFile()) {
 				if (IS_WINDOWS$1) {
 					try {
-						const directory = path.dirname(filePath);
-						const upperName = path.basename(filePath).toUpperCase();
+						const directory = path$1.dirname(filePath);
+						const upperName = path$1.basename(filePath).toUpperCase();
 						for (const actualName of yield readdir(directory)) if (upperName === actualName.toUpperCase()) {
-							filePath = path.join(directory, actualName);
+							filePath = path$1.join(directory, actualName);
 							break;
 						}
 					} catch (err) {
@@ -16289,21 +16298,21 @@ function findInPath(tool) {
 		if (!tool) throw new Error("parameter 'tool' is required");
 		const extensions = [];
 		if (IS_WINDOWS$1 && process.env["PATHEXT"]) {
-			for (const extension of process.env["PATHEXT"].split(path.delimiter)) if (extension) extensions.push(extension);
+			for (const extension of process.env["PATHEXT"].split(path$1.delimiter)) if (extension) extensions.push(extension);
 		}
 		if (isRooted(tool)) {
 			const filePath = yield tryGetExecutablePath(tool, extensions);
 			if (filePath) return [filePath];
 			return [];
 		}
-		if (tool.includes(path.sep)) return [];
+		if (tool.includes(path$1.sep)) return [];
 		const directories = [];
 		if (process.env.PATH) {
-			for (const p of process.env.PATH.split(path.delimiter)) if (p) directories.push(p);
+			for (const p of process.env.PATH.split(path$1.delimiter)) if (p) directories.push(p);
 		}
 		const matches = [];
 		for (const directory of directories) {
-			const filePath = yield tryGetExecutablePath(path.join(directory, tool), extensions);
+			const filePath = yield tryGetExecutablePath(path$1.join(directory, tool), extensions);
 			if (filePath) matches.push(filePath);
 		}
 		return matches;
@@ -16510,7 +16519,7 @@ var ToolRunner = class extends events.EventEmitter {
 	*/
 	exec() {
 		return __awaiter$3(this, void 0, void 0, function* () {
-			if (!isRooted(this.toolPath) && (this.toolPath.includes("/") || IS_WINDOWS && this.toolPath.includes("\\"))) this.toolPath = path.resolve(process.cwd(), this.options.cwd || process.cwd(), this.toolPath);
+			if (!isRooted(this.toolPath) && (this.toolPath.includes("/") || IS_WINDOWS && this.toolPath.includes("\\"))) this.toolPath = path$1.resolve(process.cwd(), this.options.cwd || process.cwd(), this.toolPath);
 			this.toolPath = yield which(this.toolPath, true);
 			return new Promise((resolve, reject) => __awaiter$3(this, void 0, void 0, function* () {
 				this._debug(`exec tool: ${this.toolPath}`);
@@ -72803,8 +72812,17 @@ var require_lodash = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	}).call(exports);
 }));
 //#endregion
+//#region node_modules/.pnpm/tsdown@0.22.13_typescript@7.0.2/node_modules/tsdown/esm-shims.js
+var getFilename, getDirname, __dirname;
+var init_esm_shims = __esmMin((() => {
+	getFilename = () => fileURLToPath(import.meta.url);
+	getDirname = () => path.dirname(getFilename());
+	__dirname = /* @__PURE__ */ getDirname();
+}));
+//#endregion
 //#region node_modules/.pnpm/wawoff2@2.0.1/node_modules/wawoff2/build/compress_binding.js
 var require_compress_binding = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	init_esm_shims();
 	var Module = typeof Module !== "undefined" ? Module : {};
 	var moduleOverrides = {};
 	var key;
@@ -74156,6 +74174,7 @@ var require_compress = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region node_modules/.pnpm/wawoff2@2.0.1/node_modules/wawoff2/build/decompress_binding.js
 var require_decompress_binding = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	init_esm_shims();
 	var Module = typeof Module !== "undefined" ? Module : {};
 	var moduleOverrides = {};
 	var key;
