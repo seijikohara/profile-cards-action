@@ -1,0 +1,86 @@
+name: Sync release tags
+description: Create the v{version} tag and matching GitHub Release for the current commit, then force v{major} to point at it.
+
+inputs:
+  bot-name:
+    description: Git user name used to author the tag objects.
+    required: true
+  bot-email:
+    description: Git user email used to author the tag objects.
+    required: true
+  github-token:
+    description: 'Token used by the GitHub CLI to publish the Release. Needs `contents: write`.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Sync release tags
+      shell: bash
+      env:
+        BOT_NAME: ${{ inputs.bot-name }}
+        BOT_EMAIL: ${{ inputs.bot-email }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+
+        current_version=$(node -p "require('./package.json').version")
+        current_commit=$(git rev-parse HEAD)
+        version_tag="v${current_version}"
+        # Strip everything from the first dot: for a 0.0.x pre-1.0 line this
+        # yields the moving major tag `v0`.
+        major_tag="v${current_version%%.*}"
+
+        existing_version_commit=""
+        if git rev-parse --verify "refs/tags/${version_tag}" >/dev/null 2>&1; then
+          existing_version_commit=$(git rev-list -n 1 "refs/tags/${version_tag}")
+        fi
+
+        if [[ -n "$existing_version_commit" && "$existing_version_commit" != "$current_commit" ]]; then
+          echo "::error::Release tag ${version_tag} already exists on a different commit (${existing_version_commit})."
+          exit 1
+        fi
+
+        git config --global user.name "$BOT_NAME"
+        git config --global user.email "$BOT_EMAIL"
+
+        # Caller workflows checkout with `persist-credentials: false` to
+        # keep secrets out of .git/config while running PR-controlled
+        # build steps. By the time this composite runs all that PR code is
+        # behind us, so it is safe to swap the origin URL to one that
+        # carries the App token for the tag pushes below.
+        authed_remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+        if [[ -z "$existing_version_commit" ]]; then
+          git tag -a "${version_tag}" "${current_commit}" -m "chore(release): publish ${version_tag}"
+          git push "${authed_remote}" "refs/tags/${version_tag}"
+        fi
+
+        git tag -fa "${major_tag}" "${current_commit}" -m "chore(release): update ${major_tag} to ${version_tag}"
+        git push --force "${authed_remote}" "refs/tags/${major_tag}"
+
+        # Publish a GitHub Release for the patch tag the first time it shows
+        # up. The major tag is intentionally not promoted to a Release: it
+        # is a moving pointer, not a release artifact. The check is idempotent
+        # so re-runs (manual dispatch, retries) don't error.
+        if gh release view "${version_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+          release_status="already existed"
+        else
+          gh release create "${version_tag}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${version_tag}" \
+            --generate-notes
+          release_status="created"
+        fi
+
+        short_sha=$(git rev-parse --short "${current_commit}")
+        {
+          echo "### 📌 Release Tags"
+          echo ""
+          echo "| Tag | Commit SHA |"
+          echo "|-----|------------|"
+          echo "| \`${version_tag}\` | \`${short_sha}\` |"
+          echo "| \`${major_tag}\` | \`${short_sha}\` |"
+          echo ""
+          echo "GitHub Release \`${version_tag}\`: ${release_status}."
+        } >> "$GITHUB_STEP_SUMMARY"

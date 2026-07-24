@@ -1,0 +1,179 @@
+name: Profile Cards Action Test Suite
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/**'
+      - 'action.yml'
+      - 'dist/**'
+      - 'src/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration-test:
+    name: Integration - ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    env:
+      # Written under the workspace (not $RUNNER_TEMP) so the action's git-based
+      # change detection, which runs `git add --intent-to-add <output-dir>`,
+      # stays inside the checked-out work tree.
+      OUT_DIR: .test-output/${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Empty card/theme/font inputs exercise the action's own default
+          # resolution: all six cards, both themes, the bundled Roboto family.
+          - name: defaults
+            cards: ''
+            themes: ''
+            font: ''
+            badges: ''
+            expected: >-
+              overview.light.svg
+              lifetime.light.svg
+              contributions.light.svg
+              composition.light.svg
+              rhythm.light.svg
+              languages.light.svg
+              overview.dark.svg
+          # A card subset rendered with a non-bundled Google font. A successful
+          # run proves the runtime font fetch + subset path works end to end.
+          - name: subset-custom-font
+            cards: 'overview,languages'
+            themes: 'light,dark'
+            font: 'Inter'
+            badges: ''
+            expected: >-
+              overview.light.svg
+              overview.dark.svg
+              languages.light.svg
+              languages.dark.svg
+          # Brand badges written under <output-dir>/badges/. The multiline value
+          # (YAML "\n" escapes) matches the action's newline-separated `badges`
+          # input; names slugify to github / npm / linkedin.
+          - name: badges
+            cards: 'overview'
+            themes: 'light,dark'
+            font: 'Roboto'
+            badges: "GitHub\nnpm\nLinkedIn"
+            expected: >-
+              overview.light.svg
+              overview.dark.svg
+              badges/github.light.svg
+              badges/github.dark.svg
+              badges/npm.light.svg
+              badges/npm.dark.svg
+              badges/linkedin.light.svg
+              badges/linkedin.dark.svg
+    outputs:
+      test-result: ${{ steps.assert.outputs.result }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7 # v7
+
+      - name: Run Profile Cards action
+        id: cards
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          username: seijikohara
+          output-dir: ${{ env.OUT_DIR }}
+          cards: ${{ matrix.cards }}
+          themes: ${{ matrix.themes }}
+          font: ${{ matrix.font }}
+          badges: ${{ matrix.badges }}
+          # Never push during tests; the action only reports whether files
+          # changed and writes them to OUT_DIR.
+          commit: false
+
+      - name: Assert generated SVGs and outputs
+        id: assert
+        env:
+          # Interpolate untrusted-shaped values only through env, never inline
+          # in the script, to avoid shell injection.
+          SCENARIO: ${{ matrix.name }}
+          EXPECTED: ${{ matrix.expected }}
+          CHANGED: ${{ steps.cards.outputs.changed }}
+          FILES: ${{ steps.cards.outputs.files }}
+        run: |
+          set -euo pipefail
+
+          echo "Scenario: $SCENARIO"
+          echo "Output dir: $OUT_DIR"
+          echo "changed output: $CHANGED"
+          echo "files output: $FILES"
+
+          # 1. At least one SVG must have been written to the output dir.
+          mapfile -t svgs < <(find "$OUT_DIR" -type f -name '*.svg' | sort)
+          if [[ ${#svgs[@]} -eq 0 ]]; then
+            echo "::error::No .svg files were written under $OUT_DIR"
+            exit 1
+          fi
+          echo "Rendered ${#svgs[@]} SVG file(s):"
+          printf '  %s\n' "${svgs[@]}"
+
+          # 2. Every scenario-specific file must exist and be non-empty.
+          missing=0
+          for rel in $EXPECTED; do
+            if [[ ! -s "$OUT_DIR/$rel" ]]; then
+              echo "::error::Expected SVG missing or empty: $OUT_DIR/$rel"
+              missing=1
+            fi
+          done
+          [[ "$missing" -eq 0 ]] || exit 1
+
+          # 3. The `changed` output must be a boolean string.
+          case "$CHANGED" in
+            true | false) ;;
+            *)
+              echo "::error::'changed' output is not a boolean: '$CHANGED'"
+              exit 1
+              ;;
+          esac
+
+          # 4. The `files` output must be a non-empty JSON array.
+          if ! printf '%s' "$FILES" | jq -e 'type == "array" and length > 0' >/dev/null; then
+            echo "::error::'files' output is not a non-empty JSON array: $FILES"
+            exit 1
+          fi
+          files_count=$(printf '%s' "$FILES" | jq 'length')
+
+          echo "result=success" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### ✅ ${SCENARIO}"
+            echo ""
+            echo "- SVG files on disk: ${#svgs[@]}"
+            echo "- \`files\` output entries: ${files_count}"
+            echo "- \`changed\` output: \`${CHANGED}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  summarize-tests:
+    name: Summarize Test Results
+    runs-on: ubuntu-latest
+    needs: integration-test
+    # Always run so a failed or skipped matrix leg is converted into an
+    # explicit pass/fail here. Branch protection can then gate on this single
+    # check instead of every matrix leg.
+    if: always()
+    steps:
+      - name: Fail if any integration leg did not succeed
+        # A `skipped` required check is treated as non-failing by branch
+        # protection, so turn any non-success upstream conclusion into an
+        # explicit failure that rulesets respect.
+        if: needs.integration-test.result != 'success'
+        run: |
+          echo "::error::integration-test concluded with '${{ needs.integration-test.result }}'"
+          exit 1
+      - name: Report successful completion
+        run: |
+          echo "### Profile Cards Action Test Suite" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All integration scenarios passed." >> $GITHUB_STEP_SUMMARY
