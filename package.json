@@ -40,8 +40,7 @@
   "dependencies": {
     "@actions/core": "^3.0.1",
     "@actions/exec": "^3.0.0",
-    "simple-icons": "^16.27.0",
-    "subset-font": "^2.5.0"
+    "simple-icons": "^16.27.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
@@ -49,6 +48,7 @@
     "oxfmt": "^0.60.0",
     "oxlint": "^1.75.0",
     "oxlint-tsgolint": "^7.0.2001",
+    "subset-font": "^2.5.0",
     "taze": "^19.16.0",
     "tsdown": "^0.22.13",
     "typescript": "^7.0.2",

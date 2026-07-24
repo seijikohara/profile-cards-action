@@ -17,9 +17,6 @@ importers:
       simple-icons:
         specifier: ^16.27.0
         version: 16.27.0
-      subset-font:
-        specifier: ^2.5.0
-        version: 2.5.0
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
@@ -36,6 +33,9 @@ importers:
       oxlint-tsgolint:
         specifier: ^7.0.2001
         version: 7.0.2001
+      subset-font:
+        specifier: ^2.5.0
+        version: 2.5.0
       taze:
         specifier: ^19.16.0
         version: 19.16.0

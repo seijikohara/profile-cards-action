@@ -4,10 +4,18 @@
  * Supplies the two `@font-face` families the card renderer references —
  * `CardSans` (weights 200/400/600) and `CardMono` (weight 400) — as Base64
  * woff2 data URIs. The chosen sans and mono families are resolved
- * independently: the bundled default (Roboto / Roboto Mono) reads pre-subset
+ * independently: the bundled default (Roboto / Roboto Mono) reads pre-built
  * constants with no network, while any other family is fetched from Google
- * Fonts, instanced/nearest-matched to each card weight, and subset to the same
- * fixed charset as the defaults.
+ * Fonts and embedded as-is (no subsetting). Google's latin woff2 already covers
+ * the cards' glyph set — printable ASCII plus Latin punctuation; the cards draw
+ * U+2192 (→) as an SVG shape rather than a glyph — so the downloaded file is
+ * embedded verbatim. A remote family takes one of two shapes:
+ *   - Variable (all returned weights share ONE woff2 URL): embed the single
+ *     file once under a weight-range face spanning the available axis; the
+ *     browser clamps each requested card weight into range (nearest-weight
+ *     selection for free, no duplicated payload).
+ *   - Static (distinct woff2 per weight): embed the nearest available weight to
+ *     each card weight under a face declared at that card weight.
  *
  * Empirical Google Fonts CSS2 API findings (probed 2026-07-24, Chrome UA — a
  * modern UA is required or the API serves ttf instead of woff2):
@@ -35,31 +43,9 @@
  *     reliable invalid-family signal.
  *   - The CSS groups all subset blocks per weight; the wanted latin face is the
  *     block preceded by the `/* latin *​/` comment (distinct from `latin-ext`).
- *
- * subset-font never runs in production for the default families (their
- * constants are pre-built by scripts/build-fonts.ts); it runs here only when a
- * non-default family is requested.
  */
 
-import subsetFont from 'subset-font';
 import { ROBOTO_200, ROBOTO_400, ROBOTO_600, ROBOTO_MONO_400 } from './fonts.generated.js';
-
-// `subset-font` ships no types; they are declared ambiently in src/subset-font.d.ts.
-
-// Fixed glyph set — MUST stay byte-identical to scripts/build-fonts.ts so
-// fetched fonts carry the same glyphs as the bundled defaults. Printable ASCII
-// (U+0020–U+007E) plus the Latin punctuation the cards emit. NOTE: the first
-// SYMBOLS character is U+00A0 NO-BREAK SPACE (not a plain space) — do not
-// "clean up" this literal. U+2192 (→) is intentionally excluded — it sits
-// outside Google's "latin" subset, so arrows are drawn as SVG shapes, not
-// glyphs.
-const ASCII = Array.from({ length: 0x7e - 0x20 + 1 }, (_, i) => String.fromCodePoint(0x20 + i)).join('');
-const SYMBOLS = ' ·×–—‘’“”•…−€™';
-const CHARSET = ASCII + SYMBOLS;
-
-// Retain the OFL/Apache name-table records: copyright (0), trademark (7),
-// license description (13), license URL (14).
-const PRESERVE_NAME_IDS: readonly number[] = [0, 7, 13, 14];
 
 // A modern desktop Chrome UA so the API serves woff2 rather than ttf.
 const CHROME_UA =
@@ -93,6 +79,11 @@ export function nearestWeight(available: readonly number[], target: number): num
 /** Build one `@font-face` rule for an alias family at a fixed weight. */
 function face(family: string, weight: number, base64: string): string {
   return `@font-face{font-family:'${family}';font-style:normal;font-weight:${weight};src:url(data:font/woff2;base64,${base64}) format('woff2')}`;
+}
+
+/** Build one `@font-face` rule for an alias family spanning a weight range. */
+function rangeFace(family: string, min: number, max: number, base64: string): string {
+  return `@font-face{font-family:'${family}';font-style:normal;font-weight:${min} ${max};src:url(data:font/woff2;base64,${base64}) format('woff2')}`;
 }
 
 function invalidFontError(name: string): Error {
@@ -135,15 +126,18 @@ async function fetchWoff2(url: string): Promise<Buffer> {
 }
 
 /**
- * Fetch a non-default family and emit one `@font-face` per card weight under
- * the fixed `alias`, each declaring its card weight even when a nearest-weight
- * substitution occurred.
+ * Fetch a non-default family and emit its `@font-face` rules under the fixed
+ * `alias`, embedding Google's latin woff2 verbatim (no subsetting). A variable
+ * family (one woff2 serving every weight) yields a single weight-range face; a
+ * static family (distinct woff2 per weight) yields one face per card weight,
+ * each declared at its card weight and carrying the nearest available weight's
+ * file.
  */
 async function buildRemoteFaces(name: string, alias: string, cardWeights: readonly number[]): Promise<string[]> {
   const faces = parseLatinFaces(await fetchFamilyCss(name));
   if (faces.length === 0) throw invalidFontError(name);
 
-  // First URL per weight, and how many weights share each URL. A URL shared by
+  // First URL per weight, and how many weights share each URL. A URL serving
   // more than one weight is the family's single variable file.
   const weightToUrl = new Map<number, string>();
   const weightsPerUrl = new Map<string, number>();
@@ -152,8 +146,21 @@ async function buildRemoteFaces(name: string, alias: string, cardWeights: readon
     weightsPerUrl.set(url, (weightsPerUrl.get(url) ?? 0) + 1);
   }
   const available = [...weightToUrl.keys()];
+  const isVariable = [...weightsPerUrl.values()].some((count) => count > 1);
 
-  // Download each distinct file at most once (variable fonts reuse one URL).
+  // Variable family: one woff2 serves every weight. Embed it once under a face
+  // spanning the available axis; the browser clamps each requested card weight
+  // into range, giving nearest-weight selection without duplicating the payload.
+  if (isVariable) {
+    const url = faces[0]?.url;
+    if (url === undefined) throw invalidFontError(name); // unreachable: faces is non-empty
+    const base64 = (await fetchWoff2(url)).toString('base64');
+    return [rangeFace(alias, Math.min(...available), Math.max(...available), base64)];
+  }
+
+  // Static family: distinct woff2 per weight. Embed the nearest available weight
+  // to each card weight, declared at the card weight. Cache downloads so a
+  // repeated nearest weight is fetched only once.
   const downloads = new Map<string, Promise<Buffer>>();
   const download = (url: string): Promise<Buffer> => {
     const inFlight = downloads.get(url);
@@ -168,16 +175,8 @@ async function buildRemoteFaces(name: string, alias: string, cardWeights: readon
       const nearest = nearestWeight(available, target);
       const url = weightToUrl.get(nearest);
       if (url === undefined) throw invalidFontError(name); // unreachable: nearest comes from the map
-      const isVariable = (weightsPerUrl.get(url) ?? 0) > 1;
       const source = await download(url);
-      const subset = await subsetFont(source, CHARSET, {
-        targetFormat: 'woff2',
-        preserveNameIds: PRESERVE_NAME_IDS,
-        // Pin a variable font to the (already clamped) nearest weight; leave a
-        // static face untouched — it has no `wght` axis to instance.
-        ...(isVariable ? { variationAxes: { wght: nearest } } : {}),
-      });
-      return face(alias, target, subset.toString('base64'));
+      return face(alias, target, source.toString('base64'));
     })
   );
 }
