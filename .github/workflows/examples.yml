@@ -1,0 +1,108 @@
+name: Examples Gallery
+
+# Refresh the committed sample cards under examples/ by running this action on
+# itself. Dogfooding: the README gallery is real output from the live profile,
+# and a scheduled run doubles as a canary on the GraphQL queries and the
+# rendering pipeline.
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Monthly is enough to keep the samples representative without churning the
+    # history — the contributions card stamps every render, so no run is a no-op.
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+permissions: {}
+
+# Serialize refreshes so two runs cannot race the same `git push`. Never cancel
+# in progress: a cancelled run could drop a push that a later run has no reason
+# to redo (the timestamp diff alone does not signal stale data).
+concurrency:
+  group: examples-gallery
+  cancel-in-progress: false
+
+jobs:
+  refresh-examples:
+    name: Refresh Examples
+    runs-on: ubuntu-latest
+    # Forks have neither the App credentials nor a reason to publish samples of
+    # this profile.
+    if: github.repository == 'seijikohara/profile-cards-action'
+    permissions:
+      contents: write
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3 # v3
+        with:
+          client-id: ${{ vars.DEV_AUTOMATION_CLIENT_ID }}
+          private-key: ${{ secrets.DEV_AUTOMATION_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v7 # v7
+        with:
+          # Persist the App token so the commit step can push: main requires
+          # pull requests, and only the App bypasses that rule. Every step in
+          # this job runs first-party code from main, so leaving the credential
+          # in .git/config exposes it to nothing a fork controls.
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Render example cards
+        uses: ./
+        with:
+          # The default runner token is all the GraphQL profile query needs.
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          username: seijikohara
+          output-dir: examples
+          cards: overview,lifetime,contributions,composition,rhythm,languages
+          themes: light,dark
+          # Three brands simple-icons carries plus one it does not, so the
+          # gallery shows both pill shapes: with a glyph and text-only.
+          badges: |
+            GitHub
+            TypeScript
+            npm
+            Findy
+          # The action's own commit path would author the commit itself. Commit
+          # in an explicit step instead, so this workflow controls the message —
+          # specifically the mandatory [skip ci] marker below.
+          commit: false
+
+      - name: Commit refreshed examples
+        # `on:` already limits this workflow to these three triggers; restating
+        # the guard here keeps it next to the only step that writes to the repo.
+        if: contains(fromJSON('["push", "schedule", "workflow_dispatch"]'), github.event_name)
+        env:
+          BOT_NAME: ${{ steps.app-token.outputs.app-slug }}[bot]
+          BOT_EMAIL: ${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$(git status --porcelain examples)" ]]; then
+            echo "Examples are already up to date"
+            echo "### Examples Gallery" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No changes — examples/ is already up to date." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git config user.name "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
+          git add examples
+          changed=$(git diff --cached --name-only -- examples | wc -l | tr -d ' ')
+
+          # [skip ci] is mandatory here. A push authenticated with an App token
+          # DOES retrigger workflows (unlike one made with GITHUB_TOKEN), and the
+          # contributions card embeds a "REFRESHED <timestamp>" line, so every
+          # run produces a diff no matter what the API returned. Without the
+          # marker this workflow would trigger itself forever.
+          git commit -m "chore(examples): refresh generated gallery [skip ci]"
+          git push
+
+          echo "Pushed ${changed} refreshed file(s)"
+          {
+            echo "### Examples Gallery"
+            echo ""
+            echo "✅ Refreshed and pushed ${changed} file(s) under \`examples/\`."
+          } >> "$GITHUB_STEP_SUMMARY"

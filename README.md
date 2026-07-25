@@ -23,6 +23,75 @@ Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme
 
 Cards are drawn at the 846px width of the profile README column, use GitHub's Primer color tokens so they blend into both themes, animate only on entry (CSS only, disabled under `prefers-reduced-motion`), and contain no scripts or external references.
 
+## Examples
+
+Everything below is unmodified output: this action rendering the live profile of [@seijikohara](https://github.com/seijikohara). [`.github/workflows/examples.yml`](.github/workflows/examples.yml) re-runs the action against the same profile and commits the result to [`examples/`](examples/), so the gallery stays current on its own. The table above says what each card shows.
+
+Each sample is wrapped in a `<picture>`, so the card you see matches your GitHub theme.
+
+**`overview`** — profile stat tiles
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/overview.dark.svg" />
+  <img alt="Overview card: lifetime and current-year contributions, stars, followers, merged pull requests, issues, repositories" src="examples/overview.light.svg" width="100%" />
+</picture>
+
+**`lifetime`** — one shaded row per contribution year
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/lifetime.dark.svg" />
+  <img alt="Lifetime card: contribution history with one row per year, each week shaded by activity" src="examples/lifetime.light.svg" width="100%" />
+</picture>
+
+**`contributions`** — streaks and an isometric trailing year
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/contributions.dark.svg" />
+  <img alt="Contributions card: current and longest streaks above a 3D calendar of the trailing 12 months" src="examples/contributions.light.svg" width="100%" />
+</picture>
+
+**`composition`** — what the contributions are made of
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/composition.dark.svg" />
+  <img alt="Composition card: per-year stacked bars of commits, pull requests, issues, reviews, and private contributions" src="examples/composition.light.svg" width="100%" />
+</picture>
+
+**`rhythm`** — when the contributions happen
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/rhythm.dark.svg" />
+  <img alt="Rhythm card: contributions by weekday and by month of the year" src="examples/rhythm.light.svg" width="100%" />
+</picture>
+
+**`languages`** — language treemap by bytes
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/languages.dark.svg" />
+  <img alt="Languages card: treemap of languages by bytes across public source repositories, with a labeled legend" src="examples/languages.light.svg" width="100%" />
+</picture>
+
+Badge pills render at their natural size. `GitHub`, `TypeScript`, and `npm` match a simple-icons glyph; `Findy` has none, so it falls back to a text-only pill:
+
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="examples/badges/github.dark.svg" />
+    <img alt="GitHub badge" src="examples/badges/github.light.svg" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="examples/badges/typescript.dark.svg" />
+    <img alt="TypeScript badge" src="examples/badges/typescript.light.svg" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="examples/badges/npm.dark.svg" />
+    <img alt="npm badge" src="examples/badges/npm.light.svg" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="examples/badges/findy.dark.svg" />
+    <img alt="Findy badge" src="examples/badges/findy.light.svg" />
+  </picture>
+</p>
+
 ## Usage
 
 ```yaml
