@@ -98,7 +98,24 @@ jobs:
           # run produces a diff no matter what the API returned. Without the
           # marker this workflow would trigger itself forever.
           git commit -m "chore(examples): refresh generated gallery [skip ci]"
-          git push
+
+          # main can advance between checkout and push (a merge, a release bump),
+          # which rejects the push as non-fast-forward. Rebase the refresh commit
+          # onto the new tip and retry rather than failing the run.
+          pushed=false
+          for attempt in 1 2 3; do
+            if git push; then
+              pushed=true
+              break
+            fi
+            echo "Push attempt ${attempt} rejected; rebasing onto the latest main" >&2
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase FETCH_HEAD
+          done
+          if [[ "$pushed" != "true" ]]; then
+            echo "::error::Failed to push refreshed examples after 3 attempts"
+            exit 1
+          fi
 
           echo "Pushed ${changed} refreshed file(s)"
           {

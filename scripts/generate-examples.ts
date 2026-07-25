@@ -4,8 +4,9 @@
  * Render every card and a representative badge set from a live GitHub profile
  * into examples/, so the README can show real output instead of prose. The
  * pipeline is the action's own (src/main.ts) minus the @actions/core plumbing:
- * fetch -> compute -> resolve fonts -> render -> write. Runs locally and from
- * .github/workflows/examples.yml; never at action runtime.
+ * fetch -> compute -> resolve fonts -> render -> write. This script is the local
+ * entry point; CI refreshes the same gallery by running the action itself
+ * (`uses: ./` in .github/workflows/examples.yml). Never runs at action runtime.
  *
  * Usage: GITHUB_TOKEN=$(gh auth token) pnpm run examples
  */
@@ -75,7 +76,7 @@ const readme = [
   '[`.github/workflows/examples.yml`](../.github/workflows/examples.yml) refreshes them automatically, so **do not edit',
   'them by hand** — the next run overwrites every one of them.',
   '',
-  'To regenerate locally, this file included:',
+  'To regenerate them locally, run:',
   '',
   '```sh',
   'GITHUB_TOKEN=$(gh auth token) pnpm run examples',
