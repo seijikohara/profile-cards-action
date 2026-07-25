@@ -4,15 +4,24 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/seijikohara/profile-cards-action/ci.yaml)](https://github.com/seijikohara/profile-cards-action/actions)
 [![License](https://img.shields.io/github/license/seijikohara/profile-cards-action)](LICENSE)
 
-A GitHub Action that renders profile README cards as SVG from the GitHub GraphQL API. It produces an overview card, contribution history, streaks, language composition, activity rhythm, and a language treemap, and can commit the generated files back to your repository.
-
-> **Status:** Skeleton. The action currently ships a stub entry point and does not render cards yet.
+A GitHub Action that renders profile README cards as SVG from the GitHub GraphQL API. It produces an overview card, contribution history, streaks, contribution composition, activity rhythm, and a language treemap, and can commit the generated files back to your repository.
 
 ## Overview
 
 Profile READMEs usually rely on third-party image services that fetch your stats on every page view. This action renders the cards itself inside your own workflow and writes plain SVG files into your repository, so the images are self-hosted, reproducible, and theme-aware (light and dark).
 
-Each requested card is rendered per theme into `<output-dir>/`. Optional badge pills are rendered into `<output-dir>/badges/`, using [simple-icons](https://simpleicons.org/) for brand glyphs when a match exists and falling back to text-only pills otherwise.
+Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme>.svg`. Optional badge pills are rendered into `<output-dir>/badges/` as `<slug>.<theme>.svg`, using [simple-icons](https://simpleicons.org/) for brand glyphs when a match exists and falling back to text-only pills otherwise.
+
+| Card            | Shows                                                                                                                                                       |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `overview`      | Eight stat tiles: lifetime and current-year contributions, stars, followers, merged PRs, issues, public repositories, recently contributed-to repositories. |
+| `lifetime`      | Contribution history — one row per year since the first contribution, each week shaded by activity.                                                         |
+| `contributions` | Current and longest streaks, plus the trailing 12 months as an isometric 3D calendar.                                                                       |
+| `composition`   | Per-year stacked bars of commits, pull requests, issues, reviews, and private contributions, with the overall private share.                                |
+| `rhythm`        | Contributions by weekday and by month of the year.                                                                                                          |
+| `languages`     | A treemap of languages by bytes across public source repositories, with a labeled legend.                                                                   |
+
+Cards are drawn at the 846px width of the profile README column, use GitHub's Primer color tokens so they blend into both themes, animate only on entry (CSS only, disabled under `prefers-reduced-motion`), and contain no scripts or external references.
 
 ## Usage
 
@@ -32,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Render profile cards
         uses: seijikohara/profile-cards-action@v0
@@ -43,9 +52,25 @@ jobs:
           output-dir: assets
           themes: light,dark
           commit: true
+          # Optional: one brand name per line, rendered as badge pills.
+          badges: |
+            LinkedIn
+            Qiita
+            npm
 ```
 
 `actions/checkout` must run first so the action can read the working tree and commit generated files back to it.
+
+Embed the results in your README with a `<picture>` per card so each theme is served to the matching viewer:
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/overview.dark.svg" />
+  <img alt="Overview" src="./assets/overview.light.svg" width="100%" />
+</picture>
+```
+
+Badge SVGs carry no links — wrap each one in an `<a href="...">` in your README to make it clickable.
 
 ## Inputs
 
@@ -71,12 +96,19 @@ jobs:
 
 ## How It Works
 
-1. **Fetch** — Query the GitHub GraphQL API for the target user's profile, contribution calendar, and repository language statistics.
-2. **Render** — Draw each requested card to SVG for every requested theme, subsetting fonts (via `subset-font`) so only the glyphs actually used are embedded.
-3. **Write** — Emit the SVGs into `output-dir` (and any badge pills into `output-dir/badges/`).
-4. **Commit** — When `commit` is enabled, commit and push the changed files using `commit-message`, and report `changed` / `files` outputs.
+1. **Fetch** — Query the GitHub GraphQL API for the target user's profile, contribution calendar, and repository language statistics. The queries are split (one per contribution year) to stay far under the API's per-query resource limits.
+2. **Resolve fonts** — Build the `@font-face` rules the cards reference (see [Fonts](#fonts)).
+3. **Render** — Draw each requested card to SVG for every requested theme, embedding the fonts as Base64 data URIs so the cards need no external resources.
+4. **Write** — Emit the SVGs into `output-dir` (and any badge pills into `output-dir/badges/`).
+5. **Commit** — When `commit` is enabled, commit and push the changed files using `commit-message` (retrying with a rebase if the branch advanced mid-run), and report the `changed` / `files` outputs.
 
-> This section describes the intended behavior. Rendering is not implemented yet.
+## Fonts
+
+GitHub renders README images through `<img>`, where SVGs cannot load external fonts — so the chosen faces are embedded directly in each card as Base64 woff2 data URIs.
+
+- **Roboto and Roboto Mono (the defaults) are bundled** with the action, pre-subset to the glyphs the cards use. The default path performs no network request.
+- **Any other Google Fonts family is fetched at run time** and embedded as-is. A variable family is embedded once under a weight range; a static family contributes one face per card weight, using the nearest available weight when an exact one is missing.
+- An unknown family fails the run with `Invalid font "<name>". Specify a valid Google Fonts family.`
 
 ## License
 
