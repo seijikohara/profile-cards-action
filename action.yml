@@ -1,5 +1,5 @@
 name: 'Profile Cards'
-description: 'Render GitHub profile README cards (SVG) from the GitHub API: overview, contribution history, streaks, composition, activity rhythm, and a language treemap.'
+description: 'Render GitHub profile README cards as SVG: contribution history, streaks, activity rhythm, language treemap.'
 author: 'Seiji Kohara (https://github.com/seijikohara)'
 branding:
   icon: 'bar-chart-2'
