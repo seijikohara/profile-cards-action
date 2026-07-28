@@ -1,3 +1,10 @@
+# Renovate resolves and pins every dependency itself, so CI does not re-apply
+# `minimumReleaseAge` to entries the lockfile already records. Without this
+# setting `pnpm install --frozen-lockfile` rejects the lockfile Renovate wrote
+# whenever a release is under a day old. Resolution-time cooldown and
+# Renovate's own three-day hold remain in place.
+trustLockfile: true
+
 # Packages allowed to run install scripts (pnpm 11 blocks build scripts by default).
 # lefthook's postinstall installs its platform binary, which `prepare` (lefthook
 # install) needs. No other dependency requires a build script.
