@@ -34,13 +34,13 @@ jobs:
     steps:
       - name: Generate GitHub App Token
         id: app-token
-        uses: actions/create-github-app-token@v3 # v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           client-id: ${{ vars.DEV_AUTOMATION_CLIENT_ID }}
           private-key: ${{ secrets.DEV_AUTOMATION_PRIVATE_KEY }}
 
       - name: Checkout repository
-        uses: actions/checkout@v7 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Persist the App token so the commit step can push: main requires
           # pull requests, and only the App bypasses that rule. Every step in
