@@ -21,6 +21,10 @@
   labels: ['dependencies'],
   // This repository is a JavaScript (Node.js) GitHub Action.
   enabledManagers: ['npm', 'github-actions'],
+  // CI commits the built `dist/` back onto the pull request branch. Without this,
+  // Renovate reads that commit as a manual edit, marks the pull request
+  // "PR Edited (Blocked)" on the dependency dashboard, and stops rebasing it.
+  gitIgnoredAuthors: ['development-automation-bot[bot]@users.noreply.github.com'],
   // Keep update branches rebased on main and merge via rebase once CI passes.
   rebaseWhen: 'behind-base-branch',
   platformAutomerge: true,
