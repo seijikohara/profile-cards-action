@@ -92,7 +92,7 @@ describe('commitAndPush', () => {
     );
   });
 
-  it('should rebase and retry, then succeed, when the first push is rejected', async () => {
+  it('should reset onto the tip and re-commit, then succeed, when the first push is rejected', async () => {
     let pushes = 0;
     getExecOutputMock.mockImplementation(async (_cmd, args) => {
       if (args?.includes('status')) return output({ stdout: ' M assets/overview.svg\n' });
@@ -109,6 +109,53 @@ describe('commitAndPush', () => {
     expect(result.changed).toBe(true);
     expect(pushes).toBe(2);
     expect(execMock).toHaveBeenCalledWith('git', ['fetch', 'origin', 'main']);
-    expect(execMock).toHaveBeenCalledWith('git', ['rebase', 'origin/main']);
+    expect(execMock).toHaveBeenCalledWith('git', ['reset', '--mixed', 'FETCH_HEAD']);
+    // Never rebase: the competing commit rewrote the same generated files, so a
+    // rebase conflicts on every race and strands the tree mid-rebase.
+    const rebased = execMock.mock.calls.some(([, args]) => args?.[0] === 'rebase');
+    expect(rebased).toBe(false);
+    // The same rendered output is committed again on top of the new tip.
+    const commits = execMock.mock.calls.filter(([, args]) => args?.[0] === 'commit');
+    expect(commits).toHaveLength(2);
+  });
+
+  it('should report no change when the new tip already carries identical output', async () => {
+    let diffs = 0;
+    getExecOutputMock.mockImplementation(async (_cmd, args) => {
+      if (args?.includes('status')) return output({ stdout: ' M assets/overview.svg\n' });
+      if (args?.includes('diff')) {
+        diffs += 1;
+        // Staged changes before the first push; identical to the tip after the reset.
+        return output({ exitCode: diffs === 1 ? 1 : 0 });
+      }
+      if (args?.includes('push')) return output({ exitCode: 1 });
+      return output();
+    });
+
+    const result = await commitAndPush({ dir: 'assets', message: 'refresh', token: 'secret' });
+
+    expect(result).toEqual({ changed: false, files: [] });
+    expect(execMock).toHaveBeenCalledWith('git', ['reset', '--mixed', 'FETCH_HEAD']);
+    // Only the pre-push commit ran; the reset left nothing worth re-committing.
+    const commits = execMock.mock.calls.filter(([, args]) => args?.[0] === 'commit');
+    expect(commits).toHaveLength(1);
+  });
+
+  it('should throw after exhausting the push attempts', async () => {
+    let pushes = 0;
+    getExecOutputMock.mockImplementation(async (_cmd, args) => {
+      if (args?.includes('status')) return output({ stdout: ' M assets/overview.svg\n' });
+      if (args?.includes('diff')) return output({ exitCode: 1 });
+      if (args?.includes('push')) {
+        pushes += 1;
+        return output({ exitCode: 1 });
+      }
+      return output();
+    });
+
+    await expect(commitAndPush({ dir: 'assets', message: 'refresh', token: 'secret' })).rejects.toThrow(
+      'Failed to push to origin/main after 3 attempts.'
+    );
+    expect(pushes).toBe(3);
   });
 });
