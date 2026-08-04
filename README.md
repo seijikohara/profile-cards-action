@@ -1,5 +1,6 @@
 # Profile Cards Action
 
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Profile%20Cards-blue?logo=github)](https://github.com/marketplace/actions/profile-cards)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/seijikohara/profile-cards-action)](https://github.com/seijikohara/profile-cards-action/releases)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/seijikohara/profile-cards-action/ci.yaml)](https://github.com/seijikohara/profile-cards-action/actions)
 [![License](https://img.shields.io/github/license/seijikohara/profile-cards-action)](LICENSE)
@@ -178,6 +179,12 @@ GitHub renders README images through `<img>`, where SVGs cannot load external fo
 - **Roboto and Roboto Mono (the defaults) are bundled** with the action, pre-subset to the glyphs the cards use. The default path performs no network request.
 - **Any other Google Fonts family is fetched at run time** and embedded as-is. A variable family is embedded once under a weight range; a static family contributes one face per card weight, using the nearest available weight when an exact one is missing.
 - An unknown family fails the run with `Invalid font "<name>". Specify a valid Google Fonts family.`
+
+## Versioning
+
+`v0` is a moving major tag. It is repointed at the newest `v0.0.x` release on every release, so `uses: seijikohara/profile-cards-action@v0` picks up patches without a workflow edit. Pin an exact tag (`@v0.0.4`) or a commit SHA instead when you need a reference that never changes.
+
+Each patch version gets its own immutable release; see [Releases](https://github.com/seijikohara/profile-cards-action/releases) for the per-version notes. The action is still pre-1.0, so inputs and card layouts can change between `v0.0.x` releases.
 
 ## License
 
