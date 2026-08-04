@@ -60,9 +60,13 @@ runs:
         git push --force "${authed_remote}" "refs/tags/${major_tag}"
 
         # Publish a GitHub Release for the patch tag the first time it shows
-        # up. The major tag is intentionally not promoted to a Release: it
-        # is a moving pointer, not a release artifact. The check is idempotent
-        # so re-runs (manual dispatch, retries) don't error.
+        # up. The major tag is deliberately left alone here: it is a moving
+        # pointer, so a Release generated against it would describe whichever
+        # patch happened to be current when it was cut and then go stale on the
+        # next bump. A `v0` Release does exist — Marketplace publishes from a
+        # Release, and the patch releases were already taken — but it is
+        # maintained by hand and says only what the moving tag means. The check
+        # is idempotent so re-runs (manual dispatch, retries) don't error.
         if gh release view "${version_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
           release_status="already existed"
         else
