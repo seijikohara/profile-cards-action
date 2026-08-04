@@ -58737,7 +58737,7 @@ async function fetchProfile(token, login) {
 *
 * Ports the scheduled profile workflow's shell steps into code: stage the output
 * directory, skip when nothing changed, otherwise commit as github-actions[bot]
-* and push with a rebase-and-retry loop for a branch that advanced mid-run.
+* and push, re-committing onto the tip when the branch advanced mid-run.
 */
 const BOT_NAME = "github-actions[bot]";
 const BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
@@ -58780,25 +58780,29 @@ async function changedPaths(dir) {
 		dir
 	], { silent: true })).stdout);
 }
-/**
-* Stage `dir`, commit any changes as github-actions[bot], and push them.
-*
-* Returns `{ changed: false, files: [] }` when nothing is staged. Otherwise
-* commits and pushes to the current branch, rebasing onto the remote tip and
-* retrying when the push is rejected because the branch advanced.
-*/
-async function commitAndPush(options) {
-	const { dir, message, token } = options;
-	const files = await changedPaths(dir);
+/** Stage everything under `dir` and report whether the index now differs from HEAD. */
+async function stage(dir) {
 	await exec("git", ["add", dir]);
-	if ((await getExecOutput("git", [
+	return (await getExecOutput("git", [
 		"diff",
 		"--cached",
 		"--quiet"
 	], {
 		ignoreReturnCode: true,
 		silent: true
-	})).exitCode === 0) return {
+	})).exitCode !== 0;
+}
+/**
+* Stage `dir`, commit any changes as github-actions[bot], and push them.
+*
+* Returns `{ changed: false, files: [] }` when nothing is staged. Otherwise
+* commits and pushes to the current branch, re-committing onto the remote tip
+* and retrying when the push is rejected because the branch advanced.
+*/
+async function commitAndPush(options) {
+	const { dir, message, token } = options;
+	const files = await changedPaths(dir);
+	if (!await stage(dir)) return {
 		changed: false,
 		files: []
 	};
@@ -58841,7 +58845,20 @@ async function commitAndPush(options) {
 			"origin",
 			branch
 		]);
-		await exec("git", ["rebase", `origin/${branch}`]);
+		await exec("git", [
+			"reset",
+			"--mixed",
+			"FETCH_HEAD"
+		]);
+		if (!await stage(dir)) return {
+			changed: false,
+			files: []
+		};
+		await exec("git", [
+			"commit",
+			"-m",
+			message
+		]);
 	}
 	throw new Error(`Failed to push to origin/${branch} after ${PUSH_ATTEMPTS} attempts.`);
 }

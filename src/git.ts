@@ -3,7 +3,7 @@
  *
  * Ports the scheduled profile workflow's shell steps into code: stage the output
  * directory, skip when nothing changed, otherwise commit as github-actions[bot]
- * and push with a rebase-and-retry loop for a branch that advanced mid-run.
+ * and push, re-committing onto the tip when the branch advanced mid-run.
  */
 
 import * as exec from '@actions/exec';
@@ -57,12 +57,22 @@ export async function changedPaths(dir: string): Promise<string[]> {
   return parsePorcelain(status.stdout);
 }
 
+/** Stage everything under `dir` and report whether the index now differs from HEAD. */
+async function stage(dir: string): Promise<boolean> {
+  await exec.exec('git', ['add', dir]);
+  const diff = await exec.getExecOutput('git', ['diff', '--cached', '--quiet'], {
+    ignoreReturnCode: true,
+    silent: true,
+  });
+  return diff.exitCode !== 0;
+}
+
 /**
  * Stage `dir`, commit any changes as github-actions[bot], and push them.
  *
  * Returns `{ changed: false, files: [] }` when nothing is staged. Otherwise
- * commits and pushes to the current branch, rebasing onto the remote tip and
- * retrying when the push is rejected because the branch advanced.
+ * commits and pushes to the current branch, re-committing onto the remote tip
+ * and retrying when the push is rejected because the branch advanced.
  */
 export async function commitAndPush(options: { dir: string; message: string; token: string }): Promise<CommitResult> {
   const { dir, message, token } = options;
@@ -70,13 +80,7 @@ export async function commitAndPush(options: { dir: string; message: string; tok
   // Capture the paths before committing so the result reports what shipped.
   const files = await changedPaths(dir);
 
-  await exec.exec('git', ['add', dir]);
-
-  const diff = await exec.getExecOutput('git', ['diff', '--cached', '--quiet'], {
-    ignoreReturnCode: true,
-    silent: true,
-  });
-  if (diff.exitCode === 0) {
+  if (!(await stage(dir))) {
     return { changed: false, files: [] };
   }
 
@@ -100,9 +104,22 @@ export async function commitAndPush(options: { dir: string; message: string; tok
       return { changed: true, files };
     }
     if (attempt === PUSH_ATTEMPTS) break;
-    // The branch can advance while cards render; rebase onto the tip and retry.
+
+    // The branch can advance while the cards render, which rejects the push as
+    // non-fast-forward. Rebasing is the wrong recovery: the other side wrote the
+    // same generated files, and cards that stamp a render timestamp differ on
+    // every run, so the two commits touch identical lines and the rebase
+    // conflicts on essentially every race — leaving the tree mid-rebase. There
+    // is nothing to merge either way, because the freshly rendered output is the
+    // answer regardless of what landed meanwhile. Drop the commit, move onto the
+    // new tip with the working tree untouched, and commit that output again.
     await exec.exec('git', ['fetch', 'origin', branch]);
-    await exec.exec('git', ['rebase', `origin/${branch}`]);
+    await exec.exec('git', ['reset', '--mixed', 'FETCH_HEAD']);
+    if (!(await stage(dir))) {
+      // The new tip already carries byte-identical output; nothing left to push.
+      return { changed: false, files: [] };
+    }
+    await exec.exec('git', ['commit', '-m', message]);
   }
 
   throw new Error(`Failed to push to origin/${branch} after ${PUSH_ATTEMPTS} attempts.`);

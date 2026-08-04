@@ -97,24 +97,52 @@ jobs:
           # contributions card embeds a "REFRESHED <timestamp>" line, so every
           # run produces a diff no matter what the API returned. Without the
           # marker this workflow would trigger itself forever.
-          git commit -m "chore(examples): refresh generated gallery [skip ci]"
+          commit_message="chore(examples): refresh generated gallery [skip ci]"
+          git commit -m "$commit_message"
 
           # main can advance between checkout and push (a merge, a release bump),
-          # which rejects the push as non-fast-forward. Rebase the refresh commit
-          # onto the new tip and retry rather than failing the run.
+          # which rejects the push as non-fast-forward. Do NOT rebase to recover:
+          # the competing commit wrote the same files, and the timestamp line
+          # above differs on every render, so a rebase conflicts on essentially
+          # every race and `set -e` then aborts the step mid-rebase. Nothing needs
+          # merging anyway — the tree just rendered is the answer whatever landed
+          # meanwhile. Move onto the new tip keeping that tree, and re-commit it.
           pushed=false
           for attempt in 1 2 3; do
             if git push; then
               pushed=true
               break
             fi
-            echo "Push attempt ${attempt} rejected; rebasing onto the latest main" >&2
+            if (( attempt == 3 )); then
+              break
+            fi
+            echo "Push attempt ${attempt} rejected; re-committing onto the latest ${GITHUB_REF_NAME}" >&2
+
             git fetch origin "$GITHUB_REF_NAME"
-            git rebase FETCH_HEAD
+            git reset --mixed FETCH_HEAD
+            git add examples
+            if git diff --cached --quiet; then
+              echo "The new tip already carries identical examples; nothing left to push"
+              pushed=true
+              changed=0
+              break
+            fi
+            changed=$(git diff --cached --name-only -- examples | wc -l | tr -d ' ')
+            git commit -m "$commit_message"
           done
           if [[ "$pushed" != "true" ]]; then
             echo "::error::Failed to push refreshed examples after 3 attempts"
             exit 1
+          fi
+
+          if [[ "$changed" == "0" ]]; then
+            echo "Nothing left to push — a concurrent run landed identical examples"
+            {
+              echo "### Examples Gallery"
+              echo ""
+              echo "No changes — a concurrent run already pushed identical examples."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
           echo "Pushed ${changed} refreshed file(s)"
