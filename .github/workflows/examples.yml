@@ -15,12 +15,22 @@ on:
 
 permissions: {}
 
-# Serialize refreshes so two runs cannot race the same `git push`. Never cancel
-# in progress: a cancelled run could drop a push that a later run has no reason
-# to redo (the timestamp diff alone does not signal stale data).
+# One repository-wide lock shared with every other workflow that writes to main.
+# Concurrency groups match by name across the whole repository, so the shared
+# name is what stops this refresh from racing the release — the group it used to
+# have serialized it against itself only, which is precisely why the two kept
+# colliding.
+#
+# Never cancel in progress: a cancelled run could drop a push that a later run
+# has no reason to redo (the timestamp diff alone does not signal stale data).
+# `queue: max` rather than the default `queue: single`, under which a pending
+# refresh — including the monthly cron one — is silently cancelled and replaced
+# when a third run arrives. All members of a shared group must declare identical
+# settings; the documentation does not say whose values govern when they differ.
 concurrency:
-  group: examples-gallery
+  group: main-writer
   cancel-in-progress: false
+  queue: max
 
 jobs:
   refresh-examples:

@@ -1,17 +1,21 @@
 name: Update Release Tags
 
-# Auto-tagging on the bot's version-bump commit is handled inside the
-# CI workflow's `Create release tags` step. This workflow is kept as
-# a manual fallback to re-sync v{version} and v{major} tags against
-# the current main HEAD when needed — including the initial bootstrap
-# tag (v0.0.0), which the CI auto-bump cannot mint because it needs a
-# prior release tag to diff against.
+# Releases are cut by `release.yml`, which reconciles tags on every trigger.
+# This workflow is the manual break-glass for the cases that reconciler will not
+# handle: minting the initial bootstrap tag (it needs a prior release tag to
+# diff against), and re-syncing the tags on demand without waiting for a push.
 on:
   workflow_dispatch:
 
+# Same repository-wide lock as the other writers to main. `cancel-in-progress`
+# must be false here specifically: dispatched to repair a stuck release, a
+# cancelling run could kill an in-flight release between its version-tag push
+# and its major-tag move — manufacturing the half-applied state it was fired to
+# fix. Every member of a shared group must declare identical settings.
 concurrency:
-  group: update-release-tags
-  cancel-in-progress: true
+  group: main-writer
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   update-release-tags:

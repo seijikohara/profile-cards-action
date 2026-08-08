@@ -52,10 +52,12 @@ reusability.
   `.gitattributes` LF.
 - **README**: shields badges (release/CI/license), H2 sections, Inputs/Outputs as
   Markdown tables, usage pinned to the moving `@v1` tag, optional Mermaid.
-- **Versioning/release**: semver `vX.Y.Z` + moving `vX`; CI auto-bumps patch when
-  `dist/` changes, then a local composite `sync-release-tags` action tags + creates
-  the GitHub Release (`gh release --generate-notes`); GitHub App token minted only
-  after PR-controlled build steps. No CHANGELOG, no semantic-release.
+- **Versioning/release**: semver `vX.Y.Z` + moving `vX`; a dedicated
+  `release.yml` reconciles (see [Releasing](#releasing)) — it bumps the patch
+  when main's `dist/` differs from the newest version tag, then a local composite
+  `sync-release-tags` action tags + creates the GitHub Release
+  (`gh release --generate-notes`); GitHub App token minted only after
+  PR-controlled build steps. No CHANGELOG, no semantic-release.
 - **CI**: `lint → format:check → typecheck → test → package`; enforce `dist/`
   freshness by regenerating and committing it back to the PR branch; SHA-pin
   third-party actions with `# vN` comments; `persist-credentials: false`.
@@ -185,6 +187,45 @@ group can serialize the bot writers, but concurrency only orders _workflow
 runs_: a pull request merge is not one, so `main` can always advance mid-run.
 Do not delete these loops on the assumption that a lock made them redundant.
 
+## Releasing
+
+Every workflow that writes to `main` — `release.yml`, `examples.yml`,
+`update-major-version-tag.yml` — shares the concurrency group **`main-writer`**
+with `cancel-in-progress: false` and `queue: max`. Group names match
+repository-wide, so the shared name is what serializes them; before it, each sat
+in its own group and they collided on essentially every merge. Two constraints
+bind all members: `queue: max` and `cancel-in-progress: true` cannot be combined
+(GitHub rejects the workflow), and every member must declare **identical**
+settings, because the documentation does not say whose values govern when they
+disagree.
+
+`release.yml` is a **reconciler, not a build step**. On every push to `main`,
+weekly, or on demand, it asks one question from scratch — _does main's committed
+`dist/` differ from the newest version tag?_ — and if so bumps the patch, pushes,
+and syncs the tags. Deriving the answer fresh is what makes losing a race
+harmless. When the release lived in CI it had exactly one chance per merge, tied
+to one run; when that run's push lost, the release was simply lost, and the
+winner's `[skip ci]` commit meant nothing re-entered the path. Recovery then
+depended on an unrelated pull request being merged later, which is what actually
+happened.
+
+Three details are load-bearing:
+
+- **Bump from `package.json`, never from the newest tag.** A tag-derived target
+  equal to the on-disk version makes `pnpm version` exit non-zero, wedging every
+  later run at the same line. Bumping what is on disk is monotonic.
+- **Never render in the release job.** `pnpm version` refuses a dirty working
+  tree, and every render dirties it. Keeping the gallery in its own workflow
+  makes the flag to bypass that check unnecessary rather than required.
+- **Re-fetch tags when re-evaluating.** Git only auto-follows tags for the
+  default refspec, so `git fetch origin main` leaves the tag list stale — and a
+  stale list makes the retry cut a redundant release instead of noticing that a
+  concurrent run already published one.
+
+`sync-release-tags` runs unconditionally, not only after a bump, so a
+half-applied state (a version pushed whose tag or Release never landed) repairs
+itself on the next trigger.
+
 ## Profile repo (consumer) after extraction
 
 - **Remove** the in-repo generator (`src/`, `scripts/build-fonts.ts`,
@@ -267,7 +308,8 @@ Deviations and findings, authoritative where they differ from the above:
   `client-id: ${{ vars.DEV_AUTOMATION_CLIENT_ID }}` /
   `private-key: ${{ secrets.DEV_AUTOMATION_PRIVATE_KEY }}` — the `app-id` input is
   deprecated and the provisioned value is a Client ID. The first tag was seeded by
-  dispatching `update-major-version-tag.yml` (CI's auto-bump needs a prior tag).
+  dispatching `update-major-version-tag.yml` (the reconciler needs a prior tag to
+  diff against, so bootstrap stays manual).
 - **Versioning starts at 0.0.x** (user directive); the moving major tag is `v0`
   until the action matures to v1.
 - **Parity verified** by running the workflow on the consumer branch before
