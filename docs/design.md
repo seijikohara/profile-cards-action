@@ -144,10 +144,46 @@ wrapping each badge image in `<a href="…">`. Hence `badges` takes names only �
 
 Port the profile repo's proven logic into the action: stage `output-dir`, commit
 **only if the diff is non-empty**, author `github-actions[bot]`, subject from
-`commit-message` (carrying `[skip ci]`), push with **rebase-retry** if the branch
-advanced mid-run, using `github-token` (`x-access-token`). The consumer grants
-`permissions: contents: write` and checks out with a push-capable token. When
-`commit: false`, the action writes only and the consumer commits using `changed`.
+`commit-message` (carrying `[skip ci]`), push with **re-commit-retry** if the
+branch advanced mid-run, using `github-token` (`x-access-token`). The consumer
+grants `permissions: contents: write` and checks out with a push-capable token.
+When `commit: false`, the action writes only and the consumer commits using
+`changed`.
+
+The retry deliberately does **not** rebase. See
+[Landing generated content on a branch](#landing-generated-content-on-a-branch).
+
+## Landing generated content on a branch
+
+Several writers push generated content to `main`: the release bump, the examples
+gallery refresh, the PR-side `dist/` commit, and — in consumer repositories —
+the action's own commit path. They race, and the loser's push is rejected as
+non-fast-forward. Two rules govern how a writer recovers.
+
+**Never rebase generated content.** A rebase assumes the two sides changed
+different things. Generated files break that assumption: both sides rewrote the
+same paths, and a card that stamps a render timestamp differs on every run, so
+the rebase conflicts on essentially every race and — under `set -e` — strands
+the tree mid-rebase. There is nothing to merge in the first place.
+
+**Pick the recovery from what the output _is_.** This is the part that does not
+generalize into one shared helper:
+
+| Output                 | Property                                                                 | Recovery                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Rendered cards, badges | Derived from a **live API** at run time; no older render is more correct | The working tree is authoritative: `reset --mixed` onto the tip, re-stage, re-commit     |
+| `dist/`                | A pure function of `src/` + the lockfile **at the same commit**          | The working tree is **not** authoritative: `reset --hard` onto the tip, then **rebuild** |
+
+Re-staging a `dist/` built before the tip moved would pair a new lockfile with a
+stale bundle — a silent wrong-content merge, not a loud failure.
+
+In every case, stop and report no change when the new tip already carries
+identical output, so a lost race never produces an empty commit.
+
+**Retries are permanent, not a stopgap.** A shared repository-wide concurrency
+group can serialize the bot writers, but concurrency only orders _workflow
+runs_: a pull request merge is not one, so `main` can always advance mid-run.
+Do not delete these loops on the assumption that a lock made them redundant.
 
 ## Profile repo (consumer) after extraction
 
@@ -182,7 +218,7 @@ advanced mid-run, using `github-token` (`x-access-token`). The consumer grants
 | Nearest-weight fallback alters look for fonts lacking 200/600      | Documented; the default Roboto has all weights.                                                          |
 | `simple-icons` bundle size                                         | Accepted (it's an action).                                                                               |
 | Reintroduced `uses:` + release maintenance                         | First-party, pinned (`@v1`/SHA); the coupling is the deliberate cost of reuse.                           |
-| Action commit needs correct permissions/token; push races          | Consumer grants `contents: write`; rebase-retry; `[skip ci]`.                                            |
+| Action commit needs correct permissions/token; push races          | Consumer grants `contents: write`; re-commit-retry; `[skip ci]`.                                         |
 | Profile loses self-containment (depends on the action at run time) | Pin `@v1`; the action's happy path (bundled defaults, no network fonts) minimizes external moving parts. |
 
 ## Migration / rollout

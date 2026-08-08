@@ -12,6 +12,17 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Bound this matrix so superseded runs stop occupying runners. Left unbounded,
+# a burst of Renovate PRs queued enough integration legs to stretch job-start
+# latency into the tens of minutes, which widens every push race elsewhere in
+# the repository from seconds to minutes. Key on the pull request number rather
+# than the branch name: two fork PRs can share a branch name (`patch-1` is the
+# web UI's default), and a collision there would cancel a run whose `Summarize
+# Test Results` check is required to merge, leaving nothing to re-trigger it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

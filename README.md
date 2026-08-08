@@ -170,7 +170,7 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
 2. **Resolve fonts** — Build the `@font-face` rules the cards reference (see [Fonts](#fonts)).
 3. **Render** — Draw each requested card to SVG for every requested theme, embedding the fonts as Base64 data URIs so the cards need no external resources.
 4. **Write** — Emit the SVGs into `output-dir` (and any badge pills into `output-dir/badges/`).
-5. **Commit** — When `commit` is enabled, commit and push the changed files using `commit-message` (retrying with a rebase if the branch advanced mid-run), and report the `changed` / `files` outputs.
+5. **Commit** — When `commit` is enabled, commit and push the changed files using `commit-message`, and report the `changed` / `files` outputs. If the branch advanced mid-run and the push is rejected, the freshly rendered output is re-committed onto the new tip and pushed again; if that tip already carries identical output, the run reports no change instead.
 
 ## Fonts
 

@@ -11,8 +11,15 @@ on:
 # run and produce a non-fast-forward `git push`. `cancel-in-progress`
 # leaves only the latest run alive; its checks are what auto-merge and
 # branch protection evaluate against the current HEAD.
+#
+# Key on the pull request number, not the branch name. Two fork PRs can share a
+# branch name (`patch-1` is the web UI's default) and would then cancel each
+# other, stranding a required check as `cancelled` with nothing left to
+# re-trigger it. Prefixing with `github.workflow` also stops this group from
+# ever colliding with another workflow's — group names match repository-wide,
+# not per workflow.
 concurrency:
-  group: ci-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
