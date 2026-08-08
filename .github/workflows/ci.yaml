@@ -101,22 +101,49 @@ jobs:
         run: |
           set -euo pipefail
 
-          git add dist/
-          if git diff --cached --quiet; then
-            echo "No dist/ changes detected"
-            exit 0
-          fi
-
           git config --global user.name "$BOT_NAME"
           git config --global user.email "$BOT_EMAIL"
-          git commit -m "build: update generated files"
+          # persist-credentials: false above means git has no stored token for
+          # github.com. Authenticate the pushes below by embedding the App token
+          # in the remote URL; GitHub Actions automatically masks secrets in logs.
+          authed_remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-          # persist-credentials: false above means git has no stored token
-          # for github.com. Authenticate this single push by embedding the
-          # App token in the remote URL; GitHub Actions automatically masks
-          # secrets in logs.
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${PR_BRANCH}"
-          echo "Committed dist/ to PR branch ${PR_BRANCH}"
+          for attempt in 1 2 3; do
+            git add dist/
+            if git diff --cached --quiet; then
+              echo "No dist/ changes detected"
+              exit 0
+            fi
+            git commit -qm "build: update generated files"
+
+            if git push "$authed_remote" "HEAD:refs/heads/${PR_BRANCH}"; then
+              echo "Committed dist/ to PR branch ${PR_BRANCH}"
+              exit 0
+            fi
+            if (( attempt == 3 )); then
+              break
+            fi
+
+            # The branch advanced mid-run — Renovate force-pushes a rebase when
+            # its pull request falls behind the base. Recover by REBUILDING, not
+            # by re-staging what is already on disk. This is the opposite of the
+            # rendered-cards case in examples.yml, and the difference is the
+            # point: dist/ is a pure function of src/ and the lockfile AT THE
+            # SAME COMMIT, so a bundle built before the rebase paired with the
+            # lockfile after it is genuinely wrong content. It would still merge
+            # green, and because the resulting push is authored by the bot the
+            # follow-up run skips this step, so nothing ever corrects it. A
+            # rendered card has no such pairing — there the freshly rendered
+            # tree is authoritative and re-staging is correct.
+            echo "Push attempt ${attempt} rejected; rebuilding against the new head" >&2
+            git fetch -q origin "$PR_BRANCH"
+            git reset -q --hard FETCH_HEAD
+            pnpm install --frozen-lockfile
+            pnpm run package
+          done
+
+          echo "::error::Failed to push dist/ to ${PR_BRANCH} after 3 attempts"
+          exit 1
 
   build-and-test-summary:
     name: Build and Test Summary
