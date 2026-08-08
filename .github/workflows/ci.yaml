@@ -80,10 +80,11 @@ jobs:
 
       - name: Generate GitHub App Token
         # Only mint the privileged token after every PR-controlled build
-        # step has run, and only when one of the downstream commit / tag
-        # steps will actually need it. The token is then scoped to the
-        # explicit env of those steps via outputs.
-        if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+        # step has run, and only when the one downstream step that needs it
+        # will actually run. The token is then scoped to the explicit env of
+        # that step via outputs. Pull requests only: releasing is release.yml's
+        # job now, so CI writes nothing on main.
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
@@ -117,50 +118,6 @@ jobs:
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${PR_BRANCH}"
           echo "Committed dist/ to PR branch ${PR_BRANCH}"
 
-      - name: Bump version on main
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != format('{0}[bot]', steps.app-token.outputs.app-slug) }}
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          BOT_NAME: ${{ steps.app-token.outputs.app-slug }}[bot]
-          BOT_EMAIL: ${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com
-        run: |
-          set -euo pipefail
-
-          # The PR-side workflow already committed any dist regen into the
-          # PR branch, so main's working tree matches HEAD's dist after
-          # checkout + rebuild. Comparing to the latest released patch tag
-          # is the only way to detect whether this push actually changed
-          # build output and therefore warrants a new release. The glob
-          # matches the 0.0.x pre-1.0 tags (v0.0.1, v0.0.2, ...).
-          latest_tag=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -1)
-          if [[ -z "$latest_tag" ]]; then
-            echo "No prior release tag found; skipping auto-bump"
-            exit 0
-          fi
-
-          if git diff --quiet "$latest_tag" HEAD -- dist/; then
-            echo "No dist/ changes since $latest_tag; no release needed"
-            exit 0
-          fi
-
-          pnpm version patch --no-git-tag-version
-          new_version=$(node -p "require('./package.json').version")
-          git add package.json pnpm-lock.yaml
-
-          git config --global user.name "$BOT_NAME"
-          git config --global user.email "$BOT_EMAIL"
-          git commit -m "chore(release): bump version to v${new_version}"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/main"
-          echo "Bumped version to v${new_version} and pushed bot commit"
-
-      - name: Create release tags
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor == format('{0}[bot]', steps.app-token.outputs.app-slug) }}
-        uses: ./.github/actions/sync-release-tags
-        with:
-          bot-name: ${{ steps.app-token.outputs.app-slug }}[bot]
-          bot-email: ${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com
-          github-token: ${{ steps.app-token.outputs.token }}
-
   build-and-test-summary:
     name: Build and Test Summary
     runs-on: ubuntu-latest
@@ -173,11 +130,11 @@ jobs:
     if: always()
     steps:
       - name: Fail if build-and-test did not succeed
-        # A cancelled push run is expected on main: the version-bump commit
-        # pushed by the bot joins the same concurrency group and supersedes
-        # its own trigger run. Let that surface as `cancelled` instead of
-        # converting it into a failure. PR runs keep failing on cancellation
-        # so the required check stays strict.
+        # A cancelled push run is expected on main: the group still resolves to
+        # a single name there, so back-to-back merges supersede each other's
+        # runs. Let that surface as `cancelled` instead of converting it into a
+        # failure. PR runs keep failing on cancellation so the required check
+        # stays strict.
         if: needs.build-and-test.result != 'success' && !(github.event_name == 'push' && needs.build-and-test.result == 'cancelled')
         run: |
           echo "::error::build-and-test concluded with '${{ needs.build-and-test.result }}'"

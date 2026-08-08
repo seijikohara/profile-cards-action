@@ -1,0 +1,178 @@
+name: Release
+
+# Cut a release whenever main's committed dist/ differs from the newest version
+# tag. This is a reconciler, not a step in a build: it re-derives that question
+# from scratch on every trigger instead of releasing as a side effect of one
+# particular run. That distinction is the whole point. When the release lived in
+# CI it had exactly one chance per merge, tied to one run — so when that run's
+# push lost a race to the examples refresh, the release was simply lost, and the
+# winner's `[skip ci]` commit meant nothing re-entered the path. Recovery then
+# depended on an unrelated pull request happening to be merged later. Evaluated
+# convergently, losing a race is a no-op: the next trigger sees the same unmet
+# condition and finishes the job.
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly backstop so a release can never stay owed indefinitely, even if
+    # every push-triggered run dies. Off the top of the hour because scheduled
+    # runs are delayed or dropped under peak load.
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+# One repository-wide lock shared with every other workflow that writes to main.
+# Concurrency groups match by name across the whole repository, so naming the
+# group here is what actually serializes this against the examples refresh.
+#
+# `queue: max` rather than the default `queue: single`: under `single` a pending
+# run is cancelled and replaced when a third arrives, which would silently drop
+# a release. `cancel-in-progress` must stay false — GitHub rejects the
+# combination of `queue: max` and `cancel-in-progress: true` — and every member
+# of a shared group must declare identical settings, since the documentation
+# does not say whose values govern when they disagree.
+concurrency:
+  group: main-writer
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    # The ref guard is not redundant with the trigger list: workflow_dispatch
+    # can be fired from any branch, and without this a dispatch from a feature
+    # branch would perform a real bump, tag, Release and v0 move.
+    if: github.repository == 'seijikohara/profile-cards-action' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ vars.DEV_AUTOMATION_CLIENT_ID }}
+          private-key: ${{ secrets.DEV_AUTOMATION_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # `ref: main` resolves at job start, not at trigger time. Holding a
+          # run in the concurrency queue would otherwise only make its base
+          # staler, so it would still be reconciling against a tip that had
+          # already moved.
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+          # No pull-request-controlled code runs in this job, but the token is
+          # supplied explicitly to each step that needs it rather than left in
+          # .git/config, matching the rest of the repository.
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+
+      # No `pnpm install`: this job never builds. `pnpm version
+      # --no-git-tag-version` only rewrites package.json, and keeping the tree
+      # free of any render or install is what lets it run at all — pnpm refuses
+      # to version a dirty working tree.
+
+      - name: Bump version when a release is owed
+        id: bump
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          BOT_NAME: ${{ steps.app-token.outputs.app-slug }}[bot]
+          BOT_EMAIL: ${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+
+          git config --global user.name "$BOT_NAME"
+          git config --global user.email "$BOT_EMAIL"
+          authed_remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          # Is a release owed at the current HEAD? The committed dist/ is what
+          # consumers actually run, so comparing it against the newest patch tag
+          # is what decides. The glob matches the 0.0.x pre-1.0 tags.
+          release_owed() {
+            local latest_tag
+            latest_tag=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -1)
+            if [[ -z "$latest_tag" ]]; then
+              # Bootstrap stays manual: with no prior tag there is nothing to
+              # diff against, and guessing a first version is not this job's
+              # call. Run Update Release Tags by hand instead.
+              echo "no prior release tag; nothing to reconcile" >&2
+              return 1
+            fi
+            if git diff --quiet "$latest_tag" HEAD -- dist/; then
+              echo "dist/ matches ${latest_tag}; no release owed" >&2
+              return 1
+            fi
+            echo "dist/ differs from ${latest_tag}; a release is owed" >&2
+            return 0
+          }
+
+          if ! release_owed; then
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for attempt in 1 2 3; do
+            # Derive the next version from package.json, never from the newest
+            # tag. `pnpm version patch` on a tag-derived target that already
+            # equals the on-disk version exits non-zero, and under `set -e` that
+            # wedges every subsequent run at the same line. Bumping what is on
+            # disk is monotonic and self-healing.
+            pnpm version patch --no-git-tag-version >/dev/null
+            new_version=$(node -p "require('./package.json').version")
+            git add package.json pnpm-lock.yaml
+            # [skip ci] keeps this bot commit from re-entering CI and the
+            # gallery. A push made with an App token DOES retrigger workflows,
+            # unlike one made with GITHUB_TOKEN.
+            git commit -qm "chore(release): bump version to v${new_version} [skip ci]"
+
+            if git push "$authed_remote" "HEAD:refs/heads/main"; then
+              echo "Bumped version to v${new_version}"
+              echo "bumped=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Push attempt ${attempt} rejected; re-evaluating against the new tip" >&2
+
+            # Drop the bump and adopt whatever landed, then ask the question
+            # again. Re-deriving the precondition rather than replaying the
+            # commit is what turns a lost race into a no-op instead of a stuck
+            # release: if a concurrent run already released, we are done.
+            #
+            # `--tags` is required, not tidiness: git only auto-follows tags
+            # when fetching the default refspec, so naming `main` explicitly
+            # would leave the tag list stale — and the check below reads it to
+            # decide whether a release is still owed. `--force` because `v0`
+            # moves on every release and would otherwise refuse to update.
+            git fetch -q --tags --force origin main
+            git reset -q --hard FETCH_HEAD
+            if ! release_owed; then
+              echo "Another run already released; nothing left to do"
+              echo "bumped=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          echo "::error::Failed to push the version bump after 3 attempts"
+          exit 1
+
+      - name: Sync release tags
+        # Run unconditionally, not only after a bump. The tags are derived from
+        # package.json, so a half-applied state — a version pushed whose tag or
+        # Release never landed — is repaired on the next trigger rather than
+        # needing a human. The composite is idempotent.
+        uses: ./.github/actions/sync-release-tags
+        with:
+          bot-name: ${{ steps.app-token.outputs.app-slug }}[bot]
+          bot-email: ${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com
+          github-token: ${{ steps.app-token.outputs.token }}
