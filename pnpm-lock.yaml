@@ -37,8 +37,8 @@ importers:
         specifier: ^2.5.0
         version: 2.5.0
       taze:
-        specifier: ^19.16.0
-        version: 19.17.2
+        specifier: ^20.0.0
+        version: 20.0.0
       tsdown:
         specifier: ^0.22.13
         version: 0.22.14(typescript@7.0.2)
@@ -1111,8 +1111,8 @@ packages:
   subset-font@2.5.0:
     resolution: {integrity: sha512-Vsa8ngQ/ohhUj0an7on49y9jLZ2rK5U+T1FzPM4/ZQY0xUy5mLis6BfFtPGzecTjFgYXQlvY7FlsJF4t3R/6Ug==}
 
-  taze@19.17.2:
-    resolution: {integrity: sha512-1WH+LUf5H0R07EF606fuP5TuHPVvtrMIPpn69EkqaOVJYg0foL8xnD+lEs0s19Zfmplul5nRd3TpbbF0twXCkw==}
+  taze@20.0.0:
+    resolution: {integrity: sha512-aygXyZ0wQrQGjuclEWE1qSyxnlVERKO51Re+xhHwgS0Ml2dqCIXpMjRrUdV1thJFOUwKJj9XPvv9ZVlAaV0CWg==}
     hasBin: true
 
   tinybench@2.9.0:
@@ -2030,7 +2030,7 @@ snapshots:
       lodash: 4.18.1
       p-limit: 3.1.0
 
-  taze@19.17.2:
+  taze@20.0.0:
     dependencies:
       '@antfu/ni': 30.3.0
       '@henrygd/queue': 1.2.0
