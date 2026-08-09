@@ -50,7 +50,7 @@
     "oxlint": "^1.75.0",
     "oxlint-tsgolint": "^7.0.2001",
     "subset-font": "^2.5.0",
-    "taze": "^19.16.0",
+    "taze": "^20.0.0",
     "tsdown": "^0.22.13",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
