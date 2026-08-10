@@ -145,6 +145,38 @@ jobs:
           echo "::error::Failed to push dist/ to ${PR_BRANCH} after 3 attempts"
           exit 1
 
+      - name: Verify dist is up to date
+        # Assert the invariant the auto-commit above only *usually* maintains:
+        # the committed dist/ matches a clean build of this commit. Consumers
+        # run dist/index.js directly, and nothing downstream re-derives it — the
+        # release reconciler compares dist/ against the newest tag, not against
+        # a build, so a stale bundle would be published rather than caught.
+        #
+        # This runs inside the existing job on purpose, so the already-required
+        # summary check gates it without adding a new required check.
+        #
+        # It is a no-op wherever the step above committed (the tree is clean by
+        # then). It bites exactly where that step cannot run:
+        #   - pull requests from forks, which are never auto-fixed, so a fork
+        #     could otherwise merge src/ with a bundle that does not match;
+        #   - runs authored by the bot, which verify the result of its own push
+        #     — the one place a mid-run rebase could have left wrong content.
+        # The build is byte-deterministic, so this cannot flake.
+        run: |
+          set -euo pipefail
+
+          # --porcelain rather than `git diff`, so a build output the commit
+          # never tracked still counts as a mismatch instead of being invisible.
+          drift=$(git status --porcelain -- dist/)
+          if [[ -z "$drift" ]]; then
+            echo "dist/ matches a clean build of this commit"
+            exit 0
+          fi
+
+          echo "::error::dist/ does not match a clean build. Run 'pnpm run package' and commit the result."
+          echo "$drift"
+          exit 1
+
   build-and-test-summary:
     name: Build and Test Summary
     runs-on: ubuntu-latest
