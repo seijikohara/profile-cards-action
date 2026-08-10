@@ -59,8 +59,10 @@ reusability.
   (`gh release --generate-notes`); GitHub App token minted only after
   PR-controlled build steps. No CHANGELOG, no semantic-release.
 - **CI**: `lint → format:check → typecheck → test → package`; enforce `dist/`
-  freshness by regenerating and committing it back to the PR branch; SHA-pin
-  third-party actions with `# vN` comments; `persist-credentials: false`.
+  freshness by regenerating and committing it back to the PR branch, then
+  asserting it matches a clean build (the commit-back cannot run on fork pull
+  requests, so the assertion is what actually gates them); SHA-pin third-party
+  actions with `# vN` comments; `persist-credentials: false`.
 - **Integration test**: `.github/workflows/test-action.yml` runs `uses: ./` over a
   scenario matrix.
 - **Commits**: Conventional Commits with scopes.
@@ -249,7 +251,8 @@ itself on the next trigger.
 - **Integration (`uses: ./` matrix):** default fonts; a custom Google font
   (weight-fallback path); a card subset; a badges list; `commit: false` (assert
   `changed`/`files` outputs) — run against a real profile (e.g. `seijikohara`).
-- **`dist/` freshness** enforced in CI (regenerate + commit back).
+- **`dist/` freshness** enforced in CI (regenerate + commit back, then assert the
+  tree matches a clean build so fork pull requests cannot merge a stale bundle).
 
 ## Risks
 
