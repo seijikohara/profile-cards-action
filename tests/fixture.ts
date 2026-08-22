@@ -1,6 +1,6 @@
 /** Deterministic synthetic profile data for tests and the preview app. */
 
-import type { DayContribution, ProfileData } from '../src/model.js';
+import type { CommitSample, DayContribution, ProfileData } from '../src/model.js';
 
 /** mulberry32 — tiny seeded PRNG so fixtures never change between runs. */
 function mulberry32(seed: number): () => number {
@@ -73,6 +73,38 @@ function lifetimeDays(): DayContribution[] {
   return days.map((day) => ({ ...day, level: levelFor(day.count, max) }));
 }
 
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/**
+ * Deterministic synthetic commits over the trailing year: weekday working
+ * hours with a morning peak and an afternoon tail, quiet weekends, and a
+ * small share of UTC-stamped (web UI) commits.
+ */
+function commitSamples(): CommitSample[] {
+  const rand = mulberry32(20260817);
+  const end = Date.parse('2026-07-22T00:00:00Z');
+  const samples: CommitSample[] = [];
+  for (let index = 364; index >= 0; index -= 1) {
+    const ms = end - index * DAY_MS;
+    const weekday = new Date(ms).getUTCDay(); // 0 = Sunday .. 6 = Saturday
+    const weekend = weekday === 0 || weekday === 6;
+    const roll = rand();
+    const count = weekend ? (roll < 0.6 ? 0 : Math.ceil(rand() * 3)) : roll < 0.2 ? 0 : Math.ceil(rand() * 6);
+    for (let n = 0; n < count; n += 1) {
+      const hour = rand() < 0.6 ? 8 + Math.floor(rand() * 4) : 13 + Math.floor(rand() * 9);
+      const suffix = rand() < 0.05 ? 'Z' : '+09:00';
+      samples.push({
+        date: `${dateStr(ms)}T${pad2(hour)}:${pad2(Math.floor(rand() * 60))}:00${suffix}`,
+        additions: Math.ceil(rand() * 120),
+        deletions: Math.floor(rand() * 60),
+      });
+    }
+  }
+  return samples;
+}
+
 export function makeFixture(): ProfileData {
   const trailing = trailingDays();
   return {
@@ -117,6 +149,7 @@ export function makeFixture(): ProfileData {
       days: trailing,
       total: trailing.reduce((sum, day) => sum + day.count, 0),
     },
+    commits: commitSamples(),
     generatedAt: '2026-07-22T03:17:00.000Z',
   };
 }

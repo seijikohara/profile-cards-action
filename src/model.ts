@@ -35,6 +35,14 @@ export interface TrailingCalendar {
   readonly total: number;
 }
 
+/** One commit authored by the user on a default branch, from the trailing-year sweep. */
+export interface CommitSample {
+  /** Author date as returned by the API — a GitTimestamp keeping the author's UTC offset. */
+  readonly date: string;
+  readonly additions: number;
+  readonly deletions: number;
+}
+
 export interface ProfileData {
   readonly login: string;
   readonly name: string | null;
@@ -55,6 +63,8 @@ export interface ProfileData {
   readonly lifetimeDays: readonly DayContribution[];
   /** Trailing ~12 months, for the 3D graph. */
   readonly trailing: TrailingCalendar;
+  /** Commits authored by the user on owned default branches, trailing 12 months. */
+  readonly commits: readonly CommitSample[];
   /** ISO timestamp of generation, minute precision. */
   readonly generatedAt: string;
 }

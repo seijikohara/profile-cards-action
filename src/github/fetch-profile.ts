@@ -1,12 +1,21 @@
 /** Orchestrates the API calls and normalizes them into the domain model. */
 
-import type { DayContribution, LanguageSlice, ProfileData, TrailingCalendar, YearActivity } from '../model.js';
+import type {
+  CommitSample,
+  DayContribution,
+  LanguageSlice,
+  ProfileData,
+  TrailingCalendar,
+  YearActivity,
+} from '../model.js';
 import { graphql } from './client.js';
 import {
+  COMMITS_QUERY,
   PROFILE_QUERY,
   TRAILING_QUERY,
   YEAR_QUERY,
   type CalendarData,
+  type CommitsQueryData,
   type ContributionLevelName,
   type ProfileQueryData,
   type TrailingQueryData,
@@ -49,6 +58,41 @@ function aggregateLanguages(repos: readonly RepoNode[]): LanguageSlice[] {
   return [...totals.entries()]
     .map(([name, { color, bytes }]) => ({ name, color, bytes }))
     .toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+}
+
+/**
+ * Page through commits the user authored on one repository's default branch
+ * within the sweep window. Returns [] for empty repositories (no default
+ * branch) and skips commits without an author date, which cannot be bucketed.
+ */
+async function fetchRepoCommits(
+  token: string,
+  owner: string,
+  name: string,
+  authorId: string,
+  since: string
+): Promise<CommitSample[]> {
+  const samples: CommitSample[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: CommitsQueryData = await graphql<CommitsQueryData>(token, COMMITS_QUERY, {
+      owner,
+      name,
+      authorId,
+      since,
+      cursor,
+    });
+    const history = page.repository?.defaultBranchRef?.target?.history;
+    if (!history) return samples;
+    for (const node of history.nodes) {
+      const date = node.author?.date;
+      if (date !== null && date !== undefined) {
+        samples.push({ date, additions: node.additions, deletions: node.deletions });
+      }
+    }
+    cursor = history.pageInfo.hasNextPage ? history.pageInfo.endCursor : null;
+  } while (cursor !== null);
+  return samples;
 }
 
 /**
@@ -136,6 +180,14 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
 
   const sourceRepos = repoNodes.filter((repo) => !repo.isFork && !repo.isArchived);
 
+  // Sweep commits the user authored across owned source repositories over the
+  // trailing 365 days — one paginated 1-point query per repository, fanned out
+  // like the year queries. This powers the cadence card.
+  const since = new Date(Date.now() - 365 * 86_400_000).toISOString();
+  const commits = (
+    await Promise.all(sourceRepos.map((repo) => fetchRepoCommits(token, login, repo.name, user.id, since)))
+  ).flat();
+
   return {
     login,
     name: user.name,
@@ -149,5 +201,6 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
     years: yearActivities,
     lifetimeDays,
     trailing,
+    commits,
   };
 }

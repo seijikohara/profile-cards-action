@@ -65,7 +65,15 @@ describe('readInputs', () => {
   it('should fall back to documented defaults when inputs are empty', () => {
     setInputs({ 'github-token': 'ghp_secret', username: 'octocat' });
     const inputs = readInputs();
-    expect(inputs.cards).toEqual(['overview', 'lifetime', 'contributions', 'composition', 'rhythm', 'languages']);
+    expect(inputs.cards).toEqual([
+      'overview',
+      'lifetime',
+      'contributions',
+      'composition',
+      'rhythm',
+      'cadence',
+      'languages',
+    ]);
     expect(inputs.themeIds).toEqual(['light', 'dark']);
     expect(inputs.outputDir).toBe('assets');
     expect(inputs.font).toBe('Roboto');
@@ -82,7 +90,7 @@ describe('readInputs', () => {
   it('should reject an unknown card', () => {
     setInputs({ ...VALID_INPUTS, cards: 'overview,bogus' });
     expect(() => readInputs()).toThrow(
-      'Unknown card "bogus". Valid: overview, lifetime, contributions, composition, rhythm, languages.'
+      'Unknown card "bogus". Valid: overview, lifetime, contributions, composition, rhythm, cadence, languages.'
     );
   });
 

@@ -22,7 +22,7 @@ reusability.
 
 ## Non-goals
 
-- No new data or cards, no time-of-day/punch-card (decided).
+- No new data or cards, no time-of-day/punch-card (decided). _Superseded 2026-08-22: see the addendum at the end of this document._
 - No icon-library change — `simple-icons` stays (thesvg evaluated and rejected:
   no `path` API, heterogeneous non-tintable icons, mixed/trademark-encumbered
   license, young single-maintainer project).
@@ -71,18 +71,18 @@ reusability.
 
 **Inputs** (kebab-case):
 
-| Input            | Required | Default                                                        | Description                                                                                                                                              |
-| ---------------- | -------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `github-token`   | yes      | —                                                              | Token for the GraphQL API (the canonical data producer) and, when committing, for push.                                                                  |
-| `username`       | no       | _(repo owner)_                                                 | GitHub login to render. Empty → `GITHUB_REPOSITORY_OWNER` (resolved in code, since `action.yml` defaults can't use `${{ }}`).                            |
-| `cards`          | no       | `overview,lifetime,contributions,composition,rhythm,languages` | Which cards to render (comma/space/newline list).                                                                                                        |
-| `output-dir`     | no       | `assets`                                                       | Directory to write card SVGs into.                                                                                                                       |
-| `themes`         | no       | `light,dark`                                                   | Themes to render.                                                                                                                                        |
-| `font`           | no       | `Roboto`                                                       | Google Fonts **sans** family.                                                                                                                            |
-| `mono-font`      | no       | `Roboto Mono`                                                  | Google Fonts **monospace** family.                                                                                                                       |
-| `badges`         | no       | _(empty)_                                                      | Multiline; one brand **name** per line. Each → `simple-icons` lookup → icon+text or text-only pill. Written to `<output-dir>/badges/<slug>.<theme>.svg`. |
-| `commit`         | no       | `true`                                                         | Commit changed files back to the repo. `false` → write only.                                                                                             |
-| `commit-message` | no       | `chore(profile): refresh generated cards [skip ci]`            | Commit subject when `commit: true`.                                                                                                                      |
+| Input            | Required | Default                                                                | Description                                                                                                                                              |
+| ---------------- | -------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `github-token`   | yes      | —                                                                      | Token for the GraphQL API (the canonical data producer) and, when committing, for push.                                                                  |
+| `username`       | no       | _(repo owner)_                                                         | GitHub login to render. Empty → `GITHUB_REPOSITORY_OWNER` (resolved in code, since `action.yml` defaults can't use `${{ }}`).                            |
+| `cards`          | no       | `overview,lifetime,contributions,composition,rhythm,cadence,languages` | Which cards to render (comma/space/newline list).                                                                                                        |
+| `output-dir`     | no       | `assets`                                                               | Directory to write card SVGs into.                                                                                                                       |
+| `themes`         | no       | `light,dark`                                                           | Themes to render.                                                                                                                                        |
+| `font`           | no       | `Roboto`                                                               | Google Fonts **sans** family.                                                                                                                            |
+| `mono-font`      | no       | `Roboto Mono`                                                          | Google Fonts **monospace** family.                                                                                                                       |
+| `badges`         | no       | _(empty)_                                                              | Multiline; one brand **name** per line. Each → `simple-icons` lookup → icon+text or text-only pill. Written to `<output-dir>/badges/<slug>.<theme>.svg`. |
+| `commit`         | no       | `true`                                                                 | Commit changed files back to the repo. `false` → write only.                                                                                             |
+| `commit-message` | no       | `chore(profile): refresh generated cards [skip ci]`                    | Commit subject when `commit: true`.                                                                                                                      |
 
 **Outputs**: `changed` (`"true"`/`"false"`), `files` (JSON array of written paths).
 
@@ -275,7 +275,7 @@ itself on the next trigger.
 
 ## Out of scope
 
-- New data/cards, time-of-day, thesvg.
+- New data/cards, time-of-day, thesvg. _Time-of-day shipped 2026-08-22 (addendum below); thesvg stays rejected._
 - Auto-creating the action repo (the user creates it; this design describes its
   contents).
 
@@ -322,3 +322,21 @@ Deviations and findings, authoritative where they differ from the above:
 - **Consumer repo reduced** to `.github`, `assets`, `docs`, `README.md`,
   `renovate.json5`, `.gitignore`; `ci.yml` dropped and Renovate narrowed to the
   `github-actions` manager.
+
+## Addendum (2026-08-22): cadence and repositories cards
+
+Supersedes the "no time-of-day" non-goal. Design:
+[`docs/superpowers/specs/2026-08-22-cadence-and-repositories-cards-design.md`](superpowers/specs/2026-08-22-cadence-and-repositories-cards-design.md).
+
+- **`cadence`** — weekday × hour punch card over a new commit sweep:
+  `Commit.history(author, since)` per owned source repository, trailing 365
+  days, default branch only. The load-bearing schema fact: `GitActor.date` is a
+  `GitTimestamp`, which keeps the author's UTC offset, so buckets use the
+  author's own clock with no timezone input. `authoredDate`/`committedDate` are
+  UTC-normalized `DateTime` and must not be used. `compute/cadence.ts` parses
+  the clock face straight off the string; going through `Date` would shift
+  every bucket.
+- **`repositories`** — top repositories by trailing-year commits from
+  `contributionsCollection.commitContributionsByRepository`, including
+  repositories the user does not own.
+- The `rhythm` card gains a footer stat line derived from already-fetched data.
