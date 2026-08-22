@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nearestWeight, resolveFonts } from '../src/fonts.js';
-import { ROBOTO_200, ROBOTO_400, ROBOTO_600, ROBOTO_MONO_400 } from '../src/fonts.generated.js';
+import { ROBOTO_400, ROBOTO_600, ROBOTO_MONO_400 } from '../src/fonts.generated.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -62,16 +62,13 @@ describe('resolveFonts default path', () => {
 
     const css = await resolveFonts('Roboto', 'Roboto Mono');
 
-    expect(css.match(FACE)).toHaveLength(4);
-    // Three CardSans faces (200/400/600) + one CardMono face (400).
-    expect(css.match(/font-family:'CardSans'/g)).toHaveLength(3);
+    expect(css.match(FACE)).toHaveLength(3);
+    // Two CardSans faces (400/600) + one CardMono face (400).
+    expect(css.match(/font-family:'CardSans'/g)).toHaveLength(2);
     expect(css.match(/font-family:'CardMono'/g)).toHaveLength(1);
-    expect(css.match(/src:url\(data:font\/woff2;base64,/g)).toHaveLength(4);
+    expect(css.match(/src:url\(data:font\/woff2;base64,/g)).toHaveLength(3);
 
     // Each face declares its card weight and embeds the matching bundled woff2.
-    expect(css).toContain(
-      `@font-face{font-family:'CardSans';font-style:normal;font-weight:200;src:url(data:font/woff2;base64,${ROBOTO_200}) format('woff2')}`
-    );
     expect(css).toContain(
       `@font-face{font-family:'CardSans';font-style:normal;font-weight:400;src:url(data:font/woff2;base64,${ROBOTO_400}) format('woff2')}`
     );
@@ -92,8 +89,8 @@ describe('resolveFonts default path', () => {
     );
 
     const css = await resolveFonts('  RoBoTo  ', 'roboto mono');
-    expect(css.match(FACE)).toHaveLength(4);
-    expect(css).toContain(`base64,${ROBOTO_200}`);
+    expect(css.match(FACE)).toHaveLength(3);
+    expect(css).toContain(`base64,${ROBOTO_400}`);
     expect(css).toContain(`base64,${ROBOTO_MONO_400}`);
   });
 });
@@ -167,20 +164,17 @@ describe('resolveFonts remote static family', () => {
     const b64_400 = woff2_400.toString('base64');
     const b64_700 = woff2_700.toString('base64');
 
-    // Three CardSans faces, declared at the card weights 200/400/600.
-    expect(css_out.match(/font-family:'CardSans'/g)).toHaveLength(3);
-    // 200 and 400 map to nearest 400; 600 maps to nearest 700.
-    expect(css_out).toContain(
-      `@font-face{font-family:'CardSans';font-style:normal;font-weight:200;src:url(data:font/woff2;base64,${b64_400}) format('woff2')}`
-    );
+    // Two CardSans faces, declared at the card weights 400/600.
+    expect(css_out.match(/font-family:'CardSans'/g)).toHaveLength(2);
+    // 400 maps to nearest 400; 600 maps to nearest 700.
     expect(css_out).toContain(
       `@font-face{font-family:'CardSans';font-style:normal;font-weight:400;src:url(data:font/woff2;base64,${b64_400}) format('woff2')}`
     );
     expect(css_out).toContain(
       `@font-face{font-family:'CardSans';font-style:normal;font-weight:600;src:url(data:font/woff2;base64,${b64_700}) format('woff2')}`
     );
-    // Three sans faces + the bundled mono face.
-    expect(css_out.match(FACE)).toHaveLength(4);
+    // Two sans faces + the bundled mono face.
+    expect(css_out.match(FACE)).toHaveLength(3);
 
     // Downloads are cached: 400 is reused for the 200 and 400 faces.
     // 1 CSS + 2 distinct woff2 = 3 calls.

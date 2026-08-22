@@ -11,16 +11,47 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
   const lifetime = data.years.reduce((sum, year) => sum + year.total, 0);
   const latestYear = data.years.at(-1);
   const thisYearTotal = latestYear?.total ?? 0;
+  const firstYear = data.years[0]?.year;
+
+  // Average per elapsed day of the latest year; lifetimeDays is clamped to
+  // today, so counting its entries for the year is the elapsed-day count.
+  const yearPrefix = `${latestYear?.year ?? ''}-`;
+  const elapsedDays =
+    latestYear === undefined ? 0 : data.lifetimeDays.filter((day) => day.date.startsWith(yearPrefix)).length;
+  const dailyAverage = elapsedDays === 0 ? undefined : `Avg ${(thisYearTotal / elapsedDays).toFixed(1)} / day`;
+
+  // Peak year of a per-year series; undefined when every year is zero.
+  const peakOf = (pick: (year: (typeof data.years)[number]) => number): string | undefined => {
+    const best = data.years.reduce(
+      (winner, year) => (pick(year) > winner.count ? { year: year.year, count: pick(year) } : winner),
+      { year: 0, count: 0 }
+    );
+    return best.count === 0 ? undefined : `Peak ${best.year} · ${formatInt(best.count)}`;
+  };
 
   const rowA: TileSpec[] = [
-    { label: 'Contributions (all time)', value: formatInt(lifetime) },
-    { label: `Contributions (${latestYear?.year ?? 'this year'})`, value: formatInt(thisYearTotal) },
+    {
+      label: 'Contributions (all time)',
+      value: formatInt(lifetime),
+      sub: firstYear === undefined ? undefined : `Since ${firstYear}`,
+    },
+    {
+      label: `Contributions (${latestYear?.year ?? 'this year'})`,
+      value: formatInt(thisYearTotal),
+      sub: dailyAverage,
+    },
     { label: 'Stars earned', value: formatInt(data.starsEarned) },
     { label: 'Followers', value: formatInt(data.followers) },
   ];
   const rowB: TileSpec[] = [
-    { label: 'Pull requests merged', value: formatInt(data.mergedPullRequests) },
-    { label: 'Issues opened', value: formatInt(data.issues) },
+    // Yearly peaks pair with the opened/typed per-year series — the closest
+    // honest caption the API offers for these lifetime counters.
+    {
+      label: 'Pull requests merged',
+      value: formatInt(data.mergedPullRequests),
+      sub: peakOf((year) => year.pullRequests),
+    },
+    { label: 'Issues opened', value: formatInt(data.issues), sub: peakOf((year) => year.issues) },
     { label: 'Public repositories', value: formatInt(data.publicSourceRepos) },
     // The API's repositoriesContributedTo is a rolling recent window, not a
     // career total — the label must say so.

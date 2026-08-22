@@ -166,6 +166,7 @@ export function makeFixture(): ProfileData {
     },
     commits: commitSamples(),
     topRepositories: topRepositories(),
+    trailingCommits: { total: 1432, repositories: 18 },
     generatedAt: '2026-07-22T03:17:00.000Z',
   };
 }

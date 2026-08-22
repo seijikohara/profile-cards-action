@@ -181,6 +181,12 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
     .filter((entry) => !entry.repository.isPrivate)
     .map((entry) => ({ nameWithOwner: entry.repository.nameWithOwner, commits: entry.contributions.totalCount }));
 
+  const trailingCollection = trailingData.user?.contributionsCollection;
+  const trailingCommits = {
+    total: trailingCollection?.totalCommitContributions ?? 0,
+    repositories: trailingCollection?.totalRepositoriesWithContributedCommits ?? 0,
+  };
+
   // The current year's calendar pads with zero-count FUTURE days up to the
   // requested `to`; keeping them would zero out the current streak. The
   // trailing (no-args) calendar ends today, so its last date is the clamp.
@@ -213,5 +219,6 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
     trailing,
     commits,
     topRepositories,
+    trailingCommits,
   };
 }

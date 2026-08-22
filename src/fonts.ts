@@ -2,7 +2,7 @@
  * Runtime font resolver.
  *
  * Supplies the two `@font-face` families the card renderer references —
- * `CardSans` (weights 200/400/600) and `CardMono` (weight 400) — as Base64
+ * `CardSans` (weights 400/600) and `CardMono` (weight 400) — as Base64
  * woff2 data URIs. The chosen sans and mono families are resolved
  * independently: the bundled default (Roboto / Roboto Mono) reads pre-built
  * constants with no network, while any other family is fetched from Google
@@ -45,7 +45,7 @@
  *     block preceded by the `/* latin *​/` comment (distinct from `latin-ext`).
  */
 
-import { ROBOTO_200, ROBOTO_400, ROBOTO_600, ROBOTO_MONO_400 } from './fonts.generated.js';
+import { ROBOTO_400, ROBOTO_600, ROBOTO_MONO_400 } from './fonts.generated.js';
 
 // A modern desktop Chrome UA so the API serves woff2 rather than ttf.
 const CHROME_UA =
@@ -56,7 +56,7 @@ const CHROME_UA =
 const HUNDREDS = '100;200;300;400;500;600;700;800;900';
 
 // Fixed alias families and the card weights each must declare.
-const CARD_SANS_WEIGHTS: readonly number[] = [200, 400, 600];
+const CARD_SANS_WEIGHTS: readonly number[] = [400, 600];
 const CARD_MONO_WEIGHTS: readonly number[] = [400];
 
 interface LatinFace {
@@ -183,11 +183,7 @@ async function buildRemoteFaces(name: string, alias: string, cardWeights: readon
 
 function resolveSans(family: string): Promise<string[]> {
   if (family.trim().toLowerCase() === 'roboto') {
-    return Promise.resolve([
-      face('CardSans', 200, ROBOTO_200),
-      face('CardSans', 400, ROBOTO_400),
-      face('CardSans', 600, ROBOTO_600),
-    ]);
+    return Promise.resolve([face('CardSans', 400, ROBOTO_400), face('CardSans', 600, ROBOTO_600)]);
   }
   return buildRemoteFaces(family.trim(), 'CardSans', CARD_SANS_WEIGHTS);
 }
@@ -201,7 +197,7 @@ function resolveMono(family: string): Promise<string[]> {
 
 /**
  * Resolve the sans and mono families into a CSS `@font-face` block declaring
- * `CardSans` (200/400/600) and `CardMono` (400) as Base64 woff2 data URIs.
+ * `CardSans` (400/600) and `CardMono` (400) as Base64 woff2 data URIs.
  */
 export async function resolveFonts(sansFamily: string, monoFamily: string): Promise<string> {
   const [sans, mono] = await Promise.all([resolveSans(sansFamily), resolveMono(monoFamily)]);

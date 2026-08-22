@@ -140,4 +140,17 @@ describe('computeLifetime', () => {
     expect(computeLifetime(series)).toEqual(first); // stable across calls
     expect(computeLifetime(shuffled)).toEqual(first); // independent of input order
   });
+
+  it('carries per-year daily-count totals for the row column', () => {
+    const result = computeLifetime([day('2020-01-01', 3), day('2020-01-02', 4), day('2021-06-15', 10)]);
+    expect(result.years.map((entry) => ({ year: entry.year, total: entry.total }))).toEqual([
+      { year: 2020, total: 7 },
+      { year: 2021, total: 10 },
+    ]);
+  });
+
+  it('totals zero for a year of empty days', () => {
+    const result = computeLifetime([day('2020-01-01', 0)]);
+    expect(result.years[0]?.total).toBe(0);
+  });
 });

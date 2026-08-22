@@ -5,18 +5,24 @@ import { languageShares, type LanguageShare } from '../compute/languages.js';
 import { squarify } from '../compute/treemap.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
+import { formatBytes, formatInt } from '../svg/text.js';
 import { contrast, type Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 
 const TREE_TOP = 60;
-const TREE_HEIGHT = 150;
+const TREE_HEIGHT = 190;
 const LEGEND_TOP_GAP = 30;
 const LEGEND_COLUMNS = 3;
 const LEGEND_ROW_HEIGHT = 30;
 
-/** Smallest cell that fits a two-line in-cell label; below this, only the legend names the language. */
+// In-cell label tiers by cell height (at LABEL_MIN_WIDTH or wider): the name
+// needs ~26px, the percentage line ~44px, the bytes line ~64px. Every tier's
+// last baseline clears the cell bottom — the old single 30px threshold let the
+// percentage baseline (y+34) fall outside the cell and clip.
 const LABEL_MIN_WIDTH = 54;
-const LABEL_MIN_HEIGHT = 30;
+const NAME_MIN_HEIGHT = 26;
+const PCT_MIN_HEIGHT = 44;
+const BYTES_MIN_HEIGHT = 64;
 
 /** Fill for a share: its linguist color, or the muted token for "Other" and colorless languages. */
 function cellFill(share: LanguageShare, theme: Theme): string {
@@ -65,13 +71,25 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
     });
 
     let label = '';
-    if (rect.width >= LABEL_MIN_WIDTH && rect.height >= LABEL_MIN_HEIGHT) {
+    if (rect.width >= LABEL_MIN_WIDTH && rect.height >= NAME_MIN_HEIGHT) {
       // On-cell ink: white or near-black, whichever contrasts more with the fill.
       const ink = contrast(fill, '#ffffff') >= contrast(fill, '#1f2328') ? '#ffffff' : '#1f2328';
       const tx = rect.x + 9;
-      label =
-        el('text', { x: tx, y: rect.y + 20, class: 'lang', fill: ink }, textNode(share.name)) +
-        el('text', { x: tx, y: rect.y + 34, class: 'lang-pct', fill: ink }, textNode(`${share.pct.toFixed(1)}%`));
+      label = el('text', { x: tx, y: rect.y + 20, class: 'lang', fill: ink }, textNode(share.name));
+      if (rect.height >= PCT_MIN_HEIGHT) {
+        label += el(
+          'text',
+          { x: tx, y: rect.y + 34, class: 'lang-pct', fill: ink },
+          textNode(`${share.pct.toFixed(1)}%`)
+        );
+      }
+      if (rect.height >= BYTES_MIN_HEIGHT) {
+        label += el(
+          'text',
+          { x: tx, y: rect.y + 50, class: 'lang-pct', fill: ink },
+          textNode(formatBytes(share.bytes))
+        );
+      }
     }
 
     return el('g', { class: `fade c${rect.index}` }, rectEl, label);
@@ -93,6 +111,11 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
       el('text', { x: x + 18, y, class: 'leg-name' }, textNode(share.name)),
       el(
         'text',
+        { x: x + columnWidth - 70, y, class: 't-tick', 'text-anchor': 'end' },
+        textNode(formatBytes(share.bytes))
+      ),
+      el(
+        'text',
         { x: x + columnWidth - 16, y, class: 't-tick', 'text-anchor': 'end' },
         textNode(`${share.pct.toFixed(1)}%`)
       )
@@ -100,7 +123,22 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
   });
 
   const legendRows = Math.ceil(shares.length / LEGEND_COLUMNS);
-  const height = legendTop + (legendRows - 1) * LEGEND_ROW_HEIGHT + CARD_PADDING + 8;
+  const legendBottom = legendTop + (legendRows - 1) * LEGEND_ROW_HEIGHT;
+
+  // Footer: the population the treemap slices — counts before Other-folding.
+  const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0);
+  const footerBaseline = legendBottom + 30;
+  const footer = el(
+    'text',
+    { x: CARD_PADDING, y: footerBaseline, class: 't-label' },
+    el('tspan', { class: 't-stat' }, textNode(String(data.languages.length))),
+    textNode(' languages across '),
+    el('tspan', { class: 't-stat' }, textNode(formatInt(data.publicSourceRepos))),
+    textNode(' source repositories · '),
+    el('tspan', { class: 't-stat' }, textNode(formatBytes(totalBytes)))
+  );
+
+  const height = footerBaseline + CARD_PADDING;
 
   // Per-cell fade delay, keyed by the share's rank and capped so the last cell is
   // not left far behind the first. Delay is overridden per class rather than
@@ -128,6 +166,6 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
       fontFaceCss,
     },
     ...cells,
-    el('g', { class: 'fade' }, ...legend)
+    el('g', { class: 'fade' }, ...legend, footer)
   );
 }

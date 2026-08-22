@@ -21,11 +21,13 @@ function year(yearNumber: number, parts: Partial<Omit<YearActivity, 'year'>> = {
 }
 
 describe('computeComposition', () => {
-  it('extracts segments in [commits, pullRequests, issues, reviews, restricted] order', () => {
+  it('extracts segments in [commits, issues, pullRequests, reviews, restricted] order', () => {
+    // Issues sits between commits and pull requests so the blue/purple pair
+    // never stacks adjacently (color-vision separation).
     const data = computeComposition([
       year(2023, { commits: 1, pullRequests: 2, issues: 3, reviews: 4, restricted: 5 }),
     ]);
-    expect(data.years[0]?.segments).toEqual([1, 2, 3, 4, 5]);
+    expect(data.years[0]?.segments).toEqual([1, 3, 2, 4, 5]);
   });
 
   it('sums the five segments and ignores year.total', () => {
@@ -73,7 +75,15 @@ describe('computeComposition', () => {
   });
 
   it('returns empty aggregates for no years', () => {
-    expect(computeComposition([])).toEqual({ years: [], maxSum: 0, privateShare: 0 });
+    expect(computeComposition([])).toEqual({ years: [], maxSum: 0, privateShare: 0, typeTotals: [0, 0, 0, 0, 0] });
+  });
+
+  it('sums per-type lifetime totals in segment order', () => {
+    const data = computeComposition([
+      year(2022, { commits: 1, issues: 2, pullRequests: 3, reviews: 4, restricted: 5 }),
+      year(2023, { commits: 10, issues: 20, pullRequests: 30, reviews: 40, restricted: 50 }),
+    ]);
+    expect(data.typeTotals).toEqual([11, 22, 33, 44, 55]);
   });
 
   it('produces the full composition structure deterministically', () => {
@@ -85,6 +95,7 @@ describe('computeComposition', () => {
       ],
       maxSum: 10,
       privateShare: 0.5,
+      typeTotals: [10, 0, 0, 0, 10],
     };
     expect(computeComposition(input)).toEqual(expected);
     // Identical input yields identical output.

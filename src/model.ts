@@ -73,6 +73,8 @@ export interface ProfileData {
   readonly commits: readonly CommitSample[];
   /** Public repositories the user committed to, trailing 12 months, API order. */
   readonly topRepositories: readonly RepoCommits[];
+  /** Trailing-year commit-contribution totals across ALL repositories the viewer can see. */
+  readonly trailingCommits: { readonly total: number; readonly repositories: number };
   /** ISO timestamp of generation, minute precision. */
   readonly generatedAt: string;
 }

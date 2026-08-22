@@ -12,6 +12,7 @@ import { computeRhythm } from '../compute/rhythm.js';
 import type { ProfileData } from '../model.js';
 import { horizontalBar, verticalBar } from '../svg/bars.js';
 import { el, textNode } from '../svg/dsl.js';
+import { formatCompact } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 
@@ -52,13 +53,6 @@ function coord(value: number): string {
   return String(Math.round(value * 100) / 100);
 }
 
-/** Compact magnitude for the bar-end value, e.g. 2345 -> "2.3k". */
-function compact(value: number): string {
-  if (value < 1000) return String(value);
-  const k = value / 1000;
-  return `${k >= 10 ? Math.round(k) : Math.round(k * 10) / 10}k`;
-}
-
 export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: string): string {
   const rhythm = computeRhythm(data.lifetimeDays);
   const calmFill = theme.contribRamp[2];
@@ -91,7 +85,11 @@ export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: strin
       );
     }
     weekdayValues.push(
-      el('text', { x: BAR_START_X + length + VALUE_GAP, y: rowCenter + 3.3, class: 't-tick' }, textNode(compact(value)))
+      el(
+        'text',
+        { x: BAR_START_X + length + VALUE_GAP, y: rowCenter + 3.3, class: 't-tick' },
+        textNode(formatCompact(value))
+      )
     );
   });
 
@@ -117,6 +115,16 @@ export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: strin
           verticalBar(center - MONTH_BAR_W / 2, BASELINE_Y, MONTH_BAR_W, height, fill)
         )
       );
+      // The peak month gets the panel's one value label, above the accent bar.
+      if (index === rhythm.peakMonth) {
+        monthTicks.push(
+          el(
+            'text',
+            { x: center, y: BASELINE_Y - height - 6, class: 't-tick', 'text-anchor': 'middle' },
+            textNode(formatCompact(value))
+          )
+        );
+      }
     }
     monthTicks.push(
       el('text', { x: center, y: MONTH_TICK_BASELINE, class: 't-tick', 'text-anchor': 'middle' }, textNode(letter))
@@ -170,12 +178,11 @@ export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: strin
       theme,
       height,
       title: 'Activity rhythm',
-      note: 'by weekday · by month',
+      note: 'all years',
       description: `Activity rhythm for ${data.login}: contributions by weekday and by month of year.`,
       extraCss:
         `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}` +
-        `.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}` +
-        `.t-stat{font-weight:600;fill:${theme.fg}}`,
+        `.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}`,
       fontFaceCss,
     },
     el(

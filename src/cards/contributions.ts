@@ -20,7 +20,7 @@ import { cardFrame, tileRow, type TileSpec } from './frame.js';
 // isometric, which keeps the 53-week ribbon from eating vertical space).
 const HW = 12;
 const HH = 4;
-const MAX_COLUMN = 52;
+const MAX_COLUMN = 40;
 const MIN_COLUMN = 3;
 
 interface Point {
@@ -85,8 +85,8 @@ export function renderContributions(data: ProfileData, streaks: Streaks, theme: 
     right: shade(color, 0.38),
   }));
 
-  const firstTrailing = data.trailing.days[0];
-  const lastTrailing = data.trailing.days.at(-1);
+  const trailingDayCount = data.trailing.days.length;
+  const peakDay = Math.max(0, ...data.trailing.days.map((day) => day.count));
   const tiles: TileSpec[] = [
     {
       label: 'Current streak',
@@ -107,7 +107,11 @@ export function renderContributions(data: ProfileData, streaks: Streaks, theme: 
     {
       label: 'Contributions (past 12 months)',
       value: formatInt(data.trailing.total),
-      sub: firstTrailing && lastTrailing ? formatDateRange(firstTrailing.date, lastTrailing.date) : undefined,
+      // The note already names the window; the caption carries rates instead.
+      sub:
+        trailingDayCount === 0
+          ? undefined
+          : `Avg ${(data.trailing.total / trailingDayCount).toFixed(1)} / day · peak ${formatInt(peakDay)}`,
     },
   ];
   const tileTop = 60;
@@ -119,7 +123,7 @@ export function renderContributions(data: ProfileData, streaks: Streaks, theme: 
   const maxPx = (weekCount - 1) * HW + HW;
   const span = maxPx - minPx;
   const originX = CARD_PADDING + (inner - span) / 2 - minPx;
-  const graphTop = tileTop + tileHeight + 24;
+  const graphTop = tileTop + tileHeight + 18;
   const originY = graphTop + MAX_COLUMN;
   const groundBottom = originY + (weekCount - 1 + 6) * HH + HH * 2;
 
@@ -156,7 +160,7 @@ export function renderContributions(data: ProfileData, streaks: Streaks, theme: 
   });
 
   // Legend (bottom-left) and refresh caption (bottom-right).
-  const legendY = groundBottom + 26;
+  const legendY = groundBottom + 22;
   const swatches = theme.contribRamp.map((color, index) =>
     el('rect', {
       x: CARD_PADDING + 34 + index * 14,
