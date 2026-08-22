@@ -8,6 +8,7 @@ import { renderContributions } from './cards/contributions.js';
 import { renderLanguages } from './cards/languages.js';
 import { renderLifetime } from './cards/lifetime.js';
 import { renderOverview } from './cards/overview.js';
+import { renderRepositories } from './cards/repositories.js';
 import { renderRhythm } from './cards/rhythm.js';
 
 /** Render one card by id. `fontFaceCss` is the resolved @font-face block injected into the frame. */
@@ -31,6 +32,8 @@ export function renderCard(
       return renderRhythm(data, theme, fontFaceCss);
     case 'cadence':
       return renderCadence(data, theme, fontFaceCss);
+    case 'repositories':
+      return renderRepositories(data, theme, fontFaceCss);
     case 'languages':
       return renderLanguages(data, theme, fontFaceCss);
     default:

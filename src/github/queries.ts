@@ -120,7 +120,13 @@ export interface YearQueryData {
   } | null;
 }
 
-/** Trailing ~12 months (API default window) — the 3D graph's data. */
+/**
+ * Trailing ~12 months (API default window) — the 3D graph's data plus the
+ * per-repository commit ranking. `contributions.totalCount` counts commit
+ * contributions (verified against live data), so the ranking needs no nested
+ * pagination. `isPrivate` feeds the fetch-side privacy filter: a PAT can see
+ * private repositories here, and their names must not reach a public card.
+ */
 export const TRAILING_QUERY = `
 query Trailing($login: String!) {
   user(login: $login) {
@@ -128,6 +134,10 @@ query Trailing($login: String!) {
       contributionCalendar {
         totalContributions
         weeks { contributionDays { date contributionCount contributionLevel } }
+      }
+      commitContributionsByRepository(maxRepositories: 25) {
+        repository { nameWithOwner isPrivate }
+        contributions(first: 1) { totalCount }
       }
     }
   }
@@ -137,6 +147,10 @@ export interface TrailingQueryData {
   readonly user: {
     readonly contributionsCollection: {
       readonly contributionCalendar: CalendarData;
+      readonly commitContributionsByRepository: readonly {
+        readonly repository: { readonly nameWithOwner: string; readonly isPrivate: boolean };
+        readonly contributions: { readonly totalCount: number };
+      }[];
     };
   } | null;
 }

@@ -10,6 +10,7 @@
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeRhythm } from '../compute/rhythm.js';
 import type { ProfileData } from '../model.js';
+import { horizontalBar, verticalBar } from '../svg/bars.js';
 import { el, textNode } from '../svg/dsl.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
@@ -23,6 +24,7 @@ const BAND_TOP = 84; // top of the tallest month bar / first weekday row
 const MONTH_MAX_HEIGHT = 104;
 const BASELINE_Y = BAND_TOP + MONTH_MAX_HEIGHT; // shared floor of both panels
 const MONTH_TICK_BASELINE = BASELINE_Y + 15;
+const FOOTER_BASELINE = MONTH_TICK_BASELINE + 29;
 
 // Horizontal split: ~42% weekday panel, gap, ~54% month panel.
 const INNER = CARD_WIDTH - CARD_PADDING * 2;
@@ -55,35 +57,6 @@ function compact(value: number): string {
   if (value < 1000) return String(value);
   const k = value / 1000;
   return `${k >= 10 ? Math.round(k) : Math.round(k * 10) / 10}k`;
-}
-
-/** Horizontal bar with a rounded data-end (right) and a square start (left). */
-function horizontalBar(x: number, y: number, width: number, height: number, fill: string): string {
-  const r = Math.min(height / 2, width);
-  const right = x + width;
-  const bottom = y + height;
-  const d =
-    `M${coord(x)} ${coord(y)}` +
-    `H${coord(right - r)}` +
-    `Q${coord(right)} ${coord(y)} ${coord(right)} ${coord(y + r)}` +
-    `V${coord(bottom - r)}` +
-    `Q${coord(right)} ${coord(bottom)} ${coord(right - r)} ${coord(bottom)}` +
-    `H${coord(x)}Z`;
-  return el('path', { d, fill });
-}
-
-/** Vertical bar with a rounded data-end (top) and a square baseline. */
-function verticalBar(x: number, baseline: number, width: number, height: number, fill: string): string {
-  const r = Math.min(width / 2, height);
-  const top = baseline - height;
-  const d =
-    `M${coord(x)} ${coord(baseline)}` +
-    `V${coord(top + r)}` +
-    `Q${coord(x)} ${coord(top)} ${coord(x + r)} ${coord(top)}` +
-    `H${coord(x + width - r)}` +
-    `Q${coord(x + width)} ${coord(top)} ${coord(x + width)} ${coord(top + r)}` +
-    `V${coord(baseline)}Z`;
-  return el('path', { d, fill });
 }
 
 export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: string): string {
@@ -172,7 +145,25 @@ export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: strin
     'stroke-width': 1,
   });
 
-  const height = MONTH_TICK_BASELINE + CARD_PADDING;
+  const footerParts: string[] = [
+    el('tspan', { class: 't-stat' }, textNode(`${Math.round(rhythm.activeDayRate * 100)}%`)),
+    textNode(' active days'),
+  ];
+  if (rhythm.busiestDay !== undefined) {
+    footerParts.push(
+      textNode(' · busiest '),
+      el('tspan', { class: 't-stat' }, textNode(rhythm.busiestDay.date)),
+      textNode(` (${rhythm.busiestDay.count})`)
+    );
+  }
+  footerParts.push(
+    textNode(' · '),
+    el('tspan', { class: 't-stat' }, textNode(`${Math.round(rhythm.weekendShare * 100)}%`)),
+    textNode(' on weekends')
+  );
+  const footer = el('text', { x: LEFT_X, y: FOOTER_BASELINE, class: 't-label' }, ...footerParts);
+
+  const height = FOOTER_BASELINE + CARD_PADDING;
 
   return cardFrame(
     {
@@ -183,10 +174,21 @@ export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: strin
       description: `Activity rhythm for ${data.login}: contributions by weekday and by month of year.`,
       extraCss:
         `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}` +
-        `.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}`,
+        `.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}` +
+        `.t-stat{font-weight:600;fill:${theme.fg}}`,
       fontFaceCss,
     },
-    el('g', { class: 'fade' }, eyebrows, weekdayAxis, monthBaseline, ...weekdayLabels, ...weekdayValues, ...monthTicks),
+    el(
+      'g',
+      { class: 'fade' },
+      eyebrows,
+      weekdayAxis,
+      monthBaseline,
+      ...weekdayLabels,
+      ...weekdayValues,
+      ...monthTicks,
+      footer
+    ),
     ...weekdayBars,
     ...monthBars
   );

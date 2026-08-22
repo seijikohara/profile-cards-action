@@ -5,7 +5,7 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/seijikohara/profile-cards-action/ci.yaml)](https://github.com/seijikohara/profile-cards-action/actions)
 [![License](https://img.shields.io/github/license/seijikohara/profile-cards-action)](LICENSE)
 
-A GitHub Action that renders profile README cards as SVG from the GitHub GraphQL API. It produces an overview card, contribution history, streaks, contribution composition, activity rhythm, a commit punch card, and a language treemap, and can commit the generated files back to your repository.
+A GitHub Action that renders profile README cards as SVG from the GitHub GraphQL API. It produces an overview card, contribution history, streaks, contribution composition, activity rhythm, a commit punch card, a repository ranking, and a language treemap, and can commit the generated files back to your repository.
 
 ## Overview
 
@@ -21,6 +21,7 @@ Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme
 | `composition`   | Per-year stacked bars of commits, pull requests, issues, reviews, and private contributions, with the overall private share.                                |
 | `rhythm`        | Contributions by weekday and by month of the year.                                                                                                          |
 | `cadence`       | Weekday × hour punch card of commits on owned default branches over the trailing year, in author-local time, with volume stats.                             |
+| `repositories`  | Top public repositories by commits over the trailing year — including repositories the user does not own — as a ranked bar list.                            |
 | `languages`     | A treemap of languages by bytes across public source repositories, with a labeled legend.                                                                   |
 
 Cards are drawn at the 846px width of the profile README column, use GitHub's Primer color tokens so they blend into both themes, animate only on entry (CSS only, disabled under `prefers-reduced-motion`), and contain no scripts or external references.
@@ -75,6 +76,13 @@ Each sample is wrapped in a `<picture>`, so the card you see matches your GitHub
 
 Hours come from each commit's author-local timezone offset, so the card needs no timezone configuration. Commits created through the GitHub web UI are recorded in UTC.
 
+**`repositories`** — where the commits went
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/repositories.dark.svg" />
+  <img alt="Repositories card: top repositories ranked by commits over the trailing year" src="examples/repositories.light.svg" width="100%" />
+</picture>
+
 **`languages`** — language treemap by bytes
 
 <picture>
@@ -128,7 +136,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           username: seijikohara
-          cards: overview,lifetime,contributions,composition,rhythm,cadence,languages
+          cards: overview,lifetime,contributions,composition,rhythm,cadence,repositories,languages
           output-dir: assets
           themes: light,dark
           commit: true
@@ -154,18 +162,18 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
 
 ## Inputs
 
-| Input            | Description                                                                                                                                       | Required | Default                                                                |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
-| `github-token`   | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                               | `true`   | —                                                                      |
-| `username`       | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                             | `false`  | `''`                                                                   |
-| `cards`          | Cards to render (comma/space/newline separated).                                                                                                  | `false`  | `overview,lifetime,contributions,composition,rhythm,cadence,languages` |
-| `output-dir`     | Directory to write card SVGs into.                                                                                                                | `false`  | `assets`                                                               |
-| `themes`         | Themes to render (comma separated): `light`, `dark`.                                                                                              | `false`  | `light,dark`                                                           |
-| `font`           | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                        | `false`  | `Roboto`                                                               |
-| `mono-font`      | Google Fonts monospace family.                                                                                                                    | `false`  | `Roboto Mono`                                                          |
-| `badges`         | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`. | `false`  | `''`                                                                   |
-| `commit`         | Commit changed files back to the repository.                                                                                                      | `false`  | `true`                                                                 |
-| `commit-message` | Commit subject used when `commit` is true.                                                                                                        | `false`  | `chore(profile): refresh generated cards [skip ci]`                    |
+| Input            | Description                                                                                                                                       | Required | Default                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `github-token`   | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                               | `true`   | —                                                                                   |
+| `username`       | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                             | `false`  | `''`                                                                                |
+| `cards`          | Cards to render (comma/space/newline separated).                                                                                                  | `false`  | `overview,lifetime,contributions,composition,rhythm,cadence,repositories,languages` |
+| `output-dir`     | Directory to write card SVGs into.                                                                                                                | `false`  | `assets`                                                                            |
+| `themes`         | Themes to render (comma separated): `light`, `dark`.                                                                                              | `false`  | `light,dark`                                                                        |
+| `font`           | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                        | `false`  | `Roboto`                                                                            |
+| `mono-font`      | Google Fonts monospace family.                                                                                                                    | `false`  | `Roboto Mono`                                                                       |
+| `badges`         | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`. | `false`  | `''`                                                                                |
+| `commit`         | Commit changed files back to the repository.                                                                                                      | `false`  | `true`                                                                              |
+| `commit-message` | Commit subject used when `commit` is true.                                                                                                        | `false`  | `chore(profile): refresh generated cards [skip ci]`                                 |
 
 ## Outputs
 

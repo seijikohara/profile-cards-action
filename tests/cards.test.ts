@@ -9,7 +9,16 @@ import { DARK, LIGHT, THEMES } from '../src/theme.js';
 import { makeFixture } from './fixture.js';
 import { assertWellFormed } from './xml.js';
 
-const CARDS = ['overview', 'lifetime', 'contributions', 'composition', 'rhythm', 'cadence', 'languages'];
+const CARDS = [
+  'overview',
+  'lifetime',
+  'contributions',
+  'composition',
+  'rhythm',
+  'cadence',
+  'repositories',
+  'languages',
+];
 
 let data: ProfileData;
 let streaks: Streaks;

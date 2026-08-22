@@ -72,6 +72,7 @@ describe('readInputs', () => {
       'composition',
       'rhythm',
       'cadence',
+      'repositories',
       'languages',
     ]);
     expect(inputs.themeIds).toEqual(['light', 'dark']);
@@ -90,7 +91,7 @@ describe('readInputs', () => {
   it('should reject an unknown card', () => {
     setInputs({ ...VALID_INPUTS, cards: 'overview,bogus' });
     expect(() => readInputs()).toThrow(
-      'Unknown card "bogus". Valid: overview, lifetime, contributions, composition, rhythm, cadence, languages.'
+      'Unknown card "bogus". Valid: overview, lifetime, contributions, composition, rhythm, cadence, repositories, languages.'
     );
   });
 

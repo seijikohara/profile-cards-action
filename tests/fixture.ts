@@ -1,6 +1,6 @@
 /** Deterministic synthetic profile data for tests and the preview app. */
 
-import type { CommitSample, DayContribution, ProfileData } from '../src/model.js';
+import type { CommitSample, DayContribution, ProfileData, RepoCommits } from '../src/model.js';
 
 /** mulberry32 — tiny seeded PRNG so fixtures never change between runs. */
 function mulberry32(seed: number): () => number {
@@ -105,6 +105,21 @@ function commitSamples(): CommitSample[] {
   return samples;
 }
 
+/** A ranking with a clear leader, mid-field ties, and a long name to exercise truncation. */
+function topRepositories(): RepoCommits[] {
+  return [
+    { nameWithOwner: 'seijikohara/vizel', commits: 379 },
+    { nameWithOwner: 'seijikohara/femto-car-launcher', commits: 371 },
+    { nameWithOwner: 'seijikohara/kogu', commits: 308 },
+    { nameWithOwner: 'seijikohara/db-tester', commits: 194 },
+    { nameWithOwner: 'seijikohara/seijikohara', commits: 168 },
+    { nameWithOwner: 'seijikohara/profile-cards-action', commits: 130 },
+    { nameWithOwner: 'open-telemetry/opentelemetry-js-contrib-examples', commits: 24 },
+    { nameWithOwner: 'seijikohara/docker-compose-cache-action', commits: 24 },
+    { nameWithOwner: 'seijikohara/dotfiles', commits: 9 },
+  ];
+}
+
 export function makeFixture(): ProfileData {
   const trailing = trailingDays();
   return {
@@ -150,6 +165,7 @@ export function makeFixture(): ProfileData {
       total: trailing.reduce((sum, day) => sum + day.count, 0),
     },
     commits: commitSamples(),
+    topRepositories: topRepositories(),
     generatedAt: '2026-07-22T03:17:00.000Z',
   };
 }

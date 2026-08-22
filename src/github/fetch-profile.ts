@@ -5,6 +5,7 @@ import type {
   DayContribution,
   LanguageSlice,
   ProfileData,
+  RepoCommits,
   TrailingCalendar,
   YearActivity,
 } from '../model.js';
@@ -171,6 +172,15 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
     total: trailingCalendar.totalContributions,
   };
 
+  // Public repositories only, whatever token runs the generator: a PAT sees
+  // private repositories in this list, and their names must not leak onto a
+  // publicly served card.
+  const topRepositories: RepoCommits[] = (
+    trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []
+  )
+    .filter((entry) => !entry.repository.isPrivate)
+    .map((entry) => ({ nameWithOwner: entry.repository.nameWithOwner, commits: entry.contributions.totalCount }));
+
   // The current year's calendar pads with zero-count FUTURE days up to the
   // requested `to`; keeping them would zero out the current streak. The
   // trailing (no-args) calendar ends today, so its last date is the clamp.
@@ -202,5 +212,6 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
     lifetimeDays,
     trailing,
     commits,
+    topRepositories,
   };
 }

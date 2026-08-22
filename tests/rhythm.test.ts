@@ -98,4 +98,39 @@ describe('computeRhythm', () => {
   it('rejects malformed dates', () => {
     expect(() => computeRhythm([day('garbage', 1)])).toThrow(/invalid calendar date/);
   });
+
+  it('computes the active-day rate over the whole series', () => {
+    const days = [day('2026-07-20', 1), day('2026-07-21', 0), day('2026-07-22', 3), day('2026-07-23', 0)];
+    expect(computeRhythm(days).activeDayRate).toBe(0.5);
+  });
+
+  it('finds the busiest day, first occurrence winning ties', () => {
+    const days = [day('2026-07-20', 2), day('2026-07-21', 9), day('2026-07-22', 9)];
+    expect(computeRhythm(days).busiestDay).toEqual({ date: '2026-07-21', count: 9 });
+  });
+
+  it('computes the weekend share of contributions', () => {
+    // Sat 6 + Sun 7 = 13 of total 26.
+    const days = [
+      day('2026-07-20', 5),
+      day('2026-07-22', 8),
+      day('2026-07-25', 6), // Saturday
+      day('2026-07-26', 7), // Sunday
+    ];
+    expect(computeRhythm(days).weekendShare).toBe(0.5);
+  });
+
+  it('reports zero rates and no busiest day for an all-zero series', () => {
+    const result = computeRhythm([day('2026-07-20', 0), day('2026-07-21', 0)]);
+    expect(result.activeDayRate).toBe(0);
+    expect(result.weekendShare).toBe(0);
+    expect(result.busiestDay).toBeUndefined();
+  });
+
+  it('reports zero rates for an empty series', () => {
+    const result = computeRhythm([]);
+    expect(result.activeDayRate).toBe(0);
+    expect(result.weekendShare).toBe(0);
+    expect(result.busiestDay).toBeUndefined();
+  });
 });
