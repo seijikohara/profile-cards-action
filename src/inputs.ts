@@ -24,7 +24,15 @@ export interface ActionInputs {
 }
 
 /** Cards the renderer knows how to draw. */
-const KNOWN_CARDS: readonly string[] = ['overview', 'lifetime', 'contributions', 'composition', 'rhythm', 'languages'];
+const KNOWN_CARDS: readonly string[] = [
+  'overview',
+  'lifetime',
+  'contributions',
+  'composition',
+  'rhythm',
+  'cadence',
+  'languages',
+];
 
 const THEME_IDS: readonly ThemeId[] = ['light', 'dark'];
 

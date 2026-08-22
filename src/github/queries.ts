@@ -13,6 +13,7 @@
 export const PROFILE_QUERY = `
 query Profile($login: String!, $cursor: String) {
   user(login: $login) {
+    id
     name
     followers { totalCount }
     mergedPullRequests: pullRequests(states: MERGED) { totalCount }
@@ -31,6 +32,7 @@ query Profile($login: String!, $cursor: String) {
     ) {
       pageInfo { hasNextPage endCursor }
       nodes {
+        name
         isFork
         isArchived
         stargazerCount
@@ -44,6 +46,7 @@ query Profile($login: String!, $cursor: String) {
 
 export interface ProfileQueryData {
   readonly user: {
+    readonly id: string;
     readonly name: string | null;
     readonly followers: { readonly totalCount: number };
     readonly mergedPullRequests: { readonly totalCount: number };
@@ -53,6 +56,7 @@ export interface ProfileQueryData {
     readonly repositories: {
       readonly pageInfo: { readonly hasNextPage: boolean; readonly endCursor: string | null };
       readonly nodes: readonly {
+        readonly name: string;
         readonly isFork: boolean;
         readonly isArchived: boolean;
         readonly stargazerCount: number;
@@ -134,5 +138,47 @@ export interface TrailingQueryData {
     readonly contributionsCollection: {
       readonly contributionCalendar: CalendarData;
     };
+  } | null;
+}
+
+/**
+ * One page of commits the user authored on a repository's default branch.
+ *
+ * `author { date }` is a GitTimestamp: unlike DateTime it keeps the author's
+ * UTC offset, which is what lets the cadence card bucket by the author's own
+ * clock. `authoredDate`/`committedDate` are DateTime (UTC-normalized) and must
+ * not be used here.
+ */
+export const COMMITS_QUERY = `
+query Commits($owner: String!, $name: String!, $authorId: ID!, $since: GitTimestamp!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef {
+      target {
+        ... on Commit {
+          history(author: { id: $authorId }, since: $since, first: 100, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes { author { date } additions deletions }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+export interface CommitsQueryData {
+  readonly repository: {
+    readonly defaultBranchRef: {
+      readonly target: {
+        /** Absent when the ref points at a non-commit object. */
+        readonly history?: {
+          readonly pageInfo: { readonly hasNextPage: boolean; readonly endCursor: string | null };
+          readonly nodes: readonly {
+            readonly author: { readonly date: string | null } | null;
+            readonly additions: number;
+            readonly deletions: number;
+          }[];
+        };
+      } | null;
+    } | null;
   } | null;
 }

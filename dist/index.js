@@ -57072,37 +57072,95 @@ function renderBadges(names, themes) {
 	return out;
 }
 //#endregion
-//#region src/compute/composition.ts
+//#region src/compute/cadence.ts
 /**
-* Reduce each year to its five non-overlapping contribution segments.
-*
-* `sum` uses the five segments, not `year.total`: the calendar total counts
-* active days while the typed counts count events, so the two diverge slightly.
-* The bar scale (`maxSum`) and `privateShare` must agree with the drawn
-* segments, so both derive from the segment sum rather than `total`.
+* Author-local clock face: the fields before the offset suffix. GitTimestamp
+* keeps the author's own offset, so the local hour reads straight off the
+* string — parsing through `Date` would re-normalize to UTC and shift every
+* bucket by the author's offset.
 */
-function computeComposition(years) {
-	const composed = years.map((activity) => {
-		const segments = [
-			activity.commits,
-			activity.pullRequests,
-			activity.issues,
-			activity.reviews,
-			activity.restricted
-		];
-		return {
-			year: activity.year,
-			segments,
-			sum: segments.reduce((total, value) => total + value, 0)
-		};
+const LOCAL_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+/**
+* Return the weekday index for a local calendar date with Monday = 0 ..
+* Sunday = 6. `Date.UTC` with explicit integer args is deterministic and
+* clock-free; `getUTCDay` numbers Sunday = 0, so shift by 6 (mod 7) to move
+* Monday to the front, matching the rhythm and lifetime row order.
+*/
+function weekdayIndex$1(year, month, day) {
+	return (new Date(Date.UTC(year, month - 1, day)).getUTCDay() + 6) % 7;
+}
+/**
+* The four leveling lower bounds from the distribution of NON-ZERO cell
+* counts, mirroring the lifetime heatmap's scheme: minimum, then the 25th,
+* 50th, and 75th percentile cuts (nearest-rank on a 0-based index).
+*/
+function computeThresholds$1(sorted) {
+	const at = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? 0;
+	if (sorted.length === 0) return [
+		0,
+		0,
+		0,
+		0
+	];
+	return [
+		sorted[0] ?? 0,
+		at(.25),
+		at(.5),
+		at(.75)
+	];
+}
+/**
+* Level a cell count: the number of thresholds `t` with `t <= count`, 0 for
+* empty cells. The thresholds are non-decreasing, so the cascade implements
+* that count directly; a positive count below q1 cannot occur (q1 is the
+* minimum non-zero count) but falls back to the level-1 floor.
+*/
+function levelOf$1(count, thresholds) {
+	if (count === 0) return 0;
+	const [q1, q2, q3, q4] = thresholds;
+	if (q4 <= count) return 4;
+	if (q3 <= count) return 3;
+	if (q2 <= count) return 2;
+	if (q1 <= count) return 1;
+	return 1;
+}
+/** Aggregate the commit sweep into the weekday × hour punch-card grid. */
+function computeCadence(commits) {
+	const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
+	let additions = 0;
+	let deletions = 0;
+	for (const sample of commits) {
+		const match = LOCAL_DATETIME.exec(sample.date);
+		if (match === null) throw new Error(`invalid commit date: ${sample.date}`);
+		const year = Number(match[1]);
+		const month = Number(match[2]);
+		const day = Number(match[3]);
+		const hour = Number(match[4]);
+		if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23) throw new Error(`invalid commit date: ${sample.date}`);
+		const row = grid[weekdayIndex$1(year, month, day)];
+		if (row !== void 0) row[hour] = (row[hour] ?? 0) + 1;
+		additions += sample.additions;
+		deletions += sample.deletions;
+	}
+	const thresholds = computeThresholds$1(grid.flat().filter((count) => count > 0).toSorted((a, b) => a - b));
+	const levels = grid.map((row) => row.map((count) => levelOf$1(count, thresholds)));
+	let peak;
+	grid.forEach((row, weekday) => {
+		row.forEach((count, hour) => {
+			if (count > 0 && count > (peak?.count ?? 0)) peak = {
+				weekday,
+				hour,
+				count
+			};
+		});
 	});
-	const maxSum = composed.reduce((max, entry) => Math.max(max, entry.sum), 0);
-	const totalSum = composed.reduce((total, entry) => total + entry.sum, 0);
-	const totalRestricted = years.reduce((total, activity) => total + activity.restricted, 0);
 	return {
-		years: composed,
-		maxSum,
-		privateShare: totalSum === 0 ? 0 : totalRestricted / totalSum
+		grid,
+		levels,
+		peak,
+		totalCommits: commits.length,
+		additions,
+		deletions
 	};
 }
 //#endregion
@@ -57192,6 +57250,140 @@ function tileRow(theme, tiles, y) {
 			}, textNode(tile.sub.toUpperCase())));
 		}).join(""),
 		height
+	};
+}
+//#endregion
+//#region src/cards/cadence.ts
+/**
+* Commit cadence card: a weekday × hour punch card over the trailing-year
+* commit sweep. Dot size and fill encode the quantile level of each cell, the
+* busiest cell is drawn in the accent color, and a footer line carries the
+* sweep's volume stats. Hours are the author's local clock (GitTimestamp keeps
+* the commit's UTC offset), so the card answers "when does this person commit"
+* on their own clock.
+*/
+const WEEKDAY_LABELS$1 = [
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat",
+	"Sun"
+];
+const GRID_TOP = 66;
+const ROW_H$1 = 24;
+const TICK_BASELINE = GRID_TOP + ROW_H$1 * WEEKDAY_LABELS$1.length + 16;
+const FOOTER_BASELINE = TICK_BASELINE + 27;
+const GRID_LEFT = 64;
+const COL_W = 758 / 24;
+/** Dot radius per level 0..4 — area grows with activity, small enough to keep the grid airy. */
+const DOT_RADIUS = [
+	1.6,
+	3.2,
+	4.6,
+	6,
+	7.4
+];
+/**
+* Compact magnitude for footer values, e.g. 45231 -> "45.2k". Extends rhythm's
+* format with a millions tier: line counts over a year of lockfile churn
+* realistically pass 1M.
+*/
+function compact$1(value) {
+	if (value < 1e3) return String(value);
+	const scaled = value >= 1e6 ? value / 1e6 : value / 1e3;
+	const unit = value >= 1e6 ? "m" : "k";
+	return `${scaled >= 10 ? Math.round(scaled) : Math.round(scaled * 10) / 10}${unit}`;
+}
+function renderCadence(data, theme, fontFaceCss) {
+	const cadence = computeCadence(data.commits);
+	const columns = [];
+	for (let hour = 0; hour < 24; hour += 1) {
+		const cx = GRID_LEFT + hour * COL_W + COL_W / 2;
+		const dots = [];
+		cadence.levels.forEach((row, weekday) => {
+			const level = row[hour] ?? 0;
+			const cy = GRID_TOP + weekday * ROW_H$1 + ROW_H$1 / 2;
+			const isPeak = cadence.peak !== void 0 && cadence.peak.weekday === weekday && cadence.peak.hour === hour;
+			dots.push(el("circle", {
+				cx,
+				cy,
+				r: DOT_RADIUS[level],
+				fill: isPeak ? theme.accent : theme.contribRamp[level]
+			}));
+		});
+		columns.push(el("g", {
+			class: "dot",
+			style: `animation-delay:${hour * 14}ms`
+		}, ...dots));
+	}
+	const weekdayLabels = WEEKDAY_LABELS$1.map((label, index) => el("text", {
+		x: 54,
+		y: GRID_TOP + index * ROW_H$1 + ROW_H$1 / 2 + 4,
+		class: "t-label",
+		"text-anchor": "end"
+	}, textNode(label)));
+	const hourTicks = [];
+	for (let hour = 0; hour < 24; hour += 2) hourTicks.push(el("text", {
+		x: GRID_LEFT + hour * COL_W + COL_W / 2,
+		y: TICK_BASELINE,
+		class: "t-tick",
+		"text-anchor": "middle"
+	}, textNode(String(hour))));
+	const footerParts = [el("tspan", { class: "t-stat" }, textNode(compact$1(cadence.totalCommits))), textNode(" commits")];
+	if (cadence.peak !== void 0) {
+		const peakLabel = `${WEEKDAY_LABELS$1[cadence.peak.weekday] ?? ""} ${String(cadence.peak.hour).padStart(2, "0")}:00`;
+		footerParts.push(textNode(" · peak "), el("tspan", { class: "t-stat" }, textNode(peakLabel)));
+	}
+	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`+${compact$1(cadence.additions)}`)), textNode(" "), el("tspan", { class: "t-stat" }, textNode(`−${compact$1(cadence.deletions)}`)), textNode(" lines"));
+	const footer = el("text", {
+		x: 24,
+		y: FOOTER_BASELINE,
+		class: "t-label"
+	}, ...footerParts);
+	return cardFrame({
+		theme,
+		height: FOOTER_BASELINE + 24,
+		title: "Commit cadence",
+		note: "trailing 12 months · author local time",
+		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
+		extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}.t-stat{font-weight:600;fill:${theme.fg}}`,
+		fontFaceCss
+	}, el("g", { class: "fade" }, ...weekdayLabels, ...hourTicks), ...columns, footer);
+}
+//#endregion
+//#region src/compute/composition.ts
+/**
+* Reduce each year to its five non-overlapping contribution segments.
+*
+* `sum` uses the five segments, not `year.total`: the calendar total counts
+* active days while the typed counts count events, so the two diverge slightly.
+* The bar scale (`maxSum`) and `privateShare` must agree with the drawn
+* segments, so both derive from the segment sum rather than `total`.
+*/
+function computeComposition(years) {
+	const composed = years.map((activity) => {
+		const segments = [
+			activity.commits,
+			activity.pullRequests,
+			activity.issues,
+			activity.reviews,
+			activity.restricted
+		];
+		return {
+			year: activity.year,
+			segments,
+			sum: segments.reduce((total, value) => total + value, 0)
+		};
+	});
+	const maxSum = composed.reduce((max, entry) => Math.max(max, entry.sum), 0);
+	const totalSum = composed.reduce((total, entry) => total + entry.sum, 0);
+	const totalRestricted = years.reduce((total, activity) => total + activity.restricted, 0);
+	return {
+		years: composed,
+		maxSum,
+		privateShare: totalSum === 0 ? 0 : totalRestricted / totalSum
 	};
 }
 //#endregion
@@ -58262,6 +58454,7 @@ function renderCard(card, data, streaks, theme, fontFaceCss) {
 		case "contributions": return renderContributions(data, streaks, theme, fontFaceCss);
 		case "composition": return renderComposition(data, theme, fontFaceCss);
 		case "rhythm": return renderRhythm(data, theme, fontFaceCss);
+		case "cadence": return renderCadence(data, theme, fontFaceCss);
 		case "languages": return renderLanguages(data, theme, fontFaceCss);
 		default: throw new Error(`Unknown card: ${card}`);
 	}
@@ -58599,6 +58792,7 @@ async function graphql(token, query, variables = {}) {
 const PROFILE_QUERY = `
 query Profile($login: String!, $cursor: String) {
   user(login: $login) {
+    id
     name
     followers { totalCount }
     mergedPullRequests: pullRequests(states: MERGED) { totalCount }
@@ -58617,6 +58811,7 @@ query Profile($login: String!, $cursor: String) {
     ) {
       pageInfo { hasNextPage endCursor }
       nodes {
+        name
         isFork
         isArchived
         stargazerCount
@@ -58652,6 +58847,29 @@ query Trailing($login: String!) {
       contributionCalendar {
         totalContributions
         weeks { contributionDays { date contributionCount contributionLevel } }
+      }
+    }
+  }
+}`;
+/**
+* One page of commits the user authored on a repository's default branch.
+*
+* `author { date }` is a GitTimestamp: unlike DateTime it keeps the author's
+* UTC offset, which is what lets the cadence card bucket by the author's own
+* clock. `authoredDate`/`committedDate` are DateTime (UTC-normalized) and must
+* not be used here.
+*/
+const COMMITS_QUERY = `
+query Commits($owner: String!, $name: String!, $authorId: ID!, $since: GitTimestamp!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef {
+      target {
+        ... on Commit {
+          history(author: { id: $authorId }, since: $since, first: 100, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes { author { date } additions deletions }
+          }
+        }
       }
     }
   }
@@ -58693,6 +58911,35 @@ function aggregateLanguages(repos) {
 		color,
 		bytes
 	})).toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+}
+/**
+* Page through commits the user authored on one repository's default branch
+* within the sweep window. Returns [] for empty repositories (no default
+* branch) and skips commits without an author date, which cannot be bucketed.
+*/
+async function fetchRepoCommits(token, owner, name, authorId, since) {
+	const samples = [];
+	let cursor = null;
+	do {
+		const history = (await graphql(token, COMMITS_QUERY, {
+			owner,
+			name,
+			authorId,
+			since,
+			cursor
+		})).repository?.defaultBranchRef?.target?.history;
+		if (!history) return samples;
+		for (const node of history.nodes) {
+			const date = node.author?.date;
+			if (date !== null && date !== void 0) samples.push({
+				date,
+				additions: node.additions,
+				deletions: node.deletions
+			});
+		}
+		cursor = history.pageInfo.hasNextPage ? history.pageInfo.endCursor : null;
+	} while (cursor !== null);
+	return samples;
 }
 /**
 * Merge per-year daily series into one ascending run.
@@ -58755,6 +59002,8 @@ async function fetchProfile(token, login) {
 	if (today === void 0) throw new Error("trailing calendar is empty");
 	const lifetimeDays = mergeDailySeries(dailySeries).filter((day) => day.date <= today);
 	const sourceRepos = repoNodes.filter((repo) => !repo.isFork && !repo.isArchived);
+	const since = (/* @__PURE__ */ new Date(Date.now() - 31536e6)).toISOString();
+	const commits = (await Promise.all(sourceRepos.map((repo) => fetchRepoCommits(token, login, repo.name, user.id, since)))).flat();
 	return {
 		login,
 		name: user.name,
@@ -58767,7 +59016,8 @@ async function fetchProfile(token, login) {
 		languages: aggregateLanguages(repoNodes),
 		years: yearActivities,
 		lifetimeDays,
-		trailing
+		trailing,
+		commits
 	};
 }
 //#endregion
@@ -58912,6 +59162,7 @@ const KNOWN_CARDS = [
 	"contributions",
 	"composition",
 	"rhythm",
+	"cadence",
 	"languages"
 ];
 const THEME_IDS = ["light", "dark"];

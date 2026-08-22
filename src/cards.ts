@@ -2,6 +2,7 @@
 
 import type { ProfileData, Streaks } from './model.js';
 import type { Theme } from './theme.js';
+import { renderCadence } from './cards/cadence.js';
 import { renderComposition } from './cards/composition.js';
 import { renderContributions } from './cards/contributions.js';
 import { renderLanguages } from './cards/languages.js';
@@ -28,6 +29,8 @@ export function renderCard(
       return renderComposition(data, theme, fontFaceCss);
     case 'rhythm':
       return renderRhythm(data, theme, fontFaceCss);
+    case 'cadence':
+      return renderCadence(data, theme, fontFaceCss);
     case 'languages':
       return renderLanguages(data, theme, fontFaceCss);
     default:

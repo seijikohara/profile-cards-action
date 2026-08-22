@@ -9,7 +9,7 @@ import { DARK, LIGHT, THEMES } from '../src/theme.js';
 import { makeFixture } from './fixture.js';
 import { assertWellFormed } from './xml.js';
 
-const CARDS = ['overview', 'lifetime', 'contributions', 'composition', 'rhythm', 'languages'];
+const CARDS = ['overview', 'lifetime', 'contributions', 'composition', 'rhythm', 'cadence', 'languages'];
 
 let data: ProfileData;
 let streaks: Streaks;
@@ -38,6 +38,13 @@ describe('card rendering', () => {
       expect(svg.startsWith('<svg '), `${name} starts with <svg`).toBe(true);
       assertWellFormed(svg);
     }
+  });
+
+  it('renders a valid empty-state cadence card when the sweep found no commits', () => {
+    const svg = renderCard('cadence', { ...data, commits: [] }, streaks, LIGHT, fontFaceCss);
+    assertWellFormed(svg);
+    expect(svg).toContain('>0</tspan> commits');
+    expect(svg).not.toContain('peak');
   });
 
   it('is deterministic for identical input', () => {
