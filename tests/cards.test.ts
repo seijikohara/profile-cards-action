@@ -40,6 +40,13 @@ describe('card rendering', () => {
     }
   });
 
+  it('renders a valid empty-state cadence card when the sweep found no commits', () => {
+    const svg = renderCard('cadence', { ...data, commits: [] }, streaks, LIGHT, fontFaceCss);
+    assertWellFormed(svg);
+    expect(svg).toContain('>0</tspan> commits');
+    expect(svg).not.toContain('peak');
+  });
+
   it('is deterministic for identical input', () => {
     const first = renderAll();
     const second = renderAll();
