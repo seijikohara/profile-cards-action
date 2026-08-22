@@ -1,7 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { el, esc, num } from '../src/svg/dsl.js';
-import { formatDate, formatDateRange, formatInt, formatUtcTimestamp, measureSans } from '../src/svg/text.js';
+import {
+  formatBytes,
+  formatCompact,
+  formatDate,
+  formatDateRange,
+  formatInt,
+  formatUtcTimestamp,
+  measureSans,
+} from '../src/svg/text.js';
 import { contrast, hexToRgb, shade } from '../src/theme.js';
+
+describe('formatCompact', () => {
+  it('passes small values through and steps to k then m', () => {
+    expect(formatCompact(0)).toBe('0');
+    expect(formatCompact(999)).toBe('999');
+    expect(formatCompact(1000)).toBe('1k');
+    expect(formatCompact(2450)).toBe('2.5k');
+    expect(formatCompact(45231)).toBe('45k');
+    expect(formatCompact(999_499)).toBe('999k');
+    expect(formatCompact(1_871_000)).toBe('1.9m');
+    expect(formatCompact(12_400_000)).toBe('12m');
+  });
+});
+
+describe('formatBytes', () => {
+  it('formats decimal byte magnitudes with a unit space', () => {
+    expect(formatBytes(912)).toBe('912 B');
+    expect(formatBytes(1000)).toBe('1.0 KB');
+    expect(formatBytes(66_688)).toBe('67 KB');
+    expect(formatBytes(708_082)).toBe('708 KB');
+    expect(formatBytes(7_036_949)).toBe('7.0 MB');
+    expect(formatBytes(14_249_614)).toBe('14 MB');
+  });
+});
 
 describe('esc', () => {
   it('escapes markup-significant characters', () => {

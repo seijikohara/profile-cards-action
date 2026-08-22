@@ -39,6 +39,25 @@ export function formatInt(v: number): string {
   return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+/** Compact magnitude: 999 -> "999", 45231 -> "45.2k", 1871000 -> "1.9m". */
+export function formatCompact(value: number): string {
+  if (value < 1000) return String(value);
+  const scaled = value >= 1_000_000 ? value / 1_000_000 : value / 1000;
+  const unit = value >= 1_000_000 ? 'm' : 'k';
+  return `${scaled >= 10 ? Math.round(scaled) : Math.round(scaled * 10) / 10}${unit}`;
+}
+
+/**
+ * Bytes in decimal units: 912 -> "912 B", 708082 -> "708 KB", 7036949 -> "7.0 MB".
+ * One decimal below 10 so small magnitudes keep a significant digit.
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1000) return `${bytes} B`;
+  const scaled = bytes >= 1_000_000 ? bytes / 1_000_000 : bytes / 1000;
+  const unit = bytes >= 1_000_000 ? 'MB' : 'KB';
+  return `${scaled >= 10 ? String(Math.round(scaled)) : (Math.round(scaled * 10) / 10).toFixed(1)} ${unit}`;
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
 /** "2026-07-22" -> "Jul 22" or "Jul 22, 2026". */

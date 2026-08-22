@@ -13,19 +13,19 @@ import { CARD_PADDING, CARD_RADIUS, CARD_WIDTH } from '../config.js';
 import { computeComposition } from '../compute/composition.js';
 import type { ProfileData } from '../model.js';
 import { el, num, textNode } from '../svg/dsl.js';
-import { measureSans } from '../svg/text.js';
+import { formatCompact, measureSans } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 
 const MAX_BAR_HEIGHT = 110;
-const BAR_WIDTH = 26;
+const BAR_WIDTH = 30;
 
 // Stack + legend order, paired with the seriesRamp index. Literal indices keep
 // tuple access non-optional under noUncheckedIndexedAccess.
 const SERIES = [
   { label: 'Commits', index: 0 },
-  { label: 'Pull requests', index: 1 },
-  { label: 'Issues', index: 2 },
+  { label: 'Issues', index: 1 },
+  { label: 'Pull requests', index: 2 },
   { label: 'Reviews', index: 3 },
   { label: 'Private', index: 4 },
 ] as const;
@@ -47,7 +47,7 @@ function barCap(x: number, top: number, width: number, height: number, radius: n
 }
 
 export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: string): string {
-  const { years, maxSum, privateShare } = computeComposition(data.years);
+  const { years, maxSum, privateShare, typeTotals } = computeComposition(data.years);
 
   const inner = CARD_WIDTH - CARD_PADDING * 2;
   const band = inner / Math.max(1, years.length);
@@ -105,16 +105,28 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
     );
   });
 
+  // Per-year totals over the bars: the quiet number row that stands in for an
+  // axis — the only quantitative anchor a static SVG can offer.
+  const totals = years.flatMap((year, i) => {
+    if (year.sum === 0) return [];
+    const cx = CARD_PADDING + i * band + band / 2;
+    const barTop = baseline - (maxSum === 0 ? 0 : (year.sum / maxSum) * MAX_BAR_HEIGHT);
+    return [
+      el('text', { x: cx, y: barTop - 6, class: 't-tick', 'text-anchor': 'middle' }, textNode(formatCompact(year.sum))),
+    ];
+  });
+
   // Legend packed left-to-right by measured label width, on one row.
   let lx = CARD_PADDING;
   const legend: string[] = [];
   for (const series of SERIES) {
     const color = theme.seriesRamp[series.index];
+    const caption = `${series.label} · ${formatCompact(typeTotals[series.index])}`;
     legend.push(
       el('rect', { x: lx, y: legendY - 9, width: 10, height: 10, rx: 2, fill: color }),
-      el('text', { x: lx + 16, y: legendY, class: 't-label' }, textNode(series.label))
+      el('text', { x: lx + 16, y: legendY, class: 't-label' }, textNode(caption))
     );
-    lx += 16 + measureSans(series.label, 12) + 20;
+    lx += 16 + measureSans(caption, 12) + 20;
   }
 
   const privateCaption = el(
@@ -142,7 +154,7 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
       extraCss: `.bar{opacity:0;animation:grow ${motionDuration}s cubic-bezier(.2,.7,.3,1) forwards}`,
       fontFaceCss,
     },
-    el('g', { class: 'fade' }, baselineRule, ...ticks, ...legend, privateCaption),
+    el('g', { class: 'fade' }, baselineRule, ...ticks, ...totals, ...legend, privateCaption),
     ...bars
   );
 }

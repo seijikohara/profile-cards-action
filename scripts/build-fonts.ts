@@ -33,7 +33,6 @@ interface Face {
 }
 
 const FACES: readonly Face[] = [
-  { constName: 'ROBOTO_200', src: 'Roboto-latin-var.woff2', wght: 200 },
   { constName: 'ROBOTO_400', src: 'Roboto-latin-var.woff2', wght: 400 },
   { constName: 'ROBOTO_600', src: 'Roboto-latin-var.woff2', wght: 600 },
   { constName: 'ROBOTO_MONO_400', src: 'RobotoMono-latin-var.woff2', wght: 400 },

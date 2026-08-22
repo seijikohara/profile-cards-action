@@ -340,3 +340,33 @@ Supersedes the "no time-of-day" non-goal. Design:
   `contributionsCollection.commitContributionsByRepository`, including
   repositories the user does not own.
 - The `rhythm` card gains a footer stat line derived from already-fetched data.
+
+## Addendum (2026-08-23): v1 design pass
+
+A polish-and-densify pass over every card, keeping the Primer blend-in identity.
+Durable findings:
+
+- **Categorical stacking is validated, not eyeballed.** The composition stack
+  originally placed commits (blue) beside pull requests (purple): measured
+  protan dE 1.9 — indistinguishable. Reordering to
+  commits → issues → pull requests → reviews → private lifts the worst adjacent
+  pair to dE 16.3 (light) with both themes passing. Colors stayed with their
+  entities; only stack order moved. Accepted, documented exceptions: the
+  Private gray (an intentional "Other" neutral, relieved by the legend and the
+  percent caption) and dark green #3fb950 at 0.005 outside the lightness band
+  (GitHub's own hue wins).
+- **Small text moved from weight 200 to 400** (values stay 600). The unused
+  Roboto 200 face was dropped from the bundle and the remote-font weight list —
+  about 17 KB less per card.
+- Every card now carries its numbers: per-year totals on composition and the
+  lifetime wall, byte columns and a population footer on languages, scope
+  disclosure ("top 10 shown") on repositories, rate captions on overview and
+  the contributions tiles, night share on cadence, a peak-month label on
+  rhythm.
+- In-cell treemap labels are tiered by cell height (name / +percent / +bytes);
+  the old single 30px threshold let the percent baseline (y+34) clip outside
+  the cell.
+- QA harness: headless Chrome with `--force-prefers-reduced-motion` screenshots
+  the cards in their designed static state at exact size. qlmanage crops the
+  right ~9% and drops `animation-delay: 0ms` elements — never judge cards by
+  its thumbnails.

@@ -11,6 +11,7 @@ import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeCadence } from '../compute/cadence.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
+import { formatCompact } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 
@@ -28,20 +29,12 @@ const GRID_LEFT = CARD_PADDING + 40;
 const GRID_W = CARD_WIDTH - CARD_PADDING - GRID_LEFT;
 const COL_W = GRID_W / 24;
 
-/** Dot radius per level 0..4 — area grows with activity, small enough to keep the grid airy. */
-const DOT_RADIUS = [1.6, 3.2, 4.6, 6, 7.4] as const;
-
 /**
- * Compact magnitude for footer values, e.g. 45231 -> "45.2k". Extends rhythm's
- * format with a millions tier: line counts over a year of lockfile churn
- * realistically pass 1M.
+ * Dot radius per level 0..4 — area grows with activity. The level-0 dot is
+ * large enough to keep the grid's ground visible in sparse regions; 1.6 read
+ * as dust.
  */
-function compact(value: number): string {
-  if (value < 1000) return String(value);
-  const scaled = value >= 1_000_000 ? value / 1_000_000 : value / 1000;
-  const unit = value >= 1_000_000 ? 'm' : 'k';
-  return `${scaled >= 10 ? Math.round(scaled) : Math.round(scaled * 10) / 10}${unit}`;
-}
+const DOT_RADIUS = [2.2, 3.4, 4.6, 6, 7.4] as const;
 
 export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: string): string {
   const cadence = computeCadence(data.commits);
@@ -88,7 +81,7 @@ export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: stri
   }
 
   const footerParts: string[] = [
-    el('tspan', { class: 't-stat' }, textNode(compact(cadence.totalCommits))),
+    el('tspan', { class: 't-stat' }, textNode(formatCompact(cadence.totalCommits))),
     textNode(' commits'),
   ];
   if (cadence.peak !== undefined) {
@@ -97,11 +90,18 @@ export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: stri
   }
   footerParts.push(
     textNode(' · '),
-    el('tspan', { class: 't-stat' }, textNode(`+${compact(cadence.additions)}`)),
+    el('tspan', { class: 't-stat' }, textNode(`+${formatCompact(cadence.additions)}`)),
     textNode(' '),
-    el('tspan', { class: 't-stat' }, textNode(`−${compact(cadence.deletions)}`)),
+    el('tspan', { class: 't-stat' }, textNode(`−${formatCompact(cadence.deletions)}`)),
     textNode(' lines')
   );
+  if (cadence.totalCommits > 0) {
+    footerParts.push(
+      textNode(' · '),
+      el('tspan', { class: 't-stat' }, textNode(`${Math.round(cadence.nightShare * 100)}%`)),
+      textNode(' at night (22-06)')
+    );
+  }
   const footer = el('text', { x: CARD_PADDING, y: FOOTER_BASELINE, class: 't-label' }, ...footerParts);
 
   const height = FOOTER_BASELINE + CARD_PADDING;
@@ -113,7 +113,7 @@ export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: stri
       title: 'Commit cadence',
       note: 'trailing 12 months · author local time',
       description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
-      extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}.t-stat{font-weight:600;fill:${theme.fg}}`,
+      extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
       fontFaceCss,
     },
     el('g', { class: 'fade' }, ...weekdayLabels, ...hourTicks),

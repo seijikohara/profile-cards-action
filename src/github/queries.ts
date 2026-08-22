@@ -131,6 +131,8 @@ export const TRAILING_QUERY = `
 query Trailing($login: String!) {
   user(login: $login) {
     contributionsCollection {
+      totalCommitContributions
+      totalRepositoriesWithContributedCommits
       contributionCalendar {
         totalContributions
         weeks { contributionDays { date contributionCount contributionLevel } }
@@ -146,6 +148,8 @@ query Trailing($login: String!) {
 export interface TrailingQueryData {
   readonly user: {
     readonly contributionsCollection: {
+      readonly totalCommitContributions: number;
+      readonly totalRepositoriesWithContributedCommits: number;
       readonly contributionCalendar: CalendarData;
       readonly commitContributionsByRepository: readonly {
         readonly repository: { readonly nameWithOwner: string; readonly isPrivate: boolean };

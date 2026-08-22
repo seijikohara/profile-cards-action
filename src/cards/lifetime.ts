@@ -13,6 +13,7 @@ import { computeLifetime } from '../compute/lifetime.js';
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
+import { formatInt } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 
@@ -23,6 +24,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 // leaves its right edge blank, so every card sizes its cells identically.
 const COLS = 53;
 const GUTTER = 34; // left column holding the year labels
+const TOTAL_GUTTER = 50; // right column holding the per-year totals
 const CELL_H = 10;
 const CELL_HGAP = 3;
 const CELL_VGAP = 3;
@@ -53,7 +55,7 @@ export function renderLifetime(data: ProfileData, theme: Theme, fontFaceCss: str
   // Horizontal frame: fixed gutter, then 53 week columns filling the inner width.
   const inner = CARD_WIDTH - CARD_PADDING * 2;
   const gridLeft = CARD_PADDING + GUTTER;
-  const gridWidth = inner - GUTTER;
+  const gridWidth = inner - GUTTER - TOTAL_GUTTER;
   const colPitch = gridWidth / COLS;
   const cellW = colPitch - CELL_HGAP;
 
@@ -115,6 +117,20 @@ export function renderLifetime(data: ProfileData, theme: Theme, fontFaceCss: str
     )
   );
 
+  // Per-year totals close each row on the right — the wall's only numbers.
+  const yearTotals = life.years.map((year, r) =>
+    el(
+      'text',
+      {
+        x: CARD_PADDING + inner,
+        y: gridTop + r * ROW_PITCH + CELL_H / 2 + 3.3,
+        class: 't-tick',
+        'text-anchor': 'end',
+      },
+      textNode(formatInt(year.total))
+    )
+  );
+
   // Legend: "Less", the five ramp swatches, then "More" — no arrow glyph.
   const legendY = gridBottom + 17;
   const swatchLeft = CARD_PADDING + 34;
@@ -156,6 +172,6 @@ export function renderLifetime(data: ProfileData, theme: Theme, fontFaceCss: str
       fontFaceCss,
     },
     ...columns,
-    el('g', { class: 'fade' }, ...monthTicks, ...yearLabels, legend)
+    el('g', { class: 'fade' }, ...monthTicks, ...yearLabels, ...yearTotals, legend)
   );
 }

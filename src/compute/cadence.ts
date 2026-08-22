@@ -20,6 +20,8 @@ export interface CadenceData {
   readonly totalCommits: number;
   readonly additions: number;
   readonly deletions: number;
+  /** Commits between 22:00 and 05:59 author-local over all commits, in [0,1]; 0 without commits. */
+  readonly nightShare: number;
 }
 
 /**
@@ -103,6 +105,11 @@ export function computeCadence(commits: readonly CommitSample[]): CadenceData {
     });
   });
 
+  const nightCommits = grid.reduce(
+    (sum, row) => sum + row.reduce((rowSum, count, hour) => (hour >= 22 || hour < 6 ? rowSum + count : rowSum), 0),
+    0
+  );
+
   return {
     grid,
     levels,
@@ -110,5 +117,6 @@ export function computeCadence(commits: readonly CommitSample[]): CadenceData {
     totalCommits: commits.length,
     additions,
     deletions,
+    nightShare: commits.length === 0 ? 0 : nightCommits / commits.length,
   };
 }

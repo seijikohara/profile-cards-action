@@ -6,6 +6,8 @@ export interface LifetimeYear {
   readonly year: number;
   /** Level 0..4 per week bucket; length is the number of week buckets that year (<= 53). */
   readonly weeks: readonly (0 | 1 | 2 | 3 | 4)[];
+  /** Sum of the year's daily counts — the row's right-column total. */
+  readonly total: number;
 }
 
 export interface LifetimeData {
@@ -121,14 +123,16 @@ export function computeLifetime(days: readonly DayContribution[]): LifetimeData 
     .toSorted(([a], [b]) => a - b)
     .map(([year, weeks]) => {
       let maxIndex = -1;
-      for (const index of weeks.keys()) {
+      let total = 0;
+      for (const [index, sum] of weeks.entries()) {
         if (index > maxIndex) maxIndex = index;
+        total += sum;
       }
       const cells: (0 | 1 | 2 | 3 | 4)[] = [];
       for (let index = 0; index <= maxIndex; index += 1) {
         cells.push(levelOf(weeks.get(index) ?? 0, thresholds));
       }
-      return { year, weeks: cells };
+      return { year, weeks: cells, total };
     });
 
   return { years, thresholds };

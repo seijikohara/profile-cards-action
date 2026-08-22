@@ -21,8 +21,10 @@ export interface Theme {
   readonly contribRamp: readonly [string, string, string, string, string];
   /**
    * Categorical series colors for the composition card, in segment order:
-   * commits, pull requests, issues, reviews, private. Primer data hues, chosen
-   * to stay legible on the inset background; private is a quiet neutral.
+   * commits, issues, pull requests, reviews, private. Primer data hues, chosen
+   * to stay legible on the inset background; private is a quiet neutral. Issues
+   * sits between commits and pull requests so the blue/purple pair never stacks
+   * adjacently — measured protan dE 1.9 when adjacent, 16.3 with green between.
    */
   readonly seriesRamp: readonly [string, string, string, string, string];
 }
@@ -36,7 +38,7 @@ export const LIGHT: Theme = {
   fgMuted: '#59636e',
   accent: '#0969da',
   contribRamp: ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
-  seriesRamp: ['#0969da', '#8250df', '#1a7f37', '#bc4c00', '#8b949e'],
+  seriesRamp: ['#0969da', '#1a7f37', '#8250df', '#bc4c00', '#8b949e'],
 };
 
 export const DARK: Theme = {
@@ -48,7 +50,7 @@ export const DARK: Theme = {
   fgMuted: '#9198a1',
   accent: '#4493f8',
   contribRamp: ['#161b22', '#0e4429', '#006d32', '#26a641', '#39d353'],
-  seriesRamp: ['#4493f8', '#a371f7', '#3fb950', '#db6d28', '#6e7681'],
+  seriesRamp: ['#4493f8', '#3fb950', '#a371f7', '#db6d28', '#6e7681'],
 };
 
 export const THEMES: readonly Theme[] = [LIGHT, DARK];

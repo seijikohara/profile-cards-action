@@ -96,6 +96,20 @@ describe('computeCadence', () => {
     expect(total).toBe(commits.length);
   });
 
+  it('computes the night share over hours 22:00-05:59 author-local', () => {
+    const result = computeCadence([
+      commit('2026-08-17T23:30:00+09:00'), // night
+      commit('2026-08-18T05:59:00+09:00'), // night
+      commit('2026-08-18T06:00:00+09:00'), // day boundary
+      commit('2026-08-18T12:00:00+09:00'), // day
+    ]);
+    expect(result.nightShare).toBe(0.5);
+  });
+
+  it('reports zero night share without commits', () => {
+    expect(computeCadence([]).nightShare).toBe(0);
+  });
+
   it('throws on malformed dates', () => {
     expect(() => computeCadence([commit('2026-08-17 08:00:00')])).toThrow('invalid commit date');
     expect(() => computeCadence([commit('2026-08-17T25:00:00Z')])).toThrow('invalid commit date');

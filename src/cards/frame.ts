@@ -30,11 +30,12 @@ export function cardFrame(options: FrameOptions, ...children: string[]): string 
   const { theme, height, title, note, description, extraCss, fontFaceCss } = options;
   const css = `
 ${fontFaceCss ?? ''}
-text{font-family:'CardSans',${FONT_SANS};font-weight:200}
+text{font-family:'CardSans',${FONT_SANS};font-weight:400}
 .t-title{font-size:15px;font-weight:600;fill:${theme.fg}}
 .t-value{font-size:28px;font-weight:600;fill:${theme.fg}}
-.t-unit{font-size:14px;font-weight:200;fill:${theme.fgMuted}}
-.t-label{font-size:12px;font-weight:200;fill:${theme.fgMuted}}
+.t-unit{font-size:14px;font-weight:400;fill:${theme.fgMuted}}
+.t-label{font-size:12px;font-weight:400;fill:${theme.fgMuted}}
+.t-stat{font-weight:600;fill:${theme.fg}}
 .t-mono{font-family:'CardMono',${FONT_MONO};font-weight:400;font-size:10px;fill:${theme.fgMuted};letter-spacing:.4px}
 .t-tick{font-family:'CardMono',${FONT_MONO};font-weight:400;font-size:9.5px;fill:${theme.fgMuted}}
 .fade{opacity:0;animation:fade .5s ease .1s forwards}
