@@ -57272,9 +57272,9 @@ const WEEKDAY_LABELS$1 = [
 	"Sun"
 ];
 const GRID_TOP = 66;
-const ROW_H$1 = 24;
-const TICK_BASELINE = GRID_TOP + ROW_H$1 * WEEKDAY_LABELS$1.length + 16;
-const FOOTER_BASELINE = TICK_BASELINE + 27;
+const ROW_H$2 = 24;
+const TICK_BASELINE = GRID_TOP + ROW_H$2 * WEEKDAY_LABELS$1.length + 16;
+const FOOTER_BASELINE$1 = TICK_BASELINE + 27;
 const GRID_LEFT = 64;
 const COL_W = 758 / 24;
 /** Dot radius per level 0..4 — area grows with activity, small enough to keep the grid airy. */
@@ -57304,7 +57304,7 @@ function renderCadence(data, theme, fontFaceCss) {
 		const dots = [];
 		cadence.levels.forEach((row, weekday) => {
 			const level = row[hour] ?? 0;
-			const cy = GRID_TOP + weekday * ROW_H$1 + ROW_H$1 / 2;
+			const cy = GRID_TOP + weekday * ROW_H$2 + ROW_H$2 / 2;
 			const isPeak = cadence.peak !== void 0 && cadence.peak.weekday === weekday && cadence.peak.hour === hour;
 			dots.push(el("circle", {
 				cx,
@@ -57320,7 +57320,7 @@ function renderCadence(data, theme, fontFaceCss) {
 	}
 	const weekdayLabels = WEEKDAY_LABELS$1.map((label, index) => el("text", {
 		x: 54,
-		y: GRID_TOP + index * ROW_H$1 + ROW_H$1 / 2 + 4,
+		y: GRID_TOP + index * ROW_H$2 + ROW_H$2 / 2 + 4,
 		class: "t-label",
 		"text-anchor": "end"
 	}, textNode(label)));
@@ -57339,12 +57339,12 @@ function renderCadence(data, theme, fontFaceCss) {
 	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`+${compact$1(cadence.additions)}`)), textNode(" "), el("tspan", { class: "t-stat" }, textNode(`−${compact$1(cadence.deletions)}`)), textNode(" lines"));
 	const footer = el("text", {
 		x: 24,
-		y: FOOTER_BASELINE,
+		y: FOOTER_BASELINE$1,
 		class: "t-label"
 	}, ...footerParts);
 	return cardFrame({
 		theme,
-		height: FOOTER_BASELINE + 24,
+		height: FOOTER_BASELINE$1 + 24,
 		title: "Commit cadence",
 		note: "trailing 12 months · author local time",
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
@@ -58235,6 +58235,110 @@ function renderOverview(data, theme, fontFaceCss) {
 	}, el("g", { class: "fade" }, tilesA.svg, tilesB.svg));
 }
 //#endregion
+//#region src/compute/repositories.ts
+const MAX_ROWS = 10;
+/** Sort, drop empty entries, and cap the ranking for the card. */
+function computeRepositories(repos) {
+	const rows = repos.filter((repo) => repo.commits > 0).toSorted((a, b) => b.commits - a.commits || a.nameWithOwner.localeCompare(b.nameWithOwner)).slice(0, MAX_ROWS);
+	return {
+		rows,
+		max: rows[0]?.commits ?? 0
+	};
+}
+//#endregion
+//#region src/svg/bars.ts
+/** Rounded-data-end bar paths shared by the bar-panel cards. */
+/** Horizontal bar with a rounded data-end (right) and a square start (left). */
+function horizontalBar(x, y, width, height, fill) {
+	const r = Math.min(height / 2, width);
+	const right = x + width;
+	const bottom = y + height;
+	return el("path", {
+		d: `M${num(x)} ${num(y)}H${num(right - r)}Q${num(right)} ${num(y)} ${num(right)} ${num(y + r)}V${num(bottom - r)}Q${num(right)} ${num(bottom)} ${num(right - r)} ${num(bottom)}H${num(x)}Z`,
+		fill
+	});
+}
+/** Vertical bar with a rounded data-end (top) and a square baseline. */
+function verticalBar(x, baseline, width, height, fill) {
+	const r = Math.min(width / 2, height);
+	const top = baseline - height;
+	return el("path", {
+		d: `M${num(x)} ${num(baseline)}V${num(top + r)}Q${num(x)} ${num(top)} ${num(x + r)} ${num(top)}H${num(x + width - r)}Q${num(x + width)} ${num(top)} ${num(x + width)} ${num(top + r)}V${num(baseline)}Z`,
+		fill
+	});
+}
+//#endregion
+//#region src/cards/repositories.ts
+/**
+* Top repositories card: ranked horizontal bars of the repositories the user
+* committed to most over the trailing year — including repositories they do
+* not own, so open-source contributions surface. The top repository is drawn
+* in the accent color; the rest reuse the calm contribution green.
+*/
+const BAND_TOP$1 = 62;
+const ROW_H$1 = 30;
+const BAR_H = 12;
+const LABEL_X = 24;
+const BAR_START_X$1 = 282;
+const VALUE_GAP$1 = 8;
+const BAR_MAX_LEN = 494;
+const MIN_BAR$1 = 3;
+const MAX_NAME = 36;
+/** Ellipsize long owner/name labels so they never run under the bars. */
+function truncate(name) {
+	return name.length > MAX_NAME ? `${name.slice(0, 35)}…` : name;
+}
+function renderRepositories(data, theme, fontFaceCss) {
+	const ranking = computeRepositories(data.topRepositories);
+	const calmFill = theme.contribRamp[2];
+	const labels = [];
+	const values = [];
+	const bars = [];
+	ranking.rows.forEach((row, index) => {
+		const rowCenter = BAND_TOP$1 + index * ROW_H$1 + ROW_H$1 / 2;
+		const length = ranking.max === 0 ? 0 : Math.max(MIN_BAR$1, row.commits / ranking.max * BAR_MAX_LEN);
+		const fill = index === 0 ? theme.accent : calmFill;
+		labels.push(el("text", {
+			x: LABEL_X,
+			y: rowCenter + 4,
+			class: "t-label"
+		}, textNode(truncate(row.nameWithOwner))));
+		bars.push(el("g", {
+			class: "hbar",
+			style: `animation-delay:${index * 55}ms;transform-origin:${BAR_START_X$1}px ${rowCenter}px`
+		}, horizontalBar(BAR_START_X$1, rowCenter - BAR_H / 2, length, BAR_H, fill)));
+		values.push(el("text", {
+			x: BAR_START_X$1 + length + VALUE_GAP$1,
+			y: rowCenter + 3.3,
+			class: "t-tick"
+		}, textNode(String(row.commits))));
+	});
+	const empty = ranking.rows.length === 0 ? el("text", {
+		x: 24,
+		y: 81,
+		class: "t-label"
+	}, textNode("No public commits in the trailing year")) : "";
+	const bandRows = Math.max(1, ranking.rows.length);
+	const bandBottom = BAND_TOP$1 + bandRows * ROW_H$1;
+	const axis = el("line", {
+		x1: 281.5,
+		y1: BAND_TOP$1,
+		x2: 281.5,
+		y2: bandBottom,
+		stroke: theme.border,
+		"stroke-width": 1
+	});
+	return cardFrame({
+		theme,
+		height: bandBottom + 24,
+		title: "Top repositories",
+		note: "trailing 12 months · by commits",
+		description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
+		extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`,
+		fontFaceCss
+	}, el("g", { class: "fade" }, axis, ...labels, ...values, empty), ...bars);
+}
+//#endregion
 //#region src/compute/rhythm.ts
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 /**
@@ -58264,6 +58368,8 @@ function indexOfMax(values) {
 function computeRhythm(days) {
 	const weekday = Array.from({ length: 7 }, () => 0);
 	const month = Array.from({ length: 12 }, () => 0);
+	let activeDays = 0;
+	let busiestDay;
 	for (const day of days) {
 		const match = ISO_DATE.exec(day.date);
 		if (match === null) throw new Error(`invalid calendar date: ${day.date}`);
@@ -58274,12 +58380,22 @@ function computeRhythm(days) {
 		const weekdayBucket = weekdayIndex(year, monthNumber, dayOfMonth);
 		weekday[weekdayBucket] = (weekday[weekdayBucket] ?? 0) + day.count;
 		month[monthIndex] = (month[monthIndex] ?? 0) + day.count;
+		if (day.count > 0) activeDays += 1;
+		if (day.count > (busiestDay?.count ?? 0)) busiestDay = {
+			date: day.date,
+			count: day.count
+		};
 	}
+	const total = weekday.reduce((sum, value) => sum + value, 0);
+	const weekendSum = (weekday[5] ?? 0) + (weekday[6] ?? 0);
 	return {
 		weekday,
 		month,
 		peakWeekday: indexOfMax(weekday),
-		peakMonth: indexOfMax(month)
+		peakMonth: indexOfMax(month),
+		activeDayRate: days.length === 0 ? 0 : activeDays / days.length,
+		busiestDay,
+		weekendShare: total === 0 ? 0 : weekendSum / total
 	};
 }
 //#endregion
@@ -58320,6 +58436,7 @@ const BAND_TOP = 84;
 const MONTH_MAX_HEIGHT = 104;
 const BASELINE_Y = 188;
 const MONTH_TICK_BASELINE = 203;
+const FOOTER_BASELINE = 232;
 const LEFT_X = 24;
 const RIGHT_X = 391;
 const RIGHT_W = 431;
@@ -58340,25 +58457,6 @@ function compact(value) {
 	if (value < 1e3) return String(value);
 	const k = value / 1e3;
 	return `${k >= 10 ? Math.round(k) : Math.round(k * 10) / 10}k`;
-}
-/** Horizontal bar with a rounded data-end (right) and a square start (left). */
-function horizontalBar(x, y, width, height, fill) {
-	const r = Math.min(height / 2, width);
-	const right = x + width;
-	const bottom = y + height;
-	return el("path", {
-		d: `M${coord(x)} ${coord(y)}H${coord(right - r)}Q${coord(right)} ${coord(y)} ${coord(right)} ${coord(y + r)}V${coord(bottom - r)}Q${coord(right)} ${coord(bottom)} ${coord(right - r)} ${coord(bottom)}H${coord(x)}Z`,
-		fill
-	});
-}
-/** Vertical bar with a rounded data-end (top) and a square baseline. */
-function verticalBar(x, baseline, width, height, fill) {
-	const r = Math.min(width / 2, height);
-	const top = baseline - height;
-	return el("path", {
-		d: `M${coord(x)} ${coord(baseline)}V${coord(top + r)}Q${coord(x)} ${coord(top)} ${coord(x + r)} ${coord(top)}H${coord(x + width - r)}Q${coord(x + width)} ${coord(top)} ${coord(x + width)} ${coord(top + r)}V${coord(baseline)}Z`,
-		fill
-	});
 }
 function renderRhythm(data, theme, fontFaceCss) {
 	const rhythm = computeRhythm(data.lifetimeDays);
@@ -58434,15 +58532,23 @@ function renderRhythm(data, theme, fontFaceCss) {
 		stroke: theme.border,
 		"stroke-width": 1
 	});
+	const footerParts = [el("tspan", { class: "t-stat" }, textNode(`${Math.round(rhythm.activeDayRate * 100)}%`)), textNode(" active days")];
+	if (rhythm.busiestDay !== void 0) footerParts.push(textNode(" · busiest "), el("tspan", { class: "t-stat" }, textNode(rhythm.busiestDay.date)), textNode(` (${rhythm.busiestDay.count})`));
+	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`${Math.round(rhythm.weekendShare * 100)}%`)), textNode(" on weekends"));
+	const footer = el("text", {
+		x: LEFT_X,
+		y: FOOTER_BASELINE,
+		class: "t-label"
+	}, ...footerParts);
 	return cardFrame({
 		theme,
-		height: 227,
+		height: 256,
 		title: "Activity rhythm",
 		note: "by weekday · by month",
 		description: `Activity rhythm for ${data.login}: contributions by weekday and by month of year.`,
-		extraCss: ".hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}",
+		extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}.t-stat{font-weight:600;fill:${theme.fg}}`,
 		fontFaceCss
-	}, el("g", { class: "fade" }, eyebrows, weekdayAxis, monthBaseline, ...weekdayLabels, ...weekdayValues, ...monthTicks), ...weekdayBars, ...monthBars);
+	}, el("g", { class: "fade" }, eyebrows, weekdayAxis, monthBaseline, ...weekdayLabels, ...weekdayValues, ...monthTicks, footer), ...weekdayBars, ...monthBars);
 }
 //#endregion
 //#region src/cards.ts
@@ -58455,6 +58561,7 @@ function renderCard(card, data, streaks, theme, fontFaceCss) {
 		case "composition": return renderComposition(data, theme, fontFaceCss);
 		case "rhythm": return renderRhythm(data, theme, fontFaceCss);
 		case "cadence": return renderCadence(data, theme, fontFaceCss);
+		case "repositories": return renderRepositories(data, theme, fontFaceCss);
 		case "languages": return renderLanguages(data, theme, fontFaceCss);
 		default: throw new Error(`Unknown card: ${card}`);
 	}
@@ -58839,7 +58946,13 @@ query Year($login: String!, $from: DateTime!, $to: DateTime!) {
     }
   }
 }`;
-/** Trailing ~12 months (API default window) — the 3D graph's data. */
+/**
+* Trailing ~12 months (API default window) — the 3D graph's data plus the
+* per-repository commit ranking. `contributions.totalCount` counts commit
+* contributions (verified against live data), so the ranking needs no nested
+* pagination. `isPrivate` feeds the fetch-side privacy filter: a PAT can see
+* private repositories here, and their names must not reach a public card.
+*/
 const TRAILING_QUERY = `
 query Trailing($login: String!) {
   user(login: $login) {
@@ -58847,6 +58960,10 @@ query Trailing($login: String!) {
       contributionCalendar {
         totalContributions
         weeks { contributionDays { date contributionCount contributionLevel } }
+      }
+      commitContributionsByRepository(maxRepositories: 25) {
+        repository { nameWithOwner isPrivate }
+        contributions(first: 1) { totalCount }
       }
     }
   }
@@ -58992,12 +59109,17 @@ async function fetchProfile(token, login) {
 		});
 		dailySeries.push(flattenCalendar(collection.contributionCalendar).filter((day) => day.date.startsWith(`${year}-`)));
 	}
-	const trailingCalendar = (await graphql(token, TRAILING_QUERY, { login })).user?.contributionsCollection.contributionCalendar;
+	const trailingData = await graphql(token, TRAILING_QUERY, { login });
+	const trailingCalendar = trailingData.user?.contributionsCollection.contributionCalendar;
 	if (!trailingCalendar) throw new Error("missing trailing calendar");
 	const trailing = {
 		days: flattenCalendar(trailingCalendar),
 		total: trailingCalendar.totalContributions
 	};
+	const topRepositories = (trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []).filter((entry) => !entry.repository.isPrivate).map((entry) => ({
+		nameWithOwner: entry.repository.nameWithOwner,
+		commits: entry.contributions.totalCount
+	}));
 	const today = trailing.days.at(-1)?.date;
 	if (today === void 0) throw new Error("trailing calendar is empty");
 	const lifetimeDays = mergeDailySeries(dailySeries).filter((day) => day.date <= today);
@@ -59017,7 +59139,8 @@ async function fetchProfile(token, login) {
 		years: yearActivities,
 		lifetimeDays,
 		trailing,
-		commits
+		commits,
+		topRepositories
 	};
 }
 //#endregion
@@ -59163,6 +59286,7 @@ const KNOWN_CARDS = [
 	"composition",
 	"rhythm",
 	"cadence",
+	"repositories",
 	"languages"
 ];
 const THEME_IDS = ["light", "dark"];

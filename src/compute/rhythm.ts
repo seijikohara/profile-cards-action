@@ -11,6 +11,12 @@ export interface RhythmData {
   readonly peakWeekday: number;
   /** Index (0..11) of the month with the greatest sum; 0 if all zero. */
   readonly peakMonth: number;
+  /** Days with any contribution over all days, in [0,1]; 0 for an empty series. */
+  readonly activeDayRate: number;
+  /** The day with the greatest count, first occurrence winning ties; undefined when all zero. */
+  readonly busiestDay: { readonly date: string; readonly count: number } | undefined;
+  /** Saturday + Sunday contributions over all contributions, in [0,1]; 0 when the total is 0. */
+  readonly weekendShare: number;
 }
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -45,6 +51,8 @@ export function computeRhythm(days: readonly DayContribution[]): RhythmData {
   const weekday: number[] = Array.from({ length: 7 }, () => 0);
   const month: number[] = Array.from({ length: 12 }, () => 0);
 
+  let activeDays = 0;
+  let busiestDay: RhythmData['busiestDay'];
   for (const day of days) {
     const match = ISO_DATE.exec(day.date);
     if (match === null) throw new Error(`invalid calendar date: ${day.date}`);
@@ -58,12 +66,20 @@ export function computeRhythm(days: readonly DayContribution[]): RhythmData {
     const weekdayBucket = weekdayIndex(year, monthNumber, dayOfMonth);
     weekday[weekdayBucket] = (weekday[weekdayBucket] ?? 0) + day.count;
     month[monthIndex] = (month[monthIndex] ?? 0) + day.count;
+    if (day.count > 0) activeDays += 1;
+    if (day.count > (busiestDay?.count ?? 0)) busiestDay = { date: day.date, count: day.count };
   }
+
+  const total = weekday.reduce((sum, value) => sum + value, 0);
+  const weekendSum = (weekday[5] ?? 0) + (weekday[6] ?? 0);
 
   return {
     weekday,
     month,
     peakWeekday: indexOfMax(weekday),
     peakMonth: indexOfMax(month),
+    activeDayRate: days.length === 0 ? 0 : activeDays / days.length,
+    busiestDay,
+    weekendShare: total === 0 ? 0 : weekendSum / total,
   };
 }

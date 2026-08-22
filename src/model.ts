@@ -35,6 +35,12 @@ export interface TrailingCalendar {
   readonly total: number;
 }
 
+/** One repository and the user's trailing-year commit contributions to it. */
+export interface RepoCommits {
+  readonly nameWithOwner: string;
+  readonly commits: number;
+}
+
 /** One commit authored by the user on a default branch, from the trailing-year sweep. */
 export interface CommitSample {
   /** Author date as returned by the API — a GitTimestamp keeping the author's UTC offset. */
@@ -65,6 +71,8 @@ export interface ProfileData {
   readonly trailing: TrailingCalendar;
   /** Commits authored by the user on owned default branches, trailing 12 months. */
   readonly commits: readonly CommitSample[];
+  /** Public repositories the user committed to, trailing 12 months, API order. */
+  readonly topRepositories: readonly RepoCommits[];
   /** ISO timestamp of generation, minute precision. */
   readonly generatedAt: string;
 }
