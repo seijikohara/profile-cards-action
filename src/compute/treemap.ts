@@ -30,11 +30,12 @@ export function squarify(
   // Scale weights to areas so their sum equals the bounding area, then lay out
   // largest-first for squareness. Original indices ride along untouched so
   // callers can map color/label back; ties break by index for determinism.
-  const items: Item[] = weights.map((weight, index) => ({
-    index,
-    area: (weight / totalWeight) * boundingArea,
-  }));
-  items.sort((a, b) => b.area - a.area || a.index - b.index);
+  const items: readonly Item[] = weights
+    .map((weight, index) => ({
+      index,
+      area: (weight / totalWeight) * boundingArea,
+    }))
+    .toSorted((a, b) => b.area - a.area || a.index - b.index);
 
   const rects: TreemapRect[] = [];
   let free: Rect = { x, y, width, height };

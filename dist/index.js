@@ -57795,8 +57795,7 @@ function squarify(weights, x, y, width, height) {
 	const items = weights.map((weight, index) => ({
 		index,
 		area: weight / totalWeight * boundingArea
-	}));
-	items.sort((a, b) => b.area - a.area || a.index - b.index);
+	})).toSorted((a, b) => b.area - a.area || a.index - b.index);
 	const rects = [];
 	let free = {
 		x,
@@ -58108,8 +58107,7 @@ function computeLifetime(days) {
 	}
 	const nonZeroSums = [];
 	for (const weeks of byYear.values()) for (const sum of weeks.values()) if (sum > 0) nonZeroSums.push(sum);
-	nonZeroSums.sort((a, b) => a - b);
-	const thresholds = computeThresholds(nonZeroSums);
+	const thresholds = computeThresholds(nonZeroSums.toSorted((a, b) => a - b));
 	return {
 		years: [...byYear.entries()].toSorted(([a], [b]) => a - b).map(([year, weeks]) => {
 			let maxIndex = -1;

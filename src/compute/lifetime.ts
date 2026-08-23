@@ -116,8 +116,7 @@ export function computeLifetime(days: readonly DayContribution[]): LifetimeData 
       if (sum > 0) nonZeroSums.push(sum);
     }
   }
-  nonZeroSums.sort((a, b) => a - b);
-  const thresholds = computeThresholds(nonZeroSums);
+  const thresholds = computeThresholds(nonZeroSums.toSorted((a, b) => a - b));
 
   const years: LifetimeYear[] = [...byYear.entries()]
     .toSorted(([a], [b]) => a - b)
