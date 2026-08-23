@@ -117,6 +117,25 @@ jobs:
             return 0
           }
 
+          # A feature PR may pre-bump the version (minor/major under
+          # semver). When package.json is already ahead of the newest tag,
+          # that version IS the release: skip the patch bump and let the
+          # unconditional sync step tag it. Stacking a bump here would skip
+          # the intended version (1.1.0 would ship as 1.1.1).
+          version_ahead() {
+            local latest_tag current_version newest
+            latest_tag=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -1)
+            current_version=v$(node -p 'require("./package.json").version')
+            newest=$(printf '%s\n' "$latest_tag" "$current_version" | sort -V | tail -1)
+            [[ -n "$latest_tag" && "$current_version" != "$latest_tag" && "$newest" == "$current_version" ]]
+          }
+
+          if version_ahead; then
+            echo "package.json is already ahead of the newest tag; the sync step releases it as-is"
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if ! release_owed; then
             echo "bumped=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -156,6 +175,11 @@ jobs:
             # moves on every release and would otherwise refuse to update.
             git fetch -q --tags --force origin main
             git reset -q --hard FETCH_HEAD
+            if version_ahead; then
+              echo "The new tip already carries a pre-bumped version; the sync step releases it"
+              echo "bumped=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             if ! release_owed; then
               echo "Another run already released; nothing left to do"
               echo "bumped=false" >> "$GITHUB_OUTPUT"

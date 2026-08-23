@@ -392,3 +392,18 @@ never rebind.
   thread a draw number instead of closing over a cursor. Pagination loops
   became recursion; scan-style prefix sums replace running cursors, summing in
   the same left-to-right order so floating-point results stay bit-identical.
+
+## Addendum (2026-08-23): v1.0.0
+
+- **The contract from v1:** inputs, outputs, card names, and generated file
+  names are stable within a major; layouts and visuals ride minors and patches.
+- **Release mechanics:** the reconciler now honors a pre-bumped package.json —
+  `version_ahead()` short-circuits the patch bump when the version already
+  leads the newest tag, and the unconditional sync step tags exactly that
+  version. So: patch releases stay fully automatic; a minor or major is cut by
+  bumping the version inside the PR that earns it, nothing more. The v1.0.0
+  cut itself used this path.
+- **Marketplace:** the listing is re-published from the v1.0.0 release
+  (web-UI step) and the interim `v0` Release — the pre-1.0 listing anchor —
+  is deleted afterwards. The `v0` tag stays frozen at v0.0.11 for consumers
+  pinned to `@v0`.
