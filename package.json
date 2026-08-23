@@ -1,6 +1,6 @@
 {
   "name": "profile-cards-action",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "private": true,
   "description": "Render GitHub profile README cards (SVG) from the GitHub GraphQL API, configurable via inputs.",
   "keywords": [
