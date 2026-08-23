@@ -74,7 +74,11 @@ async function stage(dir: string): Promise<boolean> {
  * commits and pushes to the current branch, re-committing onto the remote tip
  * and retrying when the push is rejected because the branch advanced.
  */
-export async function commitAndPush(options: { dir: string; message: string; token: string }): Promise<CommitResult> {
+export async function commitAndPush(options: {
+  readonly dir: string;
+  readonly message: string;
+  readonly token: string;
+}): Promise<CommitResult> {
   const { dir, message, token } = options;
 
   // Capture the paths before committing so the result reports what shipped.

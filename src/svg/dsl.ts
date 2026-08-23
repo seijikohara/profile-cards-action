@@ -23,7 +23,7 @@ export function num(v: number): string {
   return String(Math.round(v * 100) / 100);
 }
 
-function renderAttrs(attrs: Record<string, AttrValue>): string {
+function renderAttrs(attrs: Readonly<Record<string, AttrValue>>): string {
   let out = '';
   for (const [key, value] of Object.entries(attrs)) {
     if (value === undefined) continue;
@@ -34,7 +34,7 @@ function renderAttrs(attrs: Record<string, AttrValue>): string {
 }
 
 /** Build an element. Children are pre-rendered strings (from el/text helpers only). */
-export function el(name: string, attrs: Record<string, AttrValue> = {}, ...children: string[]): string {
+export function el(name: string, attrs: Readonly<Record<string, AttrValue>> = {}, ...children: string[]): string {
   const body = children.join('');
   return body === '' ? `<${name}${renderAttrs(attrs)}/>` : `<${name}${renderAttrs(attrs)}>${body}</${name}>`;
 }
