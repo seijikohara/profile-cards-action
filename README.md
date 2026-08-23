@@ -132,7 +132,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Render profile cards
-        uses: seijikohara/profile-cards-action@v0
+        uses: seijikohara/profile-cards-action@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           username: seijikohara
@@ -200,9 +200,11 @@ GitHub renders README images through `<img>`, where SVGs cannot load external fo
 
 ## Versioning
 
-`v0` is a moving major tag. It is repointed at the newest `v0.0.x` release on every release, so `uses: seijikohara/profile-cards-action@v0` picks up patches without a workflow edit. Pin an exact tag (`@v0.0.4`) or a commit SHA instead when you need a reference that never changes.
+This action follows [Semantic Versioning](https://semver.org). From `v1.0.0`, the inputs, the outputs, the card names, and the generated file names are a stable contract: they only change with a major release. Card layouts and visuals keep improving in minor and patch releases — the contract is the interface, not the pixels.
 
-Each patch version gets its own immutable release; see [Releases](https://github.com/seijikohara/profile-cards-action/releases) for the per-version notes. The action is still pre-1.0, so inputs and card layouts can change between `v0.0.x` releases.
+`v1` is a moving major tag, repointed at the newest `v1.x.y` release, so `uses: seijikohara/profile-cards-action@v1` picks up fixes and features without a workflow edit. Pin an exact tag (`@v1.0.0`) or a commit SHA when you need a reference that never changes. `v0` stays frozen at the last pre-1.0 release.
+
+Each version gets its own immutable release; see [Releases](https://github.com/seijikohara/profile-cards-action/releases) for the per-version notes.
 
 ## License
 
