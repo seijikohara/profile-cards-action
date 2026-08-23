@@ -61,6 +61,20 @@ function aggregateLanguages(repos: readonly RepoNode[]): LanguageSlice[] {
     .toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
 }
 
+/** Page through the profile query, one user snapshot per repository page. */
+async function fetchProfilePages(
+  token: string,
+  login: string,
+  cursor: string | null
+): Promise<readonly NonNullable<ProfileQueryData['user']>[]> {
+  const page: ProfileQueryData = await graphql<ProfileQueryData>(token, PROFILE_QUERY, { login, cursor });
+  const user = page.user;
+  if (!user) throw new Error(`user not found: ${login}`);
+  const { pageInfo } = user.repositories;
+  const rest = pageInfo.hasNextPage ? await fetchProfilePages(token, login, pageInfo.endCursor) : [];
+  return [user, ...rest];
+}
+
 /**
  * Page through commits the user authored on one repository's default branch
  * within the sweep window. Returns [] for empty repositories (no default
@@ -71,29 +85,27 @@ async function fetchRepoCommits(
   owner: string,
   name: string,
   authorId: string,
-  since: string
-): Promise<CommitSample[]> {
-  const samples: CommitSample[] = [];
-  let cursor: string | null = null;
-  do {
-    const page: CommitsQueryData = await graphql<CommitsQueryData>(token, COMMITS_QUERY, {
-      owner,
-      name,
-      authorId,
-      since,
-      cursor,
-    });
-    const history = page.repository?.defaultBranchRef?.target?.history;
-    if (!history) return samples;
-    for (const node of history.nodes) {
-      const date = node.author?.date;
-      if (date !== null && date !== undefined) {
-        samples.push({ date, additions: node.additions, deletions: node.deletions });
-      }
-    }
-    cursor = history.pageInfo.hasNextPage ? history.pageInfo.endCursor : null;
-  } while (cursor !== null);
-  return samples;
+  since: string,
+  cursor: string | null = null
+): Promise<readonly CommitSample[]> {
+  const page: CommitsQueryData = await graphql<CommitsQueryData>(token, COMMITS_QUERY, {
+    owner,
+    name,
+    authorId,
+    since,
+    cursor,
+  });
+  const history = page.repository?.defaultBranchRef?.target?.history;
+  if (!history) return [];
+  const samples = history.nodes.flatMap((node) => {
+    const date = node.author?.date;
+    return date === null || date === undefined ? [] : [{ date, additions: node.additions, deletions: node.deletions }];
+  });
+  const { pageInfo } = history;
+  const rest = pageInfo.hasNextPage
+    ? await fetchRepoCommits(token, owner, name, authorId, since, pageInfo.endCursor)
+    : [];
+  return [...samples, ...rest];
 }
 
 /**
@@ -113,21 +125,12 @@ export function mergeDailySeries(seriesPerYear: readonly (readonly DayContributi
 }
 
 export async function fetchProfile(token: string, login: string): Promise<Omit<ProfileData, 'generatedAt'>> {
-  // Page through owned public repositories (1 point per page).
-  let cursor: string | null = null;
-  let user: NonNullable<ProfileQueryData['user']> | null = null;
-  const repoNodes: RepoNode[] = [];
-  do {
-    const page: ProfileQueryData = await graphql<ProfileQueryData>(token, PROFILE_QUERY, {
-      login,
-      cursor,
-    });
-    if (!page.user) throw new Error(`user not found: ${login}`);
-    user = page.user;
-    repoNodes.push(...page.user.repositories.nodes);
-    cursor = page.user.repositories.pageInfo.hasNextPage ? page.user.repositories.pageInfo.endCursor : null;
-  } while (cursor !== null);
-  if (!user) throw new Error(`user not found: ${login}`);
+  // Page through owned public repositories (1 point per page). Every page
+  // repeats the user scalars; the first snapshot serves them.
+  const profilePages = await fetchProfilePages(token, login, null);
+  const user = profilePages[0];
+  if (user === undefined) throw new Error(`user not found: ${login}`);
+  const repoNodes: readonly RepoNode[] = profilePages.flatMap((pageUser) => pageUser.repositories.nodes);
 
   const years = user.contributionsCollection.contributionYears.toSorted((a, b) => a - b);
 

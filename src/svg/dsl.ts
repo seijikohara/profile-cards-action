@@ -24,13 +24,10 @@ export function num(v: number): string {
 }
 
 function renderAttrs(attrs: Readonly<Record<string, AttrValue>>): string {
-  let out = '';
-  for (const [key, value] of Object.entries(attrs)) {
-    if (value === undefined) continue;
-    const rendered = typeof value === 'number' ? num(value) : esc(value);
-    out += ` ${key}="${rendered}"`;
-  }
-  return out;
+  return Object.entries(attrs)
+    .filter((entry): entry is [string, string | number] => entry[1] !== undefined)
+    .map(([key, value]) => ` ${key}="${typeof value === 'number' ? num(value) : esc(value)}"`)
+    .join('');
 }
 
 /** Build an element. Children are pre-rendered strings (from el/text helpers only). */

@@ -92,22 +92,22 @@ describe('commitAndPush', () => {
     );
   });
 
+  /** Calls of getExecOutput whose args include `needle`, counted at call time (the in-flight call included). */
+  const callsWith = (needle: string): number =>
+    getExecOutputMock.mock.calls.filter(([, args]) => args?.includes(needle)).length;
+
   it('should reset onto the tip and re-commit, then succeed, when the first push is rejected', async () => {
-    let pushes = 0;
     getExecOutputMock.mockImplementation(async (_cmd, args) => {
       if (args?.includes('status')) return output({ stdout: ' M assets/overview.svg\n' });
       if (args?.includes('diff')) return output({ exitCode: 1 });
-      if (args?.includes('push')) {
-        pushes += 1;
-        return output({ exitCode: pushes === 1 ? 1 : 0 });
-      }
+      if (args?.includes('push')) return output({ exitCode: callsWith('push') === 1 ? 1 : 0 });
       return output();
     });
 
     const result = await commitAndPush({ dir: 'assets', message: 'refresh', token: 'secret' });
 
     expect(result.changed).toBe(true);
-    expect(pushes).toBe(2);
+    expect(callsWith('push')).toBe(2);
     expect(execMock).toHaveBeenCalledWith('git', ['fetch', 'origin', 'main']);
     expect(execMock).toHaveBeenCalledWith('git', ['reset', '--mixed', 'FETCH_HEAD']);
     // Never rebase: the competing commit rewrote the same generated files, so a
@@ -120,14 +120,10 @@ describe('commitAndPush', () => {
   });
 
   it('should report no change when the new tip already carries identical output', async () => {
-    let diffs = 0;
     getExecOutputMock.mockImplementation(async (_cmd, args) => {
       if (args?.includes('status')) return output({ stdout: ' M assets/overview.svg\n' });
-      if (args?.includes('diff')) {
-        diffs += 1;
-        // Staged changes before the first push; identical to the tip after the reset.
-        return output({ exitCode: diffs === 1 ? 1 : 0 });
-      }
+      // Staged changes before the first push; identical to the tip after the reset.
+      if (args?.includes('diff')) return output({ exitCode: callsWith('diff') === 1 ? 1 : 0 });
       if (args?.includes('push')) return output({ exitCode: 1 });
       return output();
     });
@@ -142,20 +138,16 @@ describe('commitAndPush', () => {
   });
 
   it('should throw after exhausting the push attempts', async () => {
-    let pushes = 0;
     getExecOutputMock.mockImplementation(async (_cmd, args) => {
       if (args?.includes('status')) return output({ stdout: ' M assets/overview.svg\n' });
       if (args?.includes('diff')) return output({ exitCode: 1 });
-      if (args?.includes('push')) {
-        pushes += 1;
-        return output({ exitCode: 1 });
-      }
+      if (args?.includes('push')) return output({ exitCode: 1 });
       return output();
     });
 
     await expect(commitAndPush({ dir: 'assets', message: 'refresh', token: 'secret' })).rejects.toThrow(
       'Failed to push to origin/main after 3 attempts.'
     );
-    expect(pushes).toBe(3);
+    expect(callsWith('push')).toBe(3);
   });
 });

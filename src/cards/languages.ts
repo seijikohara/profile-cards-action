@@ -2,6 +2,7 @@
 
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { languageShares, type LanguageShare } from '../compute/languages.js';
+import type { TreemapRect } from '../compute/treemap.js';
 import { squarify } from '../compute/treemap.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
@@ -27,6 +28,23 @@ const BYTES_MIN_HEIGHT = 64;
 /** Fill for a share: its linguist color, or the muted token for "Other" and colorless languages. */
 function cellFill(share: LanguageShare, theme: Theme): string {
   return share.color ?? theme.fgMuted;
+}
+
+/** In-cell label lines, tiered by the cell's height; '' when the cell is too small. */
+function cellLabel(share: LanguageShare, rect: TreemapRect, fill: string): string {
+  if (rect.width < LABEL_MIN_WIDTH || rect.height < NAME_MIN_HEIGHT) return '';
+  // On-cell ink: white or near-black, whichever contrasts more with the fill.
+  const ink = contrast(fill, '#ffffff') >= contrast(fill, '#1f2328') ? '#ffffff' : '#1f2328';
+  const tx = rect.x + 9;
+  return [
+    el('text', { x: tx, y: rect.y + 20, class: 'lang', fill: ink }, textNode(share.name)),
+    ...(rect.height >= PCT_MIN_HEIGHT
+      ? [el('text', { x: tx, y: rect.y + 34, class: 'lang-pct', fill: ink }, textNode(`${share.pct.toFixed(1)}%`))]
+      : []),
+    ...(rect.height >= BYTES_MIN_HEIGHT
+      ? [el('text', { x: tx, y: rect.y + 50, class: 'lang-pct', fill: ink }, textNode(formatBytes(share.bytes)))]
+      : []),
+  ].join('');
 }
 
 export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: string): string {
@@ -70,27 +88,7 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
       fill,
     });
 
-    let label = '';
-    if (rect.width >= LABEL_MIN_WIDTH && rect.height >= NAME_MIN_HEIGHT) {
-      // On-cell ink: white or near-black, whichever contrasts more with the fill.
-      const ink = contrast(fill, '#ffffff') >= contrast(fill, '#1f2328') ? '#ffffff' : '#1f2328';
-      const tx = rect.x + 9;
-      label = el('text', { x: tx, y: rect.y + 20, class: 'lang', fill: ink }, textNode(share.name));
-      if (rect.height >= PCT_MIN_HEIGHT) {
-        label += el(
-          'text',
-          { x: tx, y: rect.y + 34, class: 'lang-pct', fill: ink },
-          textNode(`${share.pct.toFixed(1)}%`)
-        );
-      }
-      if (rect.height >= BYTES_MIN_HEIGHT) {
-        label += el(
-          'text',
-          { x: tx, y: rect.y + 50, class: 'lang-pct', fill: ink },
-          textNode(formatBytes(share.bytes))
-        );
-      }
-    }
+    const label = cellLabel(share, rect, fill);
 
     return el('g', { class: `fade c${rect.index}` }, rectEl, label);
   });

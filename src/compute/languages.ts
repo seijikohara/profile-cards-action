@@ -24,24 +24,22 @@ export function languageShares(slices: readonly LanguageSlice[], limit = 8): Lan
   const entries: LanguageSlice[] =
     otherBytes > 0 ? [...kept, { name: 'Other', color: null, bytes: otherBytes }] : [...kept];
 
-  // Largest-remainder rounding in tenths of a percent.
+  // Largest-remainder rounding in tenths of a percent: floor everything, then
+  // bump the entries with the largest fractional parts until the tenths sum to
+  // exactly 1000.
   const exact = entries.map((entry) => (entry.bytes / total) * 1000);
   const floors = exact.map((value) => Math.floor(value));
-  let remainder = 1000 - floors.reduce((sum, value) => sum + value, 0);
-  const order = exact
-    .map((value, index) => ({ index, frac: value - Math.floor(value) }))
-    .toSorted((a, b) => b.frac - a.frac || a.index - b.index);
-  for (const { index } of order) {
-    if (remainder <= 0) break;
-    const floor = floors[index];
-    if (floor !== undefined) {
-      floors[index] = floor + 1;
-      remainder -= 1;
-    }
-  }
+  const remainder = 1000 - floors.reduce((sum, value) => sum + value, 0);
+  const bumped = new Set(
+    exact
+      .map((value, index) => ({ index, frac: value - Math.floor(value) }))
+      .toSorted((a, b) => b.frac - a.frac || a.index - b.index)
+      .slice(0, Math.max(0, remainder))
+      .map((entry) => entry.index)
+  );
 
   return entries.map((entry, index) => ({
     ...entry,
-    pct: (floors[index] ?? 0) / 10,
+    pct: ((floors[index] ?? 0) + (bumped.has(index) ? 1 : 0)) / 10,
   }));
 }

@@ -72,8 +72,6 @@ function levelOf(count: number, thresholds: readonly [number, number, number, nu
 /** Aggregate the commit sweep into the weekday × hour punch-card grid. */
 export function computeCadence(commits: readonly CommitSample[]): CadenceData {
   const grid: number[][] = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
-  let additions = 0;
-  let deletions = 0;
 
   for (const sample of commits) {
     const match = LOCAL_DATETIME.exec(sample.date);
@@ -87,9 +85,10 @@ export function computeCadence(commits: readonly CommitSample[]): CadenceData {
     }
     const row = grid[weekdayIndex(year, month, day)];
     if (row !== undefined) row[hour] = (row[hour] ?? 0) + 1;
-    additions += sample.additions;
-    deletions += sample.deletions;
   }
+
+  const additions = commits.reduce((sum, sample) => sum + sample.additions, 0);
+  const deletions = commits.reduce((sum, sample) => sum + sample.deletions, 0);
 
   const nonZero = grid
     .flat()
@@ -98,12 +97,14 @@ export function computeCadence(commits: readonly CommitSample[]): CadenceData {
   const thresholds = computeThresholds(nonZero);
   const levels = grid.map((row) => row.map((count) => levelOf(count, thresholds)));
 
-  let peak: CadencePeak | undefined;
-  grid.forEach((row, weekday) => {
-    row.forEach((count, hour) => {
-      if (count > 0 && count > (peak?.count ?? 0)) peak = { weekday, hour, count };
-    });
-  });
+  const peak = grid.reduce<CadencePeak | undefined>(
+    (best, row, weekday) =>
+      row.reduce<CadencePeak | undefined>(
+        (rowBest, count, hour) => (count > (rowBest?.count ?? 0) ? { weekday, hour, count } : rowBest),
+        best
+      ),
+    undefined
+  );
 
   const nightCommits = grid.reduce(
     (sum, row) => sum + row.reduce((rowSum, count, hour) => (hour >= 22 || hour < 6 ? rowSum + count : rowSum), 0),

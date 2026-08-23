@@ -10,6 +10,7 @@
  */
 
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
+import { range } from '../iter.js';
 import type { DayContribution, ProfileData, Streaks } from '../model.js';
 import { el, num, textNode } from '../svg/dsl.js';
 import { formatDate, formatDateRange, formatInt, formatUtcTimestamp } from '../svg/text.js';
@@ -64,17 +65,13 @@ function dayColumn(x: number, y: number, height: number, topFill: string, leftFi
 }
 
 /** Weeks-of-days matrix from the flat day series (calendar order, 7 rows). */
-export function toWeeks(days: readonly DayContribution[]): DayContribution[][] {
-  const weeks: DayContribution[][] = [];
-  for (let index = 0; index < days.length; index += 7) {
-    weeks.push(days.slice(index, index + 7));
-  }
+export function toWeeks(days: readonly DayContribution[]): readonly (readonly DayContribution[])[] {
   // The API returns whole weeks except possibly the current partial one.
-  return weeks;
+  return range(Math.ceil(days.length / 7)).map((week) => days.slice(week * 7, week * 7 + 7));
 }
 
 export function renderContributions(data: ProfileData, streaks: Streaks, theme: Theme, fontFaceCss: string): string {
-  const weeks = toWeeks([...data.trailing.days]);
+  const weeks = toWeeks(data.trailing.days);
   const weekCount = weeks.length;
   const maxCount = Math.max(1, ...data.trailing.days.map((day) => day.count));
 

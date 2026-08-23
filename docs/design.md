@@ -370,3 +370,25 @@ Durable findings:
   the cards in their designed static state at exact size. qlmanage crops the
   right ~9% and drops `animation-delay: 0ms` elements — never judge cards by
   its thumbnails.
+
+## Addendum (2026-08-23): const-only source
+
+Follow-up to the v1 design pass, closing the immutability audit. The entire
+tree — `src/`, `scripts/`, `tests/` — is **`let`-free**; local mutation of
+`const` builders (array pushes, grid fills) remains legitimate, but bindings
+never rebind.
+
+- Enforced by `scripts/check-const-only.ts` (chained into `pnpm run lint`):
+  oxlint has no `no-restricted-syntax`, so the checker blanks comments
+  offset-preserving and flags any `let` declaration. `prefer-const` / `no-var` /
+  `no-param-reassign` stay on as oxlint errors.
+- Refactor equivalence was **proved, not assumed**: `tests/equivalence.dump.test.ts`
+  (kept as a tool; skipped unless `EQUIV_OUT` is set) hashes all 16 fixture
+  card renders plus the streak structure — 17/17 SHA-256s identical before and
+  after, covering the streaks run-based reformulation, the recursive squarify,
+  and the fixture PRNG surgery.
+- Durable tricks: mulberry32's only state transition is adding a constant
+  (mod 2^32), so the nth draw is a pure function of (seed, n) and fixtures
+  thread a draw number instead of closing over a cursor. Pagination loops
+  became recursion; scan-style prefix sums replace running cursors, summing in
+  the same left-to-right order so floating-point results stay bit-identical.

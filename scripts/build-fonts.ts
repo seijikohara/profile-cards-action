@@ -58,8 +58,7 @@ const header = [
   '',
 ];
 
-const lines: string[] = [...header];
-let total = 0;
+const entries: { readonly line: string; readonly bytes: number }[] = [];
 for (const face of FACES) {
   const buf = await source(face.src);
   const out = await subsetFont(buf, CHARSET, {
@@ -68,10 +67,11 @@ for (const face of FACES) {
     preserveNameIds: PRESERVE_NAME_IDS,
   });
   const b64 = out.toString('base64');
-  total += out.length;
-  lines.push(`export const ${face.constName} = "${b64}";`);
+  entries.push({ line: `export const ${face.constName} = "${b64}";`, bytes: out.length });
   console.log(`${face.constName}: ${out.length} B woff2 -> ${b64.length} B base64`);
 }
+const lines: readonly string[] = [...header, ...entries.map((entry) => entry.line)];
+const total = entries.reduce((sum, entry) => sum + entry.bytes, 0);
 
 await writeFile(outFile, `${lines.join('\n')}\n`, 'utf8');
 console.log(`wrote ${outFile} (${FACES.length} faces, ${total} woff2 bytes)`);

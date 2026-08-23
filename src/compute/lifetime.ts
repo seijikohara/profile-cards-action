@@ -1,5 +1,6 @@
 /** Lifetime weekly heatmap: a "wall of years" of per-week activity levels. */
 
+import { range } from '../iter.js';
 import type { DayContribution } from '../model.js';
 
 export interface LifetimeYear {
@@ -99,40 +100,32 @@ function levelOf(sum: number, thresholds: readonly [number, number, number, numb
  * 0..maxWeekIndexPresent with gaps filled at level 0.
  */
 export function computeLifetime(days: readonly DayContribution[]): LifetimeData {
-  const byYear = new Map<number, Map<number, number>>();
-  for (const { date, count } of days) {
-    const { year, weekIndex } = bucketOf(date);
-    let weeks = byYear.get(year);
-    if (weeks === undefined) {
-      weeks = new Map<number, number>();
-      byYear.set(year, weeks);
-    }
-    weeks.set(weekIndex, (weeks.get(weekIndex) ?? 0) + count);
-  }
-
-  const nonZeroSums: number[] = [];
-  for (const weeks of byYear.values()) {
-    for (const sum of weeks.values()) {
-      if (sum > 0) nonZeroSums.push(sum);
-    }
-  }
-  const thresholds = computeThresholds(nonZeroSums.toSorted((a, b) => a - b));
-
-  const years: LifetimeYear[] = [...byYear.entries()]
+  const buckets = days.map((day) => ({ ...bucketOf(day.date), count: day.count }));
+  const yearEntries = [...Map.groupBy(buckets, (bucket) => bucket.year).entries()]
     .toSorted(([a], [b]) => a - b)
-    .map(([year, weeks]) => {
-      let maxIndex = -1;
-      let total = 0;
-      for (const [index, sum] of weeks.entries()) {
-        if (index > maxIndex) maxIndex = index;
-        total += sum;
-      }
-      const cells: (0 | 1 | 2 | 3 | 4)[] = [];
-      for (let index = 0; index <= maxIndex; index += 1) {
-        cells.push(levelOf(weeks.get(index) ?? 0, thresholds));
-      }
-      return { year, weeks: cells, total };
-    });
+    .map(([year, items]) => ({
+      year,
+      weekSums: new Map(
+        [...Map.groupBy(items, (item) => item.weekIndex).entries()].map(([week, group]) => [
+          week,
+          group.reduce((sum, item) => sum + item.count, 0),
+        ])
+      ),
+      total: items.reduce((sum, item) => sum + item.count, 0),
+    }));
+
+  const thresholds = computeThresholds(
+    yearEntries
+      .flatMap((entry) => [...entry.weekSums.values()])
+      .filter((sum) => sum > 0)
+      .toSorted((a, b) => a - b)
+  );
+
+  const years: LifetimeYear[] = yearEntries.map(({ year, weekSums, total }) => ({
+    year,
+    weeks: range(Math.max(0, ...weekSums.keys()) + 1).map((index) => levelOf(weekSums.get(index) ?? 0, thresholds)),
+    total,
+  }));
 
   return { years, thresholds };
 }

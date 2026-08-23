@@ -7,6 +7,7 @@
  */
 
 import * as exec from '@actions/exec';
+import { range } from './iter.js';
 
 export interface CommitResult {
   readonly changed: boolean;
@@ -100,7 +101,7 @@ export async function commitAndPush(options: {
   const pushUrl = `https://x-access-token:${token}@github.com/${repository}.git`;
   await exec.exec('git', ['remote', 'set-url', '--push', 'origin', pushUrl], { silent: true });
 
-  for (let attempt = 1; attempt <= PUSH_ATTEMPTS; attempt += 1) {
+  for (const attempt of range(PUSH_ATTEMPTS, 1)) {
     const push = await exec.getExecOutput('git', ['push', 'origin', `HEAD:${branch}`], {
       ignoreReturnCode: true,
     });

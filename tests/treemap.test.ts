@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { squarify } from '../src/compute/treemap.js';
 import type { TreemapRect } from '../src/compute/treemap.js';
+import { range } from '../src/iter.js';
 
 const EPS = 1e-6;
 
@@ -9,7 +10,13 @@ function rectArea(rect: TreemapRect): number {
 }
 
 /** Assert every geometric invariant of a layout at once. */
-function validateLayout(weights: readonly number[], bx: number, by: number, bw: number, bh: number): TreemapRect[] {
+function validateLayout(
+  weights: readonly number[],
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number
+): readonly TreemapRect[] {
   const rects = squarify(weights, bx, by, bw, bh);
   const n = weights.length;
 
@@ -45,8 +52,8 @@ function validateLayout(weights: readonly number[], bx: number, by: number, bw: 
   expect(Math.abs(totalArea - boundingArea)).toBeLessThanOrEqual(boundingArea * EPS);
 
   // No pairwise overlaps.
-  for (let i = 0; i < rects.length; i += 1) {
-    for (let j = i + 1; j < rects.length; j += 1) {
+  for (const i of range(rects.length)) {
+    for (const j of range(rects.length - i - 1, i + 1)) {
       const a = rects[i]!;
       const b = rects[j]!;
       const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
@@ -126,8 +133,8 @@ describe('squarify', () => {
 
   it('produces no pairwise overlaps', () => {
     const rects = squarify([8, 5, 5, 3, 3, 2, 2, 1], 0, 0, 360, 240);
-    for (let i = 0; i < rects.length; i += 1) {
-      for (let j = i + 1; j < rects.length; j += 1) {
+    for (const i of range(rects.length)) {
+      for (const j of range(rects.length - i - 1, i + 1)) {
         const a = rects[i]!;
         const b = rects[j]!;
         const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);

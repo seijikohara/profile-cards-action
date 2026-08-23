@@ -11,6 +11,7 @@ import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeCadence } from '../compute/cadence.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
+import { range } from '../iter.js';
 import { formatCompact } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
@@ -41,25 +42,21 @@ export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: stri
 
   // One group per hour column so the entry stagger costs 24 style attributes,
   // not 168.
-  const columns: string[] = [];
-  for (let hour = 0; hour < 24; hour += 1) {
+  const columns = range(24).map((hour) => {
     const cx = GRID_LEFT + hour * COL_W + COL_W / 2;
-    const dots: string[] = [];
-    cadence.levels.forEach((row, weekday) => {
+    const dots = cadence.levels.map((row, weekday) => {
       const level = row[hour] ?? 0;
       const cy = GRID_TOP + weekday * ROW_H + ROW_H / 2;
       const isPeak = cadence.peak !== undefined && cadence.peak.weekday === weekday && cadence.peak.hour === hour;
-      dots.push(
-        el('circle', {
-          cx,
-          cy,
-          r: DOT_RADIUS[level],
-          fill: isPeak ? theme.accent : theme.contribRamp[level],
-        })
-      );
+      return el('circle', {
+        cx,
+        cy,
+        r: DOT_RADIUS[level],
+        fill: isPeak ? theme.accent : theme.contribRamp[level],
+      });
     });
-    columns.push(el('g', { class: 'dot', style: `animation-delay:${hour * 14}ms` }, ...dots));
-  }
+    return el('g', { class: 'dot', style: `animation-delay:${hour * 14}ms` }, ...dots);
+  });
 
   const weekdayLabels = WEEKDAY_LABELS.map((label, index) =>
     el(
@@ -69,16 +66,14 @@ export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: stri
     )
   );
 
-  const hourTicks: string[] = [];
-  for (let hour = 0; hour < 24; hour += 2) {
-    hourTicks.push(
-      el(
-        'text',
-        { x: GRID_LEFT + hour * COL_W + COL_W / 2, y: TICK_BASELINE, class: 't-tick', 'text-anchor': 'middle' },
-        textNode(String(hour))
-      )
+  const hourTicks = range(12).map((half) => {
+    const hour = half * 2;
+    return el(
+      'text',
+      { x: GRID_LEFT + hour * COL_W + COL_W / 2, y: TICK_BASELINE, class: 't-tick', 'text-anchor': 'middle' },
+      textNode(String(hour))
     );
-  }
+  });
 
   const footerParts: string[] = [
     el('tspan', { class: 't-stat' }, textNode(formatCompact(cadence.totalCommits))),

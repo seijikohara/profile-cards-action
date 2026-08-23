@@ -4,30 +4,31 @@ const TAG = /<(\/?)([A-Za-z][\w-]*)((?:\s+[\w:-]+="[^"<>]*")*)\s*(\/?)>/y;
 
 /** Throws when `svg` is not a single well-formed element tree. */
 export function assertWellFormed(svg: string): void {
-  const stack: string[] = [];
-  let index = 0;
-  while (index < svg.length) {
-    const lt = svg.indexOf('<', index);
-    if (lt === -1) {
-      checkText(svg.slice(index));
-      break;
-    }
-    checkText(svg.slice(index, lt));
-    TAG.lastIndex = lt;
-    const match = TAG.exec(svg);
-    if (!match || match.index !== lt) {
-      throw new Error(`malformed tag at offset ${lt}: ${svg.slice(lt, lt + 60)}`);
-    }
-    const [, closing, name, , selfClosing] = match;
-    if (closing === '/') {
-      const open = stack.pop();
-      if (open !== name) throw new Error(`mismatched </${name}>, expected </${open ?? 'nothing'}>`);
-    } else if (selfClosing !== '/') {
-      stack.push(name ?? '');
-    }
-    index = TAG.lastIndex;
+  const open = walk(svg, 0, []);
+  if (open.length > 0) throw new Error(`unclosed elements: ${open.join(', ')}`);
+}
+
+/** Consume from `index`, returning the still-open element names. Depth = tag count, well within stack limits. */
+function walk(svg: string, index: number, stack: readonly string[]): readonly string[] {
+  if (index >= svg.length) return stack;
+  const lt = svg.indexOf('<', index);
+  if (lt === -1) {
+    checkText(svg.slice(index));
+    return stack;
   }
-  if (stack.length > 0) throw new Error(`unclosed elements: ${stack.join(', ')}`);
+  checkText(svg.slice(index, lt));
+  TAG.lastIndex = lt;
+  const match = TAG.exec(svg);
+  if (!match || match.index !== lt) {
+    throw new Error(`malformed tag at offset ${lt}: ${svg.slice(lt, lt + 60)}`);
+  }
+  const [, closing, name, , selfClosing] = match;
+  if (closing === '/') {
+    const openName = stack.at(-1);
+    if (openName !== name) throw new Error(`mismatched </${name}>, expected </${openName ?? 'nothing'}>`);
+    return walk(svg, TAG.lastIndex, stack.slice(0, -1));
+  }
+  return walk(svg, TAG.lastIndex, selfClosing === '/' ? stack : [...stack, name ?? '']);
 }
 
 function checkText(text: string): void {

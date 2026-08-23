@@ -15,11 +15,19 @@ import { computeStreaks } from './compute/streaks.js';
 import { resolveFonts } from './fonts.js';
 import { fetchProfile } from './github/fetch-profile.js';
 import { changedPaths, commitAndPush } from './git.js';
-import { readInputs } from './inputs.js';
+import { readInputs, type ActionInputs } from './inputs.js';
 import type { ProfileData } from './model.js';
 import { DARK, LIGHT, type Theme } from './theme.js';
 
 const THEME_BY_ID: Record<'light' | 'dark', Theme> = { light: LIGHT, dark: DARK };
+
+/** Commit when asked, otherwise just detect pending changes — either way report whether anything changed. */
+async function resolveChanged(inputs: ActionInputs): Promise<boolean> {
+  if (!inputs.commit) return (await changedPaths(inputs.outputDir)).length > 0;
+  const result = await commitAndPush({ dir: inputs.outputDir, message: inputs.commitMessage, token: inputs.token });
+  core.info(result.changed ? `Committed ${result.files.length} changed files` : 'No changes to commit');
+  return result.changed;
+}
 
 async function run(): Promise<void> {
   const inputs = readInputs();
@@ -55,18 +63,7 @@ async function run(): Promise<void> {
       `(${inputs.cards.length} cards x ${themes.length} themes, ${inputs.badges.length} badges)`
   );
 
-  let changed: boolean;
-  if (inputs.commit) {
-    const result = await commitAndPush({
-      dir: inputs.outputDir,
-      message: inputs.commitMessage,
-      token: inputs.token,
-    });
-    changed = result.changed;
-    core.info(result.changed ? `Committed ${result.files.length} changed files` : 'No changes to commit');
-  } else {
-    changed = (await changedPaths(inputs.outputDir)).length > 0;
-  }
+  const changed = await resolveChanged(inputs);
 
   core.setOutput('changed', String(changed));
   core.setOutput('files', JSON.stringify(written));
