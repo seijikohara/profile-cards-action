@@ -1,6 +1,6 @@
 /** Render every card in both themes and assert the shared SVG contract. */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { renderCard } from '../src/cards.js';
 import { computeStreaks } from '../src/compute/streaks.js';
 import { resolveFonts } from '../src/fonts.js';
@@ -20,16 +20,10 @@ const CARDS = [
   'languages',
 ];
 
-let data: ProfileData;
-let streaks: Streaks;
-let fontFaceCss: string;
-
-beforeAll(async () => {
-  data = makeFixture();
-  streaks = computeStreaks(data.lifetimeDays);
-  // The default families read pre-subset constants — no network.
-  fontFaceCss = await resolveFonts('Roboto', 'Roboto Mono');
-});
+const data: ProfileData = makeFixture();
+const streaks: Streaks = computeStreaks(data.lifetimeDays);
+// The default families read pre-subset constants — no network.
+const fontFaceCss: string = await resolveFonts('Roboto', 'Roboto Mono');
 
 /** Render the full CARDS × THEMES matrix through the public dispatcher. */
 function renderAll(): { name: string; svg: string }[] {

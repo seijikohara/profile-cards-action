@@ -23,12 +23,11 @@ export type FontWeight = 'regular' | 'semibold';
 
 /** Estimated rendered width of `text` at `size` px in the sans stack. */
 export function measureSans(text: string, size: number, weight: FontWeight = 'regular'): number {
-  let em = 0;
-  for (const ch of text) {
+  const em = Array.from(text).reduce((total, ch) => {
     const code = ch.codePointAt(0) ?? 0;
     const w = code >= 32 && code <= 126 ? HELVETICA_WIDTHS[code - 32] : undefined;
-    em += (w ?? DEFAULT_EM * 1000) / 1000;
-  }
+    return total + (w ?? DEFAULT_EM * 1000) / 1000;
+  }, 0);
   return em * size * (weight === 'semibold' ? BOLD_FACTOR : 1);
 }
 

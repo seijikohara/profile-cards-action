@@ -34,22 +34,19 @@ interface GraphQlEnvelope<T> {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function requestOnce<T>(token: string, query: string, variables: Record<string, unknown>): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: {
-        authorization: `bearer ${token}`,
-        'content-type': 'application/json',
-        // The API rejects requests without a User-Agent.
-        'user-agent': 'seijikohara-profile-generator',
-      },
-      body: JSON.stringify({ query, variables }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (cause) {
+  const response = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: {
+      authorization: `bearer ${token}`,
+      'content-type': 'application/json',
+      // The API rejects requests without a User-Agent.
+      'user-agent': 'seijikohara-profile-generator',
+    },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch((cause: unknown) => {
     throw new GitHubApiError(`network failure: ${String(cause)}`, true);
-  }
+  });
 
   if (!response.ok) {
     const retryable = response.status >= 500 || response.status === 429;
@@ -74,17 +71,21 @@ async function requestOnce<T>(token: string, query: string, variables: Record<st
 
 /** Execute a query with retries (exponential backoff + jitter) for transient failures. */
 export async function graphql<T>(token: string, query: string, variables: Record<string, unknown> = {}): Promise<T> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
-    try {
-      return await requestOnce<T>(token, query, variables);
-    } catch (error) {
-      lastError = error;
-      const retryable = error instanceof GitHubApiError && error.retryable;
-      if (!retryable || attempt === ATTEMPTS) throw error;
-      const backoff = BASE_BACKOFF_MS * 4 ** (attempt - 1);
-      await sleep(backoff + Math.random() * 500);
-    }
+  return attemptRequest<T>(token, query, variables, 1);
+}
+
+async function attemptRequest<T>(
+  token: string,
+  query: string,
+  variables: Record<string, unknown>,
+  attempt: number
+): Promise<T> {
+  try {
+    return await requestOnce<T>(token, query, variables);
+  } catch (error) {
+    const retryable = error instanceof GitHubApiError && error.retryable;
+    if (!retryable || attempt === ATTEMPTS) throw error;
+    await sleep(BASE_BACKOFF_MS * 4 ** (attempt - 1) + Math.random() * 500);
+    return attemptRequest<T>(token, query, variables, attempt + 1);
   }
-  throw lastError;
 }

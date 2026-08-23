@@ -10,6 +10,7 @@
  */
 
 import { computeLifetime } from '../compute/lifetime.js';
+import { range } from '../iter.js';
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
@@ -69,25 +70,24 @@ export function renderLifetime(data: ProfileData, theme: Theme, fontFaceCss: str
   const maxCols = Math.min(COLS, Math.max(0, ...life.years.map((year) => year.weeks.length)));
   const step = Math.min(COL_STEP_MS, SWEEP_MS / Math.max(1, maxCols - 1));
 
-  const columns: string[] = [];
-  for (let c = 0; c < maxCols; c += 1) {
-    const cells: string[] = [];
-    for (let r = 0; r < rows; r += 1) {
-      const weeks = life.years[r]?.weeks;
-      if (weeks === undefined || c >= weeks.length) continue;
-      cells.push(
-        el('rect', {
-          x: gridLeft + c * colPitch,
-          y: gridTop + r * ROW_PITCH,
-          width: cellW,
-          height: CELL_H,
-          rx: CELL_RADIUS,
-          fill: rampColor(weeks[c] ?? 0),
-        })
-      );
-    }
-    columns.push(el('g', { class: 'wk', style: `animation-delay:${Math.round(c * step)}ms` }, ...cells));
-  }
+  const columns = range(maxCols).map((c) => {
+    const cells = life.years.flatMap((year, r) => {
+      const level = year.weeks[c];
+      return level === undefined
+        ? []
+        : [
+            el('rect', {
+              x: gridLeft + c * colPitch,
+              y: gridTop + r * ROW_PITCH,
+              width: cellW,
+              height: CELL_H,
+              rx: CELL_RADIUS,
+              fill: rampColor(level),
+            }),
+          ];
+    });
+    return el('g', { class: 'wk', style: `animation-delay:${Math.round(c * step)}ms` }, ...cells);
+  });
 
   // Month ticks straddle the columns where each month roughly begins.
   const monthTicks = MONTHS.map((label, month) =>

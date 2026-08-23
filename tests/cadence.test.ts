@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeCadence } from '../src/compute/cadence.js';
+import { range } from '../src/iter.js';
 import type { CommitSample } from '../src/model.js';
 
 function commit(date: string, additions = 0, deletions = 0): CommitSample {
@@ -37,7 +38,7 @@ describe('computeCadence', () => {
     const result = computeCadence([]);
     expect(result.grid).toHaveLength(7);
     expect(result.levels).toHaveLength(7);
-    for (let row = 0; row < 7; row += 1) {
+    for (const row of range(7)) {
       expect(result.grid[row]).toHaveLength(24);
       expect(result.levels[row]).toHaveLength(24);
     }

@@ -56709,13 +56709,7 @@ function num(v) {
 	return String(Math.round(v * 100) / 100);
 }
 function renderAttrs(attrs) {
-	let out = "";
-	for (const [key, value] of Object.entries(attrs)) {
-		if (value === void 0) continue;
-		const rendered = typeof value === "number" ? num(value) : esc(value);
-		out += ` ${key}="${rendered}"`;
-	}
-	return out;
+	return Object.entries(attrs).filter((entry) => entry[1] !== void 0).map(([key, value]) => ` ${key}="${typeof value === "number" ? num(value) : esc(value)}"`).join("");
 }
 /** Build an element. Children are pre-rendered strings (from el/text helpers only). */
 function el(name, attrs = {}, ...children) {
@@ -56838,13 +56832,10 @@ const DEFAULT_EM = .6;
 const BOLD_FACTOR = 1.08;
 /** Estimated rendered width of `text` at `size` px in the sans stack. */
 function measureSans(text, size, weight = "regular") {
-	let em = 0;
-	for (const ch of text) {
+	return Array.from(text).reduce((total, ch) => {
 		const code = ch.codePointAt(0) ?? 0;
-		const w = code >= 32 && code <= 126 ? HELVETICA_WIDTHS[code - 32] : void 0;
-		em += (w ?? DEFAULT_EM * 1e3) / 1e3;
-	}
-	return em * size * (weight === "semibold" ? BOLD_FACTOR : 1);
+		return total + ((code >= 32 && code <= 126 ? HELVETICA_WIDTHS[code - 32] : void 0) ?? DEFAULT_EM * 1e3) / 1e3;
+	}, 0) * size * (weight === "semibold" ? BOLD_FACTOR : 1);
 }
 /** 12345 -> "12,345". Hand-rolled so output never depends on ICU data. */
 function formatInt(v) {
@@ -57144,8 +57135,6 @@ function levelOf$1(count, thresholds) {
 /** Aggregate the commit sweep into the weekday × hour punch-card grid. */
 function computeCadence(commits) {
 	const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
-	let additions = 0;
-	let deletions = 0;
 	for (const sample of commits) {
 		const match = LOCAL_DATETIME.exec(sample.date);
 		if (match === null) throw new Error(`invalid commit date: ${sample.date}`);
@@ -57156,21 +57145,16 @@ function computeCadence(commits) {
 		if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23) throw new Error(`invalid commit date: ${sample.date}`);
 		const row = grid[weekdayIndex$1(year, month, day)];
 		if (row !== void 0) row[hour] = (row[hour] ?? 0) + 1;
-		additions += sample.additions;
-		deletions += sample.deletions;
 	}
+	const additions = commits.reduce((sum, sample) => sum + sample.additions, 0);
+	const deletions = commits.reduce((sum, sample) => sum + sample.deletions, 0);
 	const thresholds = computeThresholds$1(grid.flat().filter((count) => count > 0).toSorted((a, b) => a - b));
 	const levels = grid.map((row) => row.map((count) => levelOf$1(count, thresholds)));
-	let peak;
-	grid.forEach((row, weekday) => {
-		row.forEach((count, hour) => {
-			if (count > 0 && count > (peak?.count ?? 0)) peak = {
-				weekday,
-				hour,
-				count
-			};
-		});
-	});
+	const peak = grid.reduce((best, row, weekday) => row.reduce((rowBest, count, hour) => count > (rowBest?.count ?? 0) ? {
+		weekday,
+		hour,
+		count
+	} : rowBest, best), void 0);
 	const nightCommits = grid.reduce((sum, row) => sum + row.reduce((rowSum, count, hour) => hour >= 22 || hour < 6 ? rowSum + count : rowSum, 0), 0);
 	return {
 		grid,
@@ -57181,6 +57165,13 @@ function computeCadence(commits) {
 		deletions,
 		nightShare: commits.length === 0 ? 0 : nightCommits / commits.length
 	};
+}
+//#endregion
+//#region src/iter.ts
+/** Immutable integer sequences for index-free iteration. */
+/** [start, start + 1, …, start + length - 1]; empty when length <= 0. */
+function range(length, start = 0) {
+	return Array.from({ length: Math.max(0, length) }, (_, index) => start + index);
 }
 //#endregion
 //#region src/cards/frame.ts
@@ -57311,39 +57302,39 @@ const DOT_RADIUS = [
 ];
 function renderCadence(data, theme, fontFaceCss) {
 	const cadence = computeCadence(data.commits);
-	const columns = [];
-	for (let hour = 0; hour < 24; hour += 1) {
+	const columns = range(24).map((hour) => {
 		const cx = GRID_LEFT + hour * COL_W + COL_W / 2;
-		const dots = [];
-		cadence.levels.forEach((row, weekday) => {
+		const dots = cadence.levels.map((row, weekday) => {
 			const level = row[hour] ?? 0;
 			const cy = GRID_TOP + weekday * ROW_H$2 + ROW_H$2 / 2;
 			const isPeak = cadence.peak !== void 0 && cadence.peak.weekday === weekday && cadence.peak.hour === hour;
-			dots.push(el("circle", {
+			return el("circle", {
 				cx,
 				cy,
 				r: DOT_RADIUS[level],
 				fill: isPeak ? theme.accent : theme.contribRamp[level]
-			}));
+			});
 		});
-		columns.push(el("g", {
+		return el("g", {
 			class: "dot",
 			style: `animation-delay:${hour * 14}ms`
-		}, ...dots));
-	}
+		}, ...dots);
+	});
 	const weekdayLabels = WEEKDAY_LABELS$1.map((label, index) => el("text", {
 		x: 54,
 		y: GRID_TOP + index * ROW_H$2 + ROW_H$2 / 2 + 4,
 		class: "t-label",
 		"text-anchor": "end"
 	}, textNode(label)));
-	const hourTicks = [];
-	for (let hour = 0; hour < 24; hour += 2) hourTicks.push(el("text", {
-		x: GRID_LEFT + hour * COL_W + COL_W / 2,
-		y: TICK_BASELINE,
-		class: "t-tick",
-		"text-anchor": "middle"
-	}, textNode(String(hour))));
+	const hourTicks = range(12).map((half) => {
+		const hour = half * 2;
+		return el("text", {
+			x: GRID_LEFT + hour * COL_W + COL_W / 2,
+			y: TICK_BASELINE,
+			class: "t-tick",
+			"text-anchor": "middle"
+		}, textNode(String(hour)));
+	});
 	const footerParts = [el("tspan", { class: "t-stat" }, textNode(formatCompact(cadence.totalCommits))), textNode(" commits")];
 	if (cadence.peak !== void 0) {
 		const peakLabel = `${WEEKDAY_LABELS$1[cadence.peak.weekday] ?? ""} ${String(cadence.peak.hour).padStart(2, "0")}:00`;
@@ -57484,11 +57475,10 @@ function renderComposition(data, theme, fontFaceCss) {
 			h: maxSum === 0 ? 0 : year.segments[series.index] / maxSum * MAX_BAR_HEIGHT
 		}));
 		const topIndex = segments.reduce((top, segment, k) => segment.h > 0 ? k : top, -1);
-		let cursor = baseline;
+		const tops = segments.reduce((acc, segment) => [...acc, (acc.at(-1) ?? baseline) - segment.h], []);
 		const rects = segments.map((segment, k) => {
 			if (segment.h <= 0) return "";
-			const top = cursor - segment.h;
-			cursor = top;
+			const top = tops[k] ?? baseline;
 			return k === topIndex ? barCap(x, top, barWidth, segment.h, 6, segment.color) : el("rect", {
 				x,
 				y: top,
@@ -57519,25 +57509,23 @@ function renderComposition(data, theme, fontFaceCss) {
 			"text-anchor": "middle"
 		}, textNode(formatCompact(year.sum)))];
 	});
-	let lx = 24;
-	const legend = [];
-	for (const series of SERIES) {
-		const color = theme.seriesRamp[series.index];
-		const caption = `${series.label} · ${formatCompact(typeTotals[series.index])}`;
-		legend.push(el("rect", {
-			x: lx,
+	const captions = SERIES.map((series) => `${series.label} · ${formatCompact(typeTotals[series.index])}`);
+	const legendXs = SERIES.map((_, i) => captions.slice(0, i).reduce((x, caption) => x + 16 + measureSans(caption, 12) + 20, 24));
+	const legend = SERIES.flatMap((series, i) => {
+		const x = legendXs[i] ?? 24;
+		return [el("rect", {
+			x,
 			y: 220,
 			width: 10,
 			height: 10,
 			rx: 2,
-			fill: color
+			fill: theme.seriesRamp[series.index]
 		}), el("text", {
-			x: lx + 16,
+			x: x + 16,
 			y: legendY,
 			class: "t-label"
-		}, textNode(caption)));
-		lx += 16 + measureSans(caption, 12) + 20;
-	}
+		}, textNode(captions[i] ?? ""))];
+	});
 	const privateCaption = el("text", {
 		x: 822,
 		y: legendY,
@@ -57645,12 +57633,10 @@ function dayColumn(x, y, height, topFill, leftFill, rightFill) {
 }
 /** Weeks-of-days matrix from the flat day series (calendar order, 7 rows). */
 function toWeeks(days) {
-	const weeks = [];
-	for (let index = 0; index < days.length; index += 7) weeks.push(days.slice(index, index + 7));
-	return weeks;
+	return range(Math.ceil(days.length / 7)).map((week) => days.slice(week * 7, week * 7 + 7));
 }
 function renderContributions(data, streaks, theme, fontFaceCss) {
-	const weeks = toWeeks([...data.trailing.days]);
+	const weeks = toWeeks(data.trailing.days);
 	const weekCount = weeks.length;
 	const maxCount = Math.max(1, ...data.trailing.days.map((day) => day.count));
 	const faces = theme.contribRamp.map((color) => ({
@@ -57762,26 +57748,19 @@ function languageShares(slices, limit = 8) {
 	}] : [...kept];
 	const exact = entries.map((entry) => entry.bytes / total * 1e3);
 	const floors = exact.map((value) => Math.floor(value));
-	let remainder = 1e3 - floors.reduce((sum, value) => sum + value, 0);
-	const order = exact.map((value, index) => ({
+	const remainder = 1e3 - floors.reduce((sum, value) => sum + value, 0);
+	const bumped = new Set(exact.map((value, index) => ({
 		index,
 		frac: value - Math.floor(value)
-	})).toSorted((a, b) => b.frac - a.frac || a.index - b.index);
-	for (const { index } of order) {
-		if (remainder <= 0) break;
-		const floor = floors[index];
-		if (floor !== void 0) {
-			floors[index] = floor + 1;
-			remainder -= 1;
-		}
-	}
+	})).toSorted((a, b) => b.frac - a.frac || a.index - b.index).slice(0, Math.max(0, remainder)).map((entry) => entry.index));
 	return entries.map((entry, index) => ({
 		...entry,
-		pct: (floors[index] ?? 0) / 10
+		pct: ((floors[index] ?? 0) + (bumped.has(index) ? 1 : 0)) / 10
 	}));
 }
 //#endregion
 //#region src/compute/treemap.ts
+/** Squarified treemap layout (Bruls, Huizing, van Wijk 2000). */
 /**
 * Squarified treemap. Lay out `weights` (all > 0) inside the rect (x, y, width,
 * height), returning one rect per weight, area proportional to the weight,
@@ -57792,33 +57771,29 @@ function squarify(weights, x, y, width, height) {
 	if (weights.length === 0) return [];
 	const totalWeight = weights.reduce((sum, w) => sum + w, 0);
 	const boundingArea = width * height;
-	const items = weights.map((weight, index) => ({
+	return layoutItems(weights.map((weight, index) => ({
 		index,
 		area: weight / totalWeight * boundingArea
-	})).toSorted((a, b) => b.area - a.area || a.index - b.index);
-	const rects = [];
-	let free = {
+	})).toSorted((a, b) => b.area - a.area || a.index - b.index), {
 		x,
 		y,
 		width,
 		height
-	};
-	let row = [];
-	let cursor = 0;
-	while (cursor < items.length) {
-		const item = items[cursor];
-		if (item === void 0) break;
-		const side = Math.min(free.width, free.height);
-		if (row.length === 0 || worstRatio(row, side) >= worstRatio([...row, item], side)) {
-			row.push(item);
-			cursor += 1;
-		} else {
-			free = layoutRow(row, free, rects, false);
-			row = [];
-		}
-	}
-	if (row.length > 0) layoutRow(row, free, rects, true);
-	return rects;
+	});
+}
+/**
+* Lay `items` into `free`, one squarified row at a time. Each row grows while
+* adding the next item does not worsen the row's worst aspect ratio — the
+* worst ratio falls then rises as a row fills, so the first increase marks the
+* optimal break point. The final row consumes all remaining area.
+*/
+function layoutItems(items, free) {
+	if (items.length === 0) return [];
+	const side = Math.min(free.width, free.height);
+	const rowLength = range(items.length - 1, 1).find((length) => worstRatio(items.slice(0, length), side) < worstRatio(items.slice(0, length + 1), side)) ?? items.length;
+	const rest = items.slice(rowLength);
+	const { rects, remaining } = layoutRow(items.slice(0, rowLength), free, rest.length === 0);
+	return [...rects, ...layoutItems(rest, remaining)];
 }
 /**
 * Return the worst (largest) aspect ratio produced by laying `row` against a
@@ -57827,69 +57802,65 @@ function squarify(weights, x, y, width, height) {
 */
 function worstRatio(row, side) {
 	if (row.length === 0) return Number.POSITIVE_INFINITY;
-	let sum = 0;
-	let max = 0;
-	let min = Number.POSITIVE_INFINITY;
-	for (const item of row) {
-		sum += item.area;
-		if (item.area > max) max = item.area;
-		if (item.area < min) min = item.area;
-	}
+	const sum = row.reduce((total, item) => total + item.area, 0);
+	const max = row.reduce((best, item) => Math.max(best, item.area), 0);
+	const min = row.reduce((best, item) => Math.min(best, item.area), Number.POSITIVE_INFINITY);
 	const side2 = side * side;
 	const sum2 = sum * sum;
 	return Math.max(side2 * max / sum2, sum2 / (side2 * min));
 }
 /**
-* Place `row` as one strip along the shorter side of `free`, pushing a rect per
-* item, and return the remaining free rect. The last item snaps to the strip's
+* Place `row` as one strip along the shorter side of `free`, returning a rect
+* per item plus the remaining free rect. The last item snaps to the strip's
 * far edge to absorb floating-point drift; when `fill` is set the strip spans
 * the whole longer side so the final row tiles the rect exactly.
 */
-function layoutRow(row, free, out, fill) {
-	let rowArea = 0;
-	for (const item of row) rowArea += item.area;
+function layoutRow(row, free, fill) {
+	const rowArea = row.reduce((total, item) => total + item.area, 0);
 	const last = row.length - 1;
 	if (free.width <= free.height) {
 		const thickness = fill ? free.height : Math.min(rowArea / free.width, free.height);
-		let offset = free.x;
-		row.forEach((item, position) => {
-			const length = item.area / thickness;
-			const w = position === last ? Math.max(0, free.x + free.width - offset) : length;
-			out.push({
-				x: offset,
-				y: free.y,
-				width: w,
-				height: thickness,
-				index: item.index
-			});
-			offset += length;
-		});
 		return {
-			x: free.x,
-			y: free.y + thickness,
-			width: free.width,
-			height: Math.max(0, free.height - thickness)
+			rects: row.map((item, position) => {
+				const offset = row.slice(0, position).reduce((total, prior) => total + prior.area / thickness, free.x);
+				const length = item.area / thickness;
+				const w = position === last ? Math.max(0, free.x + free.width - offset) : length;
+				return {
+					x: offset,
+					y: free.y,
+					width: w,
+					height: thickness,
+					index: item.index
+				};
+			}),
+			remaining: {
+				x: free.x,
+				y: free.y + thickness,
+				width: free.width,
+				height: Math.max(0, free.height - thickness)
+			}
 		};
 	}
 	const thickness = fill ? free.width : Math.min(rowArea / free.height, free.width);
-	let offset = free.y;
-	row.forEach((item, position) => {
-		const length = item.area / thickness;
-		const h = position === last ? Math.max(0, free.y + free.height - offset) : length;
-		out.push({
-			x: free.x,
-			y: offset,
-			width: thickness,
-			height: h,
-			index: item.index
-		});
-		offset += length;
-	});
 	return {
-		x: free.x + thickness,
-		y: free.y,
-		width: Math.max(0, free.width - thickness),
-		height: free.height
+		rects: row.map((item, position) => {
+			const offset = row.slice(0, position).reduce((total, prior) => total + prior.area / thickness, free.y);
+			const length = item.area / thickness;
+			const h = position === last ? Math.max(0, free.y + free.height - offset) : length;
+			return {
+				x: free.x,
+				y: offset,
+				width: thickness,
+				height: h,
+				index: item.index
+			};
+		}),
+		remaining: {
+			x: free.x + thickness,
+			y: free.y,
+			width: Math.max(0, free.width - thickness),
+			height: free.height
+		}
 	};
 }
 //#endregion
@@ -57906,6 +57877,32 @@ const BYTES_MIN_HEIGHT = 64;
 /** Fill for a share: its linguist color, or the muted token for "Other" and colorless languages. */
 function cellFill(share, theme) {
 	return share.color ?? theme.fgMuted;
+}
+/** In-cell label lines, tiered by the cell's height; '' when the cell is too small. */
+function cellLabel(share, rect, fill) {
+	if (rect.width < LABEL_MIN_WIDTH || rect.height < NAME_MIN_HEIGHT) return "";
+	const ink = contrast(fill, "#ffffff") >= contrast(fill, "#1f2328") ? "#ffffff" : "#1f2328";
+	const tx = rect.x + 9;
+	return [
+		el("text", {
+			x: tx,
+			y: rect.y + 20,
+			class: "lang",
+			fill: ink
+		}, textNode(share.name)),
+		...rect.height >= PCT_MIN_HEIGHT ? [el("text", {
+			x: tx,
+			y: rect.y + 34,
+			class: "lang-pct",
+			fill: ink
+		}, textNode(`${share.pct.toFixed(1)}%`))] : [],
+		...rect.height >= BYTES_MIN_HEIGHT ? [el("text", {
+			x: tx,
+			y: rect.y + 50,
+			class: "lang-pct",
+			fill: ink
+		}, textNode(formatBytes(share.bytes)))] : []
+	].join("");
 }
 function renderLanguages(data, theme, fontFaceCss) {
 	const shares = languageShares(data.languages);
@@ -57934,29 +57931,7 @@ function renderLanguages(data, theme, fontFaceCss) {
 			rx: 2,
 			fill
 		});
-		let label = "";
-		if (rect.width >= LABEL_MIN_WIDTH && rect.height >= NAME_MIN_HEIGHT) {
-			const ink = contrast(fill, "#ffffff") >= contrast(fill, "#1f2328") ? "#ffffff" : "#1f2328";
-			const tx = rect.x + 9;
-			label = el("text", {
-				x: tx,
-				y: rect.y + 20,
-				class: "lang",
-				fill: ink
-			}, textNode(share.name));
-			if (rect.height >= PCT_MIN_HEIGHT) label += el("text", {
-				x: tx,
-				y: rect.y + 34,
-				class: "lang-pct",
-				fill: ink
-			}, textNode(`${share.pct.toFixed(1)}%`));
-			if (rect.height >= BYTES_MIN_HEIGHT) label += el("text", {
-				x: tx,
-				y: rect.y + 50,
-				class: "lang-pct",
-				fill: ink
-			}, textNode(formatBytes(share.bytes)));
-		}
+		const label = cellLabel(share, rect, fill);
 		return el("g", { class: `fade c${rect.index}` }, rectEl, label);
 	});
 	const legendTop = 280;
@@ -58012,6 +57987,7 @@ function renderLanguages(data, theme, fontFaceCss) {
 }
 //#endregion
 //#region src/compute/lifetime.ts
+/** Lifetime weekly heatmap: a "wall of years" of per-week activity levels. */
 const DAY_MS$1 = 864e5;
 const ISO_DATE$1 = /^(\d{4})-(\d{2})-(\d{2})$/;
 /**
@@ -58095,35 +58071,22 @@ function levelOf(sum, thresholds) {
 * 0..maxWeekIndexPresent with gaps filled at level 0.
 */
 function computeLifetime(days) {
-	const byYear = /* @__PURE__ */ new Map();
-	for (const { date, count } of days) {
-		const { year, weekIndex } = bucketOf(date);
-		let weeks = byYear.get(year);
-		if (weeks === void 0) {
-			weeks = /* @__PURE__ */ new Map();
-			byYear.set(year, weeks);
-		}
-		weeks.set(weekIndex, (weeks.get(weekIndex) ?? 0) + count);
-	}
-	const nonZeroSums = [];
-	for (const weeks of byYear.values()) for (const sum of weeks.values()) if (sum > 0) nonZeroSums.push(sum);
-	const thresholds = computeThresholds(nonZeroSums.toSorted((a, b) => a - b));
+	const buckets = days.map((day) => ({
+		...bucketOf(day.date),
+		count: day.count
+	}));
+	const yearEntries = [...Map.groupBy(buckets, (bucket) => bucket.year).entries()].toSorted(([a], [b]) => a - b).map(([year, items]) => ({
+		year,
+		weekSums: new Map([...Map.groupBy(items, (item) => item.weekIndex).entries()].map(([week, group]) => [week, group.reduce((sum, item) => sum + item.count, 0)])),
+		total: items.reduce((sum, item) => sum + item.count, 0)
+	}));
+	const thresholds = computeThresholds(yearEntries.flatMap((entry) => [...entry.weekSums.values()]).filter((sum) => sum > 0).toSorted((a, b) => a - b));
 	return {
-		years: [...byYear.entries()].toSorted(([a], [b]) => a - b).map(([year, weeks]) => {
-			let maxIndex = -1;
-			let total = 0;
-			for (const [index, sum] of weeks.entries()) {
-				if (index > maxIndex) maxIndex = index;
-				total += sum;
-			}
-			const cells = [];
-			for (let index = 0; index <= maxIndex; index += 1) cells.push(levelOf(weeks.get(index) ?? 0, thresholds));
-			return {
-				year,
-				weeks: cells,
-				total
-			};
-		}),
+		years: yearEntries.map(({ year, weekSums, total }) => ({
+			year,
+			weeks: range(Math.max(0, ...weekSums.keys()) + 1).map((index) => levelOf(weekSums.get(index) ?? 0, thresholds)),
+			total
+		})),
 		thresholds
 	};
 }
@@ -58176,26 +58139,23 @@ function renderLifetime(data, theme, fontFaceCss) {
 	const height = gridBottom + LEGEND_ROW + 24;
 	const maxCols = Math.min(COLS, Math.max(0, ...life.years.map((year) => year.weeks.length)));
 	const step = Math.min(COL_STEP_MS, SWEEP_MS / Math.max(1, maxCols - 1));
-	const columns = [];
-	for (let c = 0; c < maxCols; c += 1) {
-		const cells = [];
-		for (let r = 0; r < rows; r += 1) {
-			const weeks = life.years[r]?.weeks;
-			if (weeks === void 0 || c >= weeks.length) continue;
-			cells.push(el("rect", {
+	const columns = range(maxCols).map((c) => {
+		const cells = life.years.flatMap((year, r) => {
+			const level = year.weeks[c];
+			return level === void 0 ? [] : [el("rect", {
 				x: gridLeft + c * colPitch,
 				y: gridTop + r * ROW_PITCH,
 				width: cellW,
 				height: CELL_H,
 				rx: CELL_RADIUS,
-				fill: rampColor(weeks[c] ?? 0)
-			}));
-		}
-		columns.push(el("g", {
+				fill: rampColor(level)
+			})];
+		});
+		return el("g", {
 			class: "wk",
 			style: `animation-delay:${Math.round(c * step)}ms`
-		}, ...cells));
-	}
+		}, ...cells);
+	});
 	const monthTicks = MONTHS.map((label, month) => el("text", {
 		x: gridLeft + month * COLS / 12 * colPitch + cellW / 2,
 		y: 63,
@@ -58469,23 +58429,12 @@ function weekdayIndex(year, month, day) {
 }
 /** Return the index of the greatest value; the lowest index wins ties, so 0 when all equal. */
 function indexOfMax(values) {
-	let best = 0;
-	let bestValue = values[0] ?? 0;
-	for (let index = 1; index < values.length; index += 1) {
-		const value = values[index] ?? 0;
-		if (value > bestValue) {
-			best = index;
-			bestValue = value;
-		}
-	}
-	return best;
+	return values.reduce((best, value, index) => value > (values[best] ?? 0) ? index : best, 0);
 }
 /** Aggregate a daily contribution series into weekday and month rhythms. */
 function computeRhythm(days) {
 	const weekday = Array.from({ length: 7 }, () => 0);
 	const month = Array.from({ length: 12 }, () => 0);
-	let activeDays = 0;
-	let busiestDay;
 	for (const day of days) {
 		const match = ISO_DATE.exec(day.date);
 		if (match === null) throw new Error(`invalid calendar date: ${day.date}`);
@@ -58496,12 +58445,12 @@ function computeRhythm(days) {
 		const weekdayBucket = weekdayIndex(year, monthNumber, dayOfMonth);
 		weekday[weekdayBucket] = (weekday[weekdayBucket] ?? 0) + day.count;
 		month[monthIndex] = (month[monthIndex] ?? 0) + day.count;
-		if (day.count > 0) activeDays += 1;
-		if (day.count > (busiestDay?.count ?? 0)) busiestDay = {
-			date: day.date,
-			count: day.count
-		};
 	}
+	const activeDays = days.filter((day) => day.count > 0).length;
+	const busiestDay = days.reduce((best, day) => day.count > (best?.count ?? 0) ? {
+		date: day.date,
+		count: day.count
+	} : best, void 0);
 	const total = weekday.reduce((sum, value) => sum + value, 0);
 	const weekendSum = (weekday[5] ?? 0) + (weekday[6] ?? 0);
 	return {
@@ -58692,6 +58641,31 @@ function toUtcMs(date) {
 	if (Number.isNaN(ms)) throw new Error(`invalid calendar date: ${date}`);
 	return ms;
 }
+/** Split the series' active days into runs of consecutive dates, in order. */
+function activeRuns(days) {
+	return days.filter((day) => day.count > 0).reduce((runs, day) => {
+		const ms = toUtcMs(day.date);
+		const last = runs.at(-1);
+		if (last !== void 0 && ms - last.endMs === DAY_MS) return [...runs.slice(0, -1), {
+			...last,
+			end: day.date,
+			endMs: ms,
+			length: last.length + 1
+		}];
+		return [...runs, {
+			start: day.date,
+			end: day.date,
+			endMs: ms,
+			length: 1
+		}];
+	}, []);
+}
+function toRange(run) {
+	return run === void 0 ? void 0 : {
+		start: run.start,
+		end: run.end
+	};
+}
 /**
 * Compute current and longest streaks with their date ranges.
 *
@@ -58699,57 +58673,20 @@ function toUtcMs(date) {
 * The "today" anchor is the series' last day, so results do not depend on the
 * generator host's clock or timezone. A current streak stays alive when the
 * last day has no contributions yet (the day is not over — GitHub streak
-* convention).
+* convention): the anchor then moves to the day before, so only a run ending
+* there still counts.
 */
 function computeStreaks(days) {
-	let longest = 0;
-	let longestRange;
-	let run = 0;
-	let runStart = "";
-	let lastActiveMs = NaN;
-	for (const day of days) {
-		if (day.count === 0) continue;
-		const ms = toUtcMs(day.date);
-		if (ms - lastActiveMs === DAY_MS) run += 1;
-		else {
-			run = 1;
-			runStart = day.date;
-		}
-		lastActiveMs = ms;
-		if (run > longest) {
-			longest = run;
-			longestRange = {
-				start: runStart,
-				end: day.date
-			};
-		}
-	}
-	let index = days.length - 1;
-	const last = days[index];
-	let current = 0;
-	let currentRange;
-	let expectedMs = NaN;
-	if (last !== void 0 && last.count === 0) {
-		index -= 1;
-		expectedMs = toUtcMs(last.date) - DAY_MS;
-	}
-	for (; index >= 0; index -= 1) {
-		const day = days[index];
-		if (day === void 0 || day.count === 0) break;
-		const ms = toUtcMs(day.date);
-		if (!Number.isNaN(expectedMs) && ms !== expectedMs) break;
-		current += 1;
-		currentRange = {
-			start: day.date,
-			end: currentRange?.end ?? day.date
-		};
-		expectedMs = ms - DAY_MS;
-	}
+	const runs = activeRuns(days);
+	const longestRun = runs.reduce((best, run) => run.length > (best?.length ?? 0) ? run : best, void 0);
+	const last = days.at(-1);
+	const anchorMs = last === void 0 ? NaN : last.count === 0 ? toUtcMs(last.date) - DAY_MS : toUtcMs(last.date);
+	const currentRun = runs.find((run) => run.endMs === anchorMs);
 	return {
-		current,
-		longest,
-		currentRange,
-		longestRange
+		current: currentRun?.length ?? 0,
+		longest: longestRun?.length ?? 0,
+		currentRange: toRange(currentRun),
+		longestRange: toRange(longestRun)
 	};
 }
 //#endregion
@@ -58947,24 +58884,21 @@ var GitHubApiError = class extends Error {
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function requestOnce(token, query, variables) {
-	let response;
-	try {
-		response = await fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				authorization: `bearer ${token}`,
-				"content-type": "application/json",
-				"user-agent": "seijikohara-profile-generator"
-			},
-			body: JSON.stringify({
-				query,
-				variables
-			}),
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-		});
-	} catch (cause) {
+	const response = await fetch(ENDPOINT, {
+		method: "POST",
+		headers: {
+			authorization: `bearer ${token}`,
+			"content-type": "application/json",
+			"user-agent": "seijikohara-profile-generator"
+		},
+		body: JSON.stringify({
+			query,
+			variables
+		}),
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+	}).catch((cause) => {
 		throw new GitHubApiError(`network failure: ${String(cause)}`, true);
-	}
+	});
 	if (!response.ok) {
 		const retryable = response.status >= 500 || response.status === 429;
 		const body = await response.text().catch(() => "");
@@ -58981,16 +58915,16 @@ async function requestOnce(token, query, variables) {
 }
 /** Execute a query with retries (exponential backoff + jitter) for transient failures. */
 async function graphql(token, query, variables = {}) {
-	let lastError;
-	for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) try {
+	return attemptRequest(token, query, variables, 1);
+}
+async function attemptRequest(token, query, variables, attempt) {
+	try {
 		return await requestOnce(token, query, variables);
 	} catch (error) {
-		lastError = error;
 		if (!(error instanceof GitHubApiError && error.retryable) || attempt === ATTEMPTS) throw error;
-		const backoff = BASE_BACKOFF_MS * 4 ** (attempt - 1);
-		await sleep(backoff + Math.random() * 500);
+		await sleep(BASE_BACKOFF_MS * 4 ** (attempt - 1) + Math.random() * 500);
+		return attemptRequest(token, query, variables, attempt + 1);
 	}
-	throw lastError;
 }
 //#endregion
 //#region src/github/queries.ts
@@ -59140,34 +59074,41 @@ function aggregateLanguages(repos) {
 		bytes
 	})).toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
 }
+/** Page through the profile query, one user snapshot per repository page. */
+async function fetchProfilePages(token, login, cursor) {
+	const user = (await graphql(token, PROFILE_QUERY, {
+		login,
+		cursor
+	})).user;
+	if (!user) throw new Error(`user not found: ${login}`);
+	const { pageInfo } = user.repositories;
+	return [user, ...pageInfo.hasNextPage ? await fetchProfilePages(token, login, pageInfo.endCursor) : []];
+}
 /**
 * Page through commits the user authored on one repository's default branch
 * within the sweep window. Returns [] for empty repositories (no default
 * branch) and skips commits without an author date, which cannot be bucketed.
 */
-async function fetchRepoCommits(token, owner, name, authorId, since) {
-	const samples = [];
-	let cursor = null;
-	do {
-		const history = (await graphql(token, COMMITS_QUERY, {
-			owner,
-			name,
-			authorId,
-			since,
-			cursor
-		})).repository?.defaultBranchRef?.target?.history;
-		if (!history) return samples;
-		for (const node of history.nodes) {
-			const date = node.author?.date;
-			if (date !== null && date !== void 0) samples.push({
-				date,
-				additions: node.additions,
-				deletions: node.deletions
-			});
-		}
-		cursor = history.pageInfo.hasNextPage ? history.pageInfo.endCursor : null;
-	} while (cursor !== null);
-	return samples;
+async function fetchRepoCommits(token, owner, name, authorId, since, cursor = null) {
+	const history = (await graphql(token, COMMITS_QUERY, {
+		owner,
+		name,
+		authorId,
+		since,
+		cursor
+	})).repository?.defaultBranchRef?.target?.history;
+	if (!history) return [];
+	const samples = history.nodes.flatMap((node) => {
+		const date = node.author?.date;
+		return date === null || date === void 0 ? [] : [{
+			date,
+			additions: node.additions,
+			deletions: node.deletions
+		}];
+	});
+	const { pageInfo } = history;
+	const rest = pageInfo.hasNextPage ? await fetchRepoCommits(token, owner, name, authorId, since, pageInfo.endCursor) : [];
+	return [...samples, ...rest];
 }
 /**
 * Merge per-year daily series into one ascending run.
@@ -59183,20 +59124,10 @@ function mergeDailySeries(seriesPerYear) {
 	return [...byDate.values()].toSorted((a, b) => a.date.localeCompare(b.date));
 }
 async function fetchProfile(token, login) {
-	let cursor = null;
-	let user = null;
-	const repoNodes = [];
-	do {
-		const page = await graphql(token, PROFILE_QUERY, {
-			login,
-			cursor
-		});
-		if (!page.user) throw new Error(`user not found: ${login}`);
-		user = page.user;
-		repoNodes.push(...page.user.repositories.nodes);
-		cursor = page.user.repositories.pageInfo.hasNextPage ? page.user.repositories.pageInfo.endCursor : null;
-	} while (cursor !== null);
-	if (!user) throw new Error(`user not found: ${login}`);
+	const profilePages = await fetchProfilePages(token, login, null);
+	const user = profilePages[0];
+	if (user === void 0) throw new Error(`user not found: ${login}`);
+	const repoNodes = profilePages.flatMap((pageUser) => pageUser.repositories.nodes);
 	const years = user.contributionsCollection.contributionYears.toSorted((a, b) => a - b);
 	const yearResults = await Promise.all(years.map((year) => graphql(token, YEAR_QUERY, {
 		login,
@@ -59360,7 +59291,7 @@ async function commitAndPush(options) {
 		"origin",
 		`https://x-access-token:${token}@github.com/${repository}.git`
 	], { silent: true });
-	for (let attempt = 1; attempt <= PUSH_ATTEMPTS; attempt += 1) {
+	for (const attempt of range(PUSH_ATTEMPTS, 1)) {
 		if ((await getExecOutput("git", [
 			"push",
 			"origin",
@@ -59484,6 +59415,17 @@ const THEME_BY_ID = {
 	light: LIGHT,
 	dark: DARK
 };
+/** Commit when asked, otherwise just detect pending changes — either way report whether anything changed. */
+async function resolveChanged(inputs) {
+	if (!inputs.commit) return (await changedPaths(inputs.outputDir)).length > 0;
+	const result = await commitAndPush({
+		dir: inputs.outputDir,
+		message: inputs.commitMessage,
+		token: inputs.token
+	});
+	info(result.changed ? `Committed ${result.files.length} changed files` : "No changes to commit");
+	return result.changed;
+}
 async function run() {
 	const inputs = readInputs();
 	setSecret(inputs.token);
@@ -59505,16 +59447,7 @@ async function run() {
 		written.push(path);
 	}
 	info(`Generated ${written.length} files for @${data.login} in ${inputs.outputDir} (${inputs.cards.length} cards x ${themes.length} themes, ${inputs.badges.length} badges)`);
-	let changed;
-	if (inputs.commit) {
-		const result = await commitAndPush({
-			dir: inputs.outputDir,
-			message: inputs.commitMessage,
-			token: inputs.token
-		});
-		changed = result.changed;
-		info(result.changed ? `Committed ${result.files.length} changed files` : "No changes to commit");
-	} else changed = (await changedPaths(inputs.outputDir)).length > 0;
+	const changed = await resolveChanged(inputs);
 	setOutput("changed", String(changed));
 	setOutput("files", JSON.stringify(written));
 }

@@ -1,17 +1,21 @@
 /** Deterministic synthetic profile data for tests and the preview app. */
 
+import { range } from '../src/iter.js';
 import type { CommitSample, DayContribution, ProfileData, RepoCommits } from '../src/model.js';
 
-/** mulberry32 — tiny seeded PRNG so fixtures never change between runs. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+const MULBERRY_INCREMENT = 0x6d2b79f5;
+
+/**
+ * The nth draw (1-based) of the mulberry32 stream for `seed` — deterministic
+ * fixtures with no mutable cursor: the generator's only state transition is
+ * adding a constant (mod 2^32), so the state after n draws is index-computable
+ * and each builder threads a draw number instead of closing over state.
+ */
+function randAt(seed: number, drawNumber: number): number {
+  const a = ((seed >>> 0) + drawNumber * MULBERRY_INCREMENT) >>> 0;
+  const t1 = Math.imul(a ^ (a >>> 15), a | 1);
+  const t2 = t1 ^ (t1 + Math.imul(t1 ^ (t1 >>> 7), t1 | 61));
+  return ((t2 ^ (t2 >>> 14)) >>> 0) / 4294967296;
 }
 
 function levelFor(count: number, max: number): DayContribution['level'] {
@@ -31,17 +35,32 @@ const DAY_MS = 86_400_000;
 
 /** 371 days (53 whole weeks) ending 2026-07-22, weekday-aligned like the API. */
 function trailingDays(): DayContribution[] {
-  const rand = mulberry32(20260722);
+  const seed = 20260722;
   const end = Date.parse('2026-07-22T00:00:00Z');
-  const days: { date: string; count: number }[] = [];
-  for (let index = 370; index >= 0; index -= 1) {
-    const roll = rand();
-    // Weekly rhythm with quiet weekends and occasional spikes.
-    const count = roll < 0.28 ? 0 : roll > 0.97 ? Math.ceil(rand() * 30) : Math.ceil(rand() * 9);
-    days.push({ date: dateStr(end - index * DAY_MS), count });
-  }
+  const { days } = range(371).reduce<{
+    readonly draw: number;
+    readonly days: readonly { readonly date: string; readonly count: number }[];
+  }>(
+    (acc, offset) => {
+      const index = 370 - offset;
+      const roll = randAt(seed, acc.draw);
+      // Weekly rhythm with quiet weekends and occasional spikes. The second
+      // draw happens only on active days, exactly like the generator it replays.
+      const active = roll >= 0.28;
+      const count = !active
+        ? 0
+        : roll > 0.97
+          ? Math.ceil(randAt(seed, acc.draw + 1) * 30)
+          : Math.ceil(randAt(seed, acc.draw + 1) * 9);
+      return {
+        draw: acc.draw + (active ? 2 : 1),
+        days: [...acc.days, { date: dateStr(end - index * DAY_MS), count }],
+      };
+    },
+    { draw: 1, days: [] }
+  );
   const max = Math.max(...days.map((day) => day.count));
-  return days.map((day) => ({ ...day, count: day.count, level: levelFor(day.count, max) }));
+  return days.map((day) => ({ ...day, level: levelFor(day.count, max) }));
 }
 
 /**
@@ -50,25 +69,34 @@ function trailingDays(): DayContribution[] {
  * gentle year-over-year drift so the wall of years is not uniform.
  */
 function lifetimeDays(): DayContribution[] {
-  const rand = mulberry32(20140101);
+  const seed = 20140101;
   const start = Date.parse('2014-01-01T00:00:00Z');
   const end = Date.parse('2026-07-22T00:00:00Z');
-  const days: { date: string; count: number }[] = [];
-  for (let ms = start; ms <= end; ms += DAY_MS) {
-    const weekday = new Date(ms).getUTCDay(); // 0 = Sunday .. 6 = Saturday
-    const weekend = weekday === 0 || weekday === 6;
-    const roll = rand();
-    const count = weekend
-      ? roll < 0.7
+  const dayCount = (end - start) / DAY_MS + 1;
+  const { days } = range(dayCount).reduce<{
+    readonly draw: number;
+    readonly days: readonly { readonly date: string; readonly count: number }[];
+  }>(
+    (acc, offset) => {
+      const ms = start + offset * DAY_MS;
+      const weekday = new Date(ms).getUTCDay(); // 0 = Sunday .. 6 = Saturday
+      const weekend = weekday === 0 || weekday === 6;
+      const roll = randAt(seed, acc.draw);
+      const active = weekend ? roll >= 0.7 : roll >= 0.25;
+      const count = !active
         ? 0
-        : Math.ceil(rand() * 4)
-      : roll < 0.25
-        ? 0
-        : roll > 0.97
-          ? Math.ceil(rand() * 30)
-          : Math.ceil(rand() * 9);
-    days.push({ date: dateStr(ms), count });
-  }
+        : weekend
+          ? Math.ceil(randAt(seed, acc.draw + 1) * 4)
+          : roll > 0.97
+            ? Math.ceil(randAt(seed, acc.draw + 1) * 30)
+            : Math.ceil(randAt(seed, acc.draw + 1) * 9);
+      return {
+        draw: acc.draw + (active ? 2 : 1),
+        days: [...acc.days, { date: dateStr(ms), count }],
+      };
+    },
+    { draw: 1, days: [] }
+  );
   const max = Math.max(1, ...days.map((day) => day.count));
   return days.map((day) => ({ ...day, level: levelFor(day.count, max) }));
 }
@@ -82,26 +110,41 @@ function pad2(value: number): string {
  * hours with a morning peak and an afternoon tail, quiet weekends, and a
  * small share of UTC-stamped (web UI) commits.
  */
-function commitSamples(): CommitSample[] {
-  const rand = mulberry32(20260817);
+function commitSamples(): readonly CommitSample[] {
+  const seed = 20260817;
   const end = Date.parse('2026-07-22T00:00:00Z');
-  const samples: CommitSample[] = [];
-  for (let index = 364; index >= 0; index -= 1) {
-    const ms = end - index * DAY_MS;
-    const weekday = new Date(ms).getUTCDay(); // 0 = Sunday .. 6 = Saturday
-    const weekend = weekday === 0 || weekday === 6;
-    const roll = rand();
-    const count = weekend ? (roll < 0.6 ? 0 : Math.ceil(rand() * 3)) : roll < 0.2 ? 0 : Math.ceil(rand() * 6);
-    for (let n = 0; n < count; n += 1) {
-      const hour = rand() < 0.6 ? 8 + Math.floor(rand() * 4) : 13 + Math.floor(rand() * 9);
-      const suffix = rand() < 0.05 ? 'Z' : '+09:00';
-      samples.push({
-        date: `${dateStr(ms)}T${pad2(hour)}:${pad2(Math.floor(rand() * 60))}:00${suffix}`,
-        additions: Math.ceil(rand() * 120),
-        deletions: Math.floor(rand() * 60),
+  const DRAWS_PER_COMMIT = 6; // hour condition, hour value, suffix, minute, additions, deletions
+  const { samples } = range(365).reduce<{ readonly draw: number; readonly samples: readonly CommitSample[] }>(
+    (acc, offset) => {
+      const index = 364 - offset;
+      const ms = end - index * DAY_MS;
+      const weekday = new Date(ms).getUTCDay(); // 0 = Sunday .. 6 = Saturday
+      const weekend = weekday === 0 || weekday === 6;
+      const roll = randAt(seed, acc.draw);
+      const active = weekend ? roll >= 0.6 : roll >= 0.2;
+      const count = !active
+        ? 0
+        : weekend
+          ? Math.ceil(randAt(seed, acc.draw + 1) * 3)
+          : Math.ceil(randAt(seed, acc.draw + 1) * 6);
+      const dayDraws = acc.draw + (active ? 2 : 1);
+      const commits = range(count).map((n) => {
+        const base = dayDraws + n * DRAWS_PER_COMMIT;
+        const hour =
+          randAt(seed, base) < 0.6
+            ? 8 + Math.floor(randAt(seed, base + 1) * 4)
+            : 13 + Math.floor(randAt(seed, base + 1) * 9);
+        const suffix = randAt(seed, base + 2) < 0.05 ? 'Z' : '+09:00';
+        return {
+          date: `${dateStr(ms)}T${pad2(hour)}:${pad2(Math.floor(randAt(seed, base + 3) * 60))}:00${suffix}`,
+          additions: Math.ceil(randAt(seed, base + 4) * 120),
+          deletions: Math.floor(randAt(seed, base + 5) * 60),
+        };
       });
-    }
-  }
+      return { draw: dayDraws + count * DRAWS_PER_COMMIT, samples: [...acc.samples, ...commits] };
+    },
+    { draw: 1, samples: [] }
+  );
   return samples;
 }
 

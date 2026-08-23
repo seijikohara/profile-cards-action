@@ -10,6 +10,33 @@ function toUtcMs(date: string): number {
   return ms;
 }
 
+/** One maximal run of consecutive active days. */
+interface Run {
+  readonly start: string;
+  readonly end: string;
+  /** UTC midnight of `end` — run adjacency and the current-streak anchor compare on this. */
+  readonly endMs: number;
+  readonly length: number;
+}
+
+/** Split the series' active days into runs of consecutive dates, in order. */
+function activeRuns(days: readonly DayContribution[]): readonly Run[] {
+  return days
+    .filter((day) => day.count > 0)
+    .reduce<readonly Run[]>((runs, day) => {
+      const ms = toUtcMs(day.date);
+      const last = runs.at(-1);
+      if (last !== undefined && ms - last.endMs === DAY_MS) {
+        return [...runs.slice(0, -1), { ...last, end: day.date, endMs: ms, length: last.length + 1 }];
+      }
+      return [...runs, { start: day.date, end: day.date, endMs: ms, length: 1 }];
+    }, []);
+}
+
+function toRange(run: Run | undefined): DateRange | undefined {
+  return run === undefined ? undefined : { start: run.start, end: run.end };
+}
+
 /**
  * Compute current and longest streaks with their date ranges.
  *
@@ -17,51 +44,27 @@ function toUtcMs(date: string): number {
  * The "today" anchor is the series' last day, so results do not depend on the
  * generator host's clock or timezone. A current streak stays alive when the
  * last day has no contributions yet (the day is not over — GitHub streak
- * convention).
+ * convention): the anchor then moves to the day before, so only a run ending
+ * there still counts.
  */
 export function computeStreaks(days: readonly DayContribution[]): Streaks {
-  let longest = 0;
-  let longestRange: DateRange | undefined;
-  let run = 0;
-  let runStart = '';
-  let lastActiveMs = Number.NaN;
-  for (const day of days) {
-    if (day.count === 0) continue;
-    const ms = toUtcMs(day.date);
-    if (ms - lastActiveMs === DAY_MS) {
-      run += 1;
-    } else {
-      run = 1;
-      runStart = day.date;
-    }
-    lastActiveMs = ms;
-    if (run > longest) {
-      longest = run;
-      longestRange = { start: runStart, end: day.date };
-    }
-  }
+  const runs = activeRuns(days);
 
-  // Current streak: walk back from the end; forgive the final day if zero —
-  // but anchor continuity to it, so a gap before the forgiven day still ends
-  // the streak.
-  let index = days.length - 1;
-  const last = days[index];
-  let current = 0;
-  let currentRange: DateRange | undefined;
-  let expectedMs = Number.NaN;
-  if (last !== undefined && last.count === 0) {
-    index -= 1;
-    expectedMs = toUtcMs(last.date) - DAY_MS;
-  }
-  for (; index >= 0; index -= 1) {
-    const day = days[index];
-    if (day === undefined || day.count === 0) break;
-    const ms = toUtcMs(day.date);
-    if (!Number.isNaN(expectedMs) && ms !== expectedMs) break;
-    current += 1;
-    currentRange = { start: day.date, end: currentRange?.end ?? day.date };
-    expectedMs = ms - DAY_MS;
-  }
+  // Strict > keeps the earliest run on ties, matching the walk it replaced.
+  const longestRun = runs.reduce<Run | undefined>(
+    (best, run) => (run.length > (best?.length ?? 0) ? run : best),
+    undefined
+  );
 
-  return { current, longest, currentRange, longestRange };
+  const last = days.at(-1);
+  const anchorMs =
+    last === undefined ? Number.NaN : last.count === 0 ? toUtcMs(last.date) - DAY_MS : toUtcMs(last.date);
+  const currentRun = runs.find((run) => run.endMs === anchorMs);
+
+  return {
+    current: currentRun?.length ?? 0,
+    longest: longestRun?.length ?? 0,
+    currentRange: toRange(currentRun),
+    longestRange: toRange(longestRun),
+  };
 }

@@ -76,11 +76,14 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
     // Topmost drawn segment: the highest-index segment with any height.
     const topIndex = segments.reduce((top, segment, k) => (segment.h > 0 ? k : top), -1);
 
-    let cursor = baseline;
+    // Segment k's top edge, accumulated the same way the bars stack.
+    const tops = segments.reduce<readonly number[]>(
+      (acc, segment) => [...acc, (acc.at(-1) ?? baseline) - segment.h],
+      []
+    );
     const rects = segments.map((segment, k) => {
       if (segment.h <= 0) return '';
-      const top = cursor - segment.h;
-      cursor = top;
+      const top = tops[k] ?? baseline;
       return k === topIndex
         ? barCap(x, top, barWidth, segment.h, CARD_RADIUS, segment.color)
         : el('rect', { x, y: top, width: barWidth, height: segment.h, fill: segment.color });
@@ -117,17 +120,18 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
   });
 
   // Legend packed left-to-right by measured label width, on one row.
-  let lx = CARD_PADDING;
-  const legend: string[] = [];
-  for (const series of SERIES) {
-    const color = theme.seriesRamp[series.index];
-    const caption = `${series.label} · ${formatCompact(typeTotals[series.index])}`;
-    legend.push(
-      el('rect', { x: lx, y: legendY - 9, width: 10, height: 10, rx: 2, fill: color }),
-      el('text', { x: lx + 16, y: legendY, class: 't-label' }, textNode(caption))
-    );
-    lx += 16 + measureSans(caption, 12) + 20;
-  }
+  // Legend packed left-to-right by measured caption width.
+  const captions = SERIES.map((series) => `${series.label} · ${formatCompact(typeTotals[series.index])}`);
+  const legendXs = SERIES.map((_, i) =>
+    captions.slice(0, i).reduce((x, caption) => x + 16 + measureSans(caption, 12) + 20, CARD_PADDING)
+  );
+  const legend = SERIES.flatMap((series, i) => {
+    const x = legendXs[i] ?? CARD_PADDING;
+    return [
+      el('rect', { x, y: legendY - 9, width: 10, height: 10, rx: 2, fill: theme.seriesRamp[series.index] }),
+      el('text', { x: x + 16, y: legendY, class: 't-label' }, textNode(captions[i] ?? '')),
+    ];
+  });
 
   const privateCaption = el(
     'text',
