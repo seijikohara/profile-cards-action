@@ -26,6 +26,7 @@ const VALID_INPUTS: Record<string, string> = {
   themes: 'light,dark',
   font: 'Roboto',
   'mono-font': 'Roboto Mono',
+  'language-limit': '8',
   badges: '',
   commit: 'true',
   'commit-message': 'chore(profile): refresh generated cards [skip ci]',
@@ -56,6 +57,7 @@ describe('readInputs', () => {
       themeIds: ['light', 'dark'],
       font: 'Roboto',
       monoFont: 'Roboto Mono',
+      languageLimit: 8,
       badges: [],
       commit: true,
       commitMessage: 'chore(profile): refresh generated cards [skip ci]',
@@ -79,6 +81,7 @@ describe('readInputs', () => {
     expect(inputs.outputDir).toBe('assets');
     expect(inputs.font).toBe('Roboto');
     expect(inputs.monoFont).toBe('Roboto Mono');
+    expect(inputs.languageLimit).toBe(8);
     expect(inputs.commit).toBe(true);
     expect(inputs.commitMessage).toBe('chore(profile): refresh generated cards [skip ci]');
   });
@@ -114,6 +117,21 @@ describe('readInputs', () => {
   it('should throw when username is empty and no owner is set', () => {
     setInputs({ ...VALID_INPUTS, username: '' });
     expect(() => readInputs()).toThrow(/GITHUB_REPOSITORY_OWNER/);
+  });
+
+  it('should parse a raised language-limit', () => {
+    setInputs({ ...VALID_INPUTS, 'language-limit': '20' });
+    expect(readInputs().languageLimit).toBe(20);
+  });
+
+  it.each(['0', '-1', '4.5', 'many'])('should reject language-limit %s', (raw) => {
+    setInputs({ ...VALID_INPUTS, 'language-limit': raw });
+    expect(() => readInputs()).toThrow(/language-limit/);
+  });
+
+  it('should fall back to the default when language-limit is blank', () => {
+    setInputs({ ...VALID_INPUTS, 'language-limit': '  ' });
+    expect(readInputs().languageLimit).toBe(8);
   });
 
   it('should parse badges: trim, drop empties, preserve order', () => {

@@ -22,7 +22,7 @@ Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme
 | `rhythm`        | Contributions of every type by weekday and by month of the year.                                                                                             |
 | `cadence`       | Weekday × hour punch card of commits on owned default branches over the trailing year, in author-local time, with an hour-of-day histogram and volume stats. |
 | `repositories`  | Top public repositories by commits over the trailing year — including repositories the user does not own — as a ranked bar list with language and stars.     |
-| `languages`     | A treemap of languages by bytes across public source repositories, beside a ranked list of every language.                                                   |
+| `languages`     | A treemap of languages by bytes across public source repositories, beside a ranked list. `language-limit` sets how many are listed.                          |
 
 Cards are drawn at the 846px width of the profile README column, use GitHub's Primer color tokens so they blend into both themes, animate only on entry (CSS only, disabled under `prefers-reduced-motion`), and contain no scripts or external references.
 
@@ -83,11 +83,11 @@ Hours come from each commit's author-local timezone offset, so the card needs no
   <img alt="Repositories card: top repositories ranked by commits over the trailing year, with primary language and stars" src="examples/repositories.light.svg" width="100%" />
 </picture>
 
-**`languages`** — ranked language list and treemap by bytes
+**`languages`** — language treemap by bytes, with a ranked list
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="examples/languages.dark.svg" />
-  <img alt="Languages card: ranked list of languages by bytes beside a treemap, across public source repositories" src="examples/languages.light.svg" width="100%" />
+  <img alt="Languages card: treemap of languages by bytes beside a ranked list, across public source repositories" src="examples/languages.light.svg" width="100%" />
 </picture>
 
 Badge pills render at their natural size. `GitHub`, `TypeScript`, and `npm` match a simple-icons glyph; `Findy` has none, so it falls back to a text-only pill:
@@ -171,6 +171,7 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
 | `themes`         | Themes to render (comma separated): `light`, `dark`.                                                                                              | `false`  | `light,dark`                                                                        |
 | `font`           | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                        | `false`  | `Roboto`                                                                            |
 | `mono-font`      | Google Fonts monospace family.                                                                                                                    | `false`  | `Roboto Mono`                                                                       |
+| `language-limit` | Languages the `languages` card lists before the rest fold into "Other". The card grows one row per language.                                      | `false`  | `8`                                                                                 |
 | `badges`         | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`. | `false`  | `''`                                                                                |
 | `commit`         | Commit changed files back to the repository.                                                                                                      | `false`  | `true`                                                                              |
 | `commit-message` | Commit subject used when `commit` is true.                                                                                                        | `false`  | `chore(profile): refresh generated cards [skip ci]`                                 |

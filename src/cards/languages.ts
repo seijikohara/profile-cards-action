@@ -1,14 +1,18 @@
 /**
- * Languages card: a ranked list beside a squarified treemap, both by bytes.
+ * Languages card: a squarified treemap beside a ranked list, both by bytes.
  *
- * The list is the card's index and sits on the left, where a reader's eye
- * starts: one row per language, top to bottom in size order, so the ranking is
- * legible without decoding cell areas. The treemap holds the proportions the
- * list cannot show. A three-column legend under the map read in reading order
- * — across, then down — which put rank 4 directly below rank 1.
+ * The treemap is the figure and the list is its key, so the list sits to the
+ * right where a chart legend belongs — the figure is read first, the key when
+ * a reader needs it. One row per language, top to bottom in size order, so the
+ * ranking is legible without decoding cell areas: the legend this replaced ran
+ * across three columns before wrapping, which put rank 4 below rank 1.
+ *
+ * The list is exhaustive by construction, so the treemap grows to whatever
+ * height it needs; `languageLimit` decides how many languages are listed before
+ * the rest fold into "Other".
  */
 
-import { CARD_PADDING, CARD_WIDTH } from '../config.js';
+import { CARD_PADDING, CARD_WIDTH, DEFAULT_LANGUAGE_LIMIT } from '../config.js';
 import { languageShares, type LanguageShare } from '../compute/languages.js';
 import type { TreemapRect } from '../compute/treemap.js';
 import { squarify } from '../compute/treemap.js';
@@ -20,19 +24,21 @@ import { cardFrame } from './frame.js';
 
 const CONTENT_TOP = 60;
 
-// Left column: the ranked list.
+// Left column: the treemap. It sets the card's height, growing to match the
+// list so a long list never leaves the figure stranded at the top.
+const COLUMN_GAP = 20;
 const LIST_WIDTH = 250;
+const TREE_X = CARD_PADDING;
+const TREE_WIDTH = CARD_WIDTH - CARD_PADDING * 2 - LIST_WIDTH - COLUMN_GAP;
+const TREE_MIN_HEIGHT = 250;
+
+// Right column: the ranked list, closing flush with the card's right padding.
+const LIST_X = TREE_X + TREE_WIDTH + COLUMN_GAP;
 const LIST_ROW_HEIGHT = 27;
 const LIST_FIRST_BASELINE = CONTENT_TOP + 15;
-const LIST_NAME_X = CARD_PADDING + 18;
-const LIST_BYTES_RIGHT = CARD_PADDING + 176;
-const LIST_PCT_RIGHT = CARD_PADDING + LIST_WIDTH;
-
-// Right column: the treemap.
-const COLUMN_GAP = 20;
-const TREE_X = CARD_PADDING + LIST_WIDTH + COLUMN_GAP;
-const TREE_WIDTH = CARD_WIDTH - CARD_PADDING - TREE_X;
-const TREE_HEIGHT = 250;
+const LIST_NAME_X = LIST_X + 18;
+const LIST_BYTES_RIGHT = LIST_X + 176;
+const LIST_PCT_RIGHT = LIST_X + LIST_WIDTH;
 
 // In-cell label tiers by cell height (at LABEL_MIN_WIDTH or wider): the name
 // needs ~26px, the percentage line ~44px, the bytes line ~64px. Every tier's
@@ -41,6 +47,15 @@ const LABEL_MIN_WIDTH = 54;
 const NAME_MIN_HEIGHT = 26;
 const PCT_MIN_HEIGHT = 44;
 const BYTES_MIN_HEIGHT = 64;
+
+/**
+ * Percentage label. A share below 0.05% rounds to "0.0%", which reads as
+ * "none" for a language the card is in the middle of listing — say "<0.1%"
+ * instead. The stored value stays 0.0 so the shares still sum to exactly 100.0.
+ */
+function pctLabel(share: LanguageShare): string {
+  return share.pct === 0 && share.bytes > 0 ? '<0.1%' : `${share.pct.toFixed(1)}%`;
+}
 
 /** Fill for a share: its linguist color, or the muted token for "Other" and colorless languages. */
 function cellFill(share: LanguageShare, theme: Theme): string {
@@ -56,7 +71,7 @@ function cellLabel(share: LanguageShare, rect: TreemapRect, fill: string): strin
   return [
     el('text', { x: tx, y: rect.y + 20, class: 'lang', fill: ink }, textNode(share.name)),
     ...(rect.height >= PCT_MIN_HEIGHT
-      ? [el('text', { x: tx, y: rect.y + 34, class: 'lang-pct', fill: ink }, textNode(`${share.pct.toFixed(1)}%`))]
+      ? [el('text', { x: tx, y: rect.y + 34, class: 'lang-pct', fill: ink }, textNode(pctLabel(share)))]
       : []),
     ...(rect.height >= BYTES_MIN_HEIGHT
       ? [el('text', { x: tx, y: rect.y + 50, class: 'lang-pct', fill: ink }, textNode(formatBytes(share.bytes)))]
@@ -64,8 +79,13 @@ function cellLabel(share: LanguageShare, rect: TreemapRect, fill: string): strin
   ].join('');
 }
 
-export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: string): string {
-  const shares = languageShares(data.languages);
+export function renderLanguages(
+  data: ProfileData,
+  theme: Theme,
+  fontFaceCss: string,
+  languageLimit: number = DEFAULT_LANGUAGE_LIMIT
+): string {
+  const shares = languageShares(data.languages, languageLimit);
 
   if (shares.length === 0) {
     return cardFrame(
@@ -80,12 +100,13 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
     );
   }
 
+  const treeHeight = Math.max(TREE_MIN_HEIGHT, shares.length * LIST_ROW_HEIGHT);
   const rects = squarify(
     shares.map((share) => share.bytes),
     TREE_X,
     CONTENT_TOP,
     TREE_WIDTH,
-    TREE_HEIGHT
+    treeHeight
   );
 
   // One faded, staggered group per cell: an inset rounded rect (the 1px inset on
@@ -114,14 +135,14 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
     return el(
       'g',
       {},
-      el('circle', { cx: CARD_PADDING + 5, cy: y - 4, r: 5, fill: cellFill(share, theme) }),
+      el('circle', { cx: LIST_X + 5, cy: y - 4, r: 5, fill: cellFill(share, theme) }),
       el('text', { x: LIST_NAME_X, y, class: 'leg-name' }, textNode(share.name)),
       el('text', { x: LIST_BYTES_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(formatBytes(share.bytes))),
-      el('text', { x: LIST_PCT_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(`${share.pct.toFixed(1)}%`))
+      el('text', { x: LIST_PCT_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(pctLabel(share)))
     );
   });
 
-  const contentBottom = Math.max(CONTENT_TOP + TREE_HEIGHT, CONTENT_TOP + shares.length * LIST_ROW_HEIGHT);
+  const contentBottom = CONTENT_TOP + treeHeight;
 
   // Footer: the population the treemap slices — counts before Other-folding.
   const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0);

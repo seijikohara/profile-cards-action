@@ -57918,10 +57918,10 @@ function renderContributions(data, streaks, theme, fontFaceCss) {
 }
 //#endregion
 //#region src/compute/languages.ts
+/** Language share computation for the Languages card. */
 /**
-* Keep the top `limit` languages and fold the tail into "Other"
-* (categorical palettes must not run past ~8 hues). Percentages use
-* largest-remainder rounding so the printed values total 100.0.
+* Keep the top `limit` languages and fold the tail into "Other". Percentages
+* use largest-remainder rounding so the printed values total 100.0.
 *
 * "Other" stays last however large it grows. It is a residual bucket, not a
 * language, so it does not compete for a rank — the convention every legend
@@ -58057,27 +58057,39 @@ function layoutRow(row, free, fill) {
 //#endregion
 //#region src/cards/languages.ts
 /**
-* Languages card: a ranked list beside a squarified treemap, both by bytes.
+* Languages card: a squarified treemap beside a ranked list, both by bytes.
 *
-* The list is the card's index and sits on the left, where a reader's eye
-* starts: one row per language, top to bottom in size order, so the ranking is
-* legible without decoding cell areas. The treemap holds the proportions the
-* list cannot show. A three-column legend under the map read in reading order
-* — across, then down — which put rank 4 directly below rank 1.
+* The treemap is the figure and the list is its key, so the list sits to the
+* right where a chart legend belongs — the figure is read first, the key when
+* a reader needs it. One row per language, top to bottom in size order, so the
+* ranking is legible without decoding cell areas: the legend this replaced ran
+* across three columns before wrapping, which put rank 4 below rank 1.
+*
+* The list is exhaustive by construction, so the treemap grows to whatever
+* height it needs; `languageLimit` decides how many languages are listed before
+* the rest fold into "Other".
 */
 const CONTENT_TOP = 60;
+const TREE_X = 24;
+const TREE_WIDTH = 528;
+const TREE_MIN_HEIGHT = 250;
 const LIST_ROW_HEIGHT = 27;
 const LIST_FIRST_BASELINE = 75;
-const LIST_NAME_X = 42;
-const LIST_BYTES_RIGHT = 200;
-const LIST_PCT_RIGHT = 274;
-const TREE_X = 294;
-const TREE_WIDTH = 528;
-const TREE_HEIGHT = 250;
+const LIST_NAME_X = 590;
+const LIST_BYTES_RIGHT = 748;
+const LIST_PCT_RIGHT = 822;
 const LABEL_MIN_WIDTH = 54;
 const NAME_MIN_HEIGHT = 26;
 const PCT_MIN_HEIGHT = 44;
 const BYTES_MIN_HEIGHT = 64;
+/**
+* Percentage label. A share below 0.05% rounds to "0.0%", which reads as
+* "none" for a language the card is in the middle of listing — say "<0.1%"
+* instead. The stored value stays 0.0 so the shares still sum to exactly 100.0.
+*/
+function pctLabel(share) {
+	return share.pct === 0 && share.bytes > 0 ? "<0.1%" : `${share.pct.toFixed(1)}%`;
+}
 /** Fill for a share: its linguist color, or the muted token for "Other" and colorless languages. */
 function cellFill(share, theme) {
 	return share.color ?? theme.fgMuted;
@@ -58099,7 +58111,7 @@ function cellLabel(share, rect, fill) {
 			y: rect.y + 34,
 			class: "lang-pct",
 			fill: ink
-		}, textNode(`${share.pct.toFixed(1)}%`))] : [],
+		}, textNode(pctLabel(share)))] : [],
 		...rect.height >= BYTES_MIN_HEIGHT ? [el("text", {
 			x: tx,
 			y: rect.y + 50,
@@ -58108,8 +58120,8 @@ function cellLabel(share, rect, fill) {
 		}, textNode(formatBytes(share.bytes)))] : []
 	].join("");
 }
-function renderLanguages(data, theme, fontFaceCss) {
-	const shares = languageShares(data.languages);
+function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
+	const shares = languageShares(data.languages, languageLimit);
 	if (shares.length === 0) return cardFrame({
 		theme,
 		height: 96,
@@ -58121,7 +58133,8 @@ function renderLanguages(data, theme, fontFaceCss) {
 		y: 72,
 		class: "t-label"
 	}, textNode("No language data")));
-	const rects = squarify(shares.map((share) => share.bytes), TREE_X, CONTENT_TOP, TREE_WIDTH, TREE_HEIGHT);
+	const treeHeight = Math.max(TREE_MIN_HEIGHT, shares.length * LIST_ROW_HEIGHT);
+	const rects = squarify(shares.map((share) => share.bytes), TREE_X, CONTENT_TOP, TREE_WIDTH, treeHeight);
 	const cells = rects.map((rect) => {
 		const share = shares[rect.index];
 		if (share === void 0) return "";
@@ -58139,7 +58152,7 @@ function renderLanguages(data, theme, fontFaceCss) {
 	const list = shares.map((share, index) => {
 		const y = LIST_FIRST_BASELINE + index * LIST_ROW_HEIGHT;
 		return el("g", {}, el("circle", {
-			cx: 29,
+			cx: 577,
 			cy: y - 4,
 			r: 5,
 			fill: cellFill(share, theme)
@@ -58157,9 +58170,9 @@ function renderLanguages(data, theme, fontFaceCss) {
 			y,
 			class: "t-tick",
 			"text-anchor": "end"
-		}, textNode(`${share.pct.toFixed(1)}%`)));
+		}, textNode(pctLabel(share))));
 	});
-	const contentBottom = Math.max(310, CONTENT_TOP + shares.length * LIST_ROW_HEIGHT);
+	const contentBottom = CONTENT_TOP + treeHeight;
 	const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0);
 	const footerBaseline = contentBottom + 28;
 	const footer = el("text", {
@@ -58857,8 +58870,10 @@ function renderRhythm(data, theme, fontFaceCss) {
 }
 //#endregion
 //#region src/cards.ts
+/** @fileoverview Dispatch a card name to its renderer, threading the resolved font CSS. */
+const DEFAULT_CARD_OPTIONS = { languageLimit: 8 };
 /** Render one card by id. `fontFaceCss` is the resolved @font-face block injected into the frame. */
-function renderCard(card, data, streaks, theme, fontFaceCss) {
+function renderCard(card, data, streaks, theme, fontFaceCss, options = DEFAULT_CARD_OPTIONS) {
 	switch (card) {
 		case "overview": return renderOverview(data, theme, fontFaceCss);
 		case "lifetime": return renderLifetime(data, theme, fontFaceCss);
@@ -58867,7 +58882,7 @@ function renderCard(card, data, streaks, theme, fontFaceCss) {
 		case "rhythm": return renderRhythm(data, theme, fontFaceCss);
 		case "cadence": return renderCadence(data, theme, fontFaceCss);
 		case "repositories": return renderRepositories(data, theme, fontFaceCss);
-		case "languages": return renderLanguages(data, theme, fontFaceCss);
+		case "languages": return renderLanguages(data, theme, fontFaceCss, options.languageLimit);
 		default: throw new Error(`Unknown card: ${card}`);
 	}
 }
@@ -59623,6 +59638,14 @@ function parseThemes(raw) {
 	}
 	return themes;
 }
+/** Parse `language-limit`: a positive integer, or the default when empty. */
+function parseLanguageLimit(raw) {
+	const trimmed = raw.trim();
+	if (trimmed === "") return 8;
+	const value = Number(trimmed);
+	if (!Number.isInteger(value) || value < 1) throw new Error(`Invalid language-limit "${trimmed}". Expected a positive integer.`);
+	return value;
+}
 /** Resolve the login, falling back to the repository owner. */
 function resolveUsername(raw) {
 	const username = raw.trim() || process.env["GITHUB_REPOSITORY_OWNER"] || "";
@@ -59644,6 +59667,7 @@ function readInputs() {
 		themeIds: parseThemes(getInput("themes")),
 		font: getInput("font").trim() || DEFAULT_FONT,
 		monoFont: getInput("mono-font").trim() || DEFAULT_MONO_FONT,
+		languageLimit: parseLanguageLimit(getInput("language-limit")),
 		badges: getMultilineInput("badges").map((name) => name.trim()).filter((name) => name.length > 0),
 		commit: readCommit(),
 		commitMessage: getInput("commit-message").trim() || DEFAULT_COMMIT_MESSAGE
@@ -59684,7 +59708,7 @@ async function run() {
 	const fontFaceCss = await resolveFonts(inputs.font, inputs.monoFont);
 	const themes = inputs.themeIds.map((id) => THEME_BY_ID[id]);
 	const files = /* @__PURE__ */ new Map();
-	for (const theme of themes) for (const card of inputs.cards) files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss));
+	for (const theme of themes) for (const card of inputs.cards) files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss, { languageLimit: inputs.languageLimit }));
 	for (const [name, svg] of renderBadges(inputs.badges, themes)) files.set(join("badges", name), svg);
 	const written = [];
 	for (const [rel, svg] of files) {
