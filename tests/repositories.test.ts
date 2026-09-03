@@ -3,7 +3,7 @@ import { computeRepositories } from '../src/compute/repositories.js';
 import type { RepoCommits } from '../src/model.js';
 
 function repo(nameWithOwner: string, commits: number): RepoCommits {
-  return { nameWithOwner, commits };
+  return { nameWithOwner, commits, language: null, stars: 0 };
 }
 
 describe('computeRepositories', () => {

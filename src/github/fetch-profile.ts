@@ -182,7 +182,12 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
     trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []
   )
     .filter((entry) => !entry.repository.isPrivate)
-    .map((entry) => ({ nameWithOwner: entry.repository.nameWithOwner, commits: entry.contributions.totalCount }));
+    .map((entry) => ({
+      nameWithOwner: entry.repository.nameWithOwner,
+      commits: entry.contributions.totalCount,
+      language: entry.repository.primaryLanguage,
+      stars: entry.repository.stargazerCount,
+    }));
 
   const trailingCollection = trailingData.user?.contributionsCollection;
   const trailingCommits = {

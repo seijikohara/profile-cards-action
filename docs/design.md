@@ -403,7 +403,50 @@ never rebind.
   version. So: patch releases stay fully automatic; a minor or major is cut by
   bumping the version inside the PR that earns it, nothing more. The v1.0.0
   cut itself used this path.
-- **Marketplace:** the listing is re-published from the v1.0.0 release
-  (web-UI step) and the interim `v0` Release — the pre-1.0 listing anchor —
-  is deleted afterwards. The `v0` tag stays frozen at v0.0.11 for consumers
-  pinned to `@v0`.
+- **Marketplace:** an already-listed action surfaces new releases by itself.
+  v1.0.0 appeared as Latest with no web-UI step; the per-release publish
+  checkbox matters for the first listing and for delisting, not for updates.
+  The interim `v0` Release — the pre-1.0 listing anchor — was kept, its notes
+  rewritten as a frozen-line notice, and the `v0` tag stays frozen at v0.0.11
+  for consumers pinned to `@v0`.
+
+## Addendum (2026-09-03): one magnitude language across the cards
+
+A legibility pass triggered by a reader question the cards could not answer:
+what does the blue mean? The accent color meant _commits_ on the composition
+card and _peak_ on three others, and nothing said so anywhere.
+
+- **One quantity, one ramp.** Every card that answers "how much activity" now
+  fills from GitHub's contribution green, via `src/cards/legend.ts`. The accent
+  is back to a single, categorical meaning (composition's commits series), and
+  the peak cell on the cadence grid is marked with a foreground-ink ring rather
+  than a second hue.
+- **Bars start at ramp level 2, cells do not.** Level 1 of the dark ramp
+  (`#0e4429`) is 1.7:1 against the dark canvas — fine for a 10px calendar cell
+  read as texture, not for a bar that has to be read. `barFill` therefore maps
+  a series onto the ramp's top three steps; the punch-card dots keep the full
+  quartile ramp, matching the calendar cards exactly.
+- **The `Less … More` key is one function.** `rampLegend` replaced the copies
+  in `contributions` and `lifetime` and now serves `cadence`, whose color and
+  dot size are the only quantity channels it has. Bar cards carry no key: bar
+  length already states the quantity and the ink only reinforces it.
+- **Provenance belongs on the card.** `rhythm` bucketed the contribution
+  calendar (all types), but its note said only "all years"; it now reads
+  "all contribution types · all years", opens its footer with the population
+  the panels split, and labels every month bar rather than only the peak.
+- **A ranked list beats a wrapped legend.** The languages legend ran across
+  three columns before wrapping, so rank 4 sat directly under rank 1. It is now
+  a single vertical list to the left of the treemap. `languageShares` sorts
+  "Other" by size with everything else: a folded tail is regularly larger than
+  the languages it outranks, and one out-of-order row breaks both the list and
+  the treemap's squarify input.
+- **Densification:** `cadence` gained the marginal hour-of-day histogram and
+  shaded night bands (behind the histogram only — shading the grid would
+  swallow its level-0 dots in the dark theme); `repositories` gained a primary
+  language dot and a star count per row, drawn as a path because the embedded
+  font is subset to the characters the cards typeset; `overview` filled three
+  empty tile captions with scope notes.
+- **Two guards had rotted.** `scripts/check-const-only.ts` was documented as
+  chained into `pnpm run lint` but was not wired anywhere, and the local
+  example gallery still rendered six of the eight cards. Both are fixed; the
+  gallery list now mirrors `action.yml`'s `cards` default.

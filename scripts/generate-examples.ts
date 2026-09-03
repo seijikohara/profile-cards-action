@@ -54,7 +54,18 @@ if (token === undefined || token.trim() === '') {
 
 const login = process.env['EXAMPLES_LOGIN'] ?? 'seijikohara';
 
-const CARDS: readonly string[] = ['overview', 'lifetime', 'contributions', 'composition', 'rhythm', 'languages'];
+// Mirrors action.yml's `cards` default, which is what CI renders — a gallery
+// missing a card is a gallery that cannot be trusted to show regressions.
+const CARDS: readonly string[] = [
+  'overview',
+  'lifetime',
+  'contributions',
+  'composition',
+  'rhythm',
+  'cadence',
+  'repositories',
+  'languages',
+];
 
 // Three brands simple-icons carries plus one it does not, so the gallery shows
 // both pill shapes: with a glyph and text-only.

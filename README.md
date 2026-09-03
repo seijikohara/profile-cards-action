@@ -13,16 +13,16 @@ Profile READMEs usually rely on third-party image services that fetch your stats
 
 Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme>.svg`. Optional badge pills are rendered into `<output-dir>/badges/` as `<slug>.<theme>.svg`, using [simple-icons](https://simpleicons.org/) for brand glyphs when a match exists and falling back to text-only pills otherwise.
 
-| Card            | Shows                                                                                                                                                       |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `overview`      | Eight stat tiles: lifetime and current-year contributions, stars, followers, merged PRs, issues, public repositories, recently contributed-to repositories. |
-| `lifetime`      | Contribution history — one row per year since the first contribution, each week shaded by activity.                                                         |
-| `contributions` | Current and longest streaks, plus the trailing 12 months as an isometric 3D calendar.                                                                       |
-| `composition`   | Per-year stacked bars of commits, pull requests, issues, reviews, and private contributions, with the overall private share.                                |
-| `rhythm`        | Contributions by weekday and by month of the year.                                                                                                          |
-| `cadence`       | Weekday × hour punch card of commits on owned default branches over the trailing year, in author-local time, with volume stats.                             |
-| `repositories`  | Top public repositories by commits over the trailing year — including repositories the user does not own — as a ranked bar list.                            |
-| `languages`     | A treemap of languages by bytes across public source repositories, with a labeled legend.                                                                   |
+| Card            | Shows                                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `overview`      | Eight stat tiles: lifetime and current-year contributions, stars, followers, merged PRs, issues, public repositories, recently contributed-to repositories.  |
+| `lifetime`      | Contribution history — one row per year since the first contribution, each week shaded by activity.                                                          |
+| `contributions` | Current and longest streaks, plus the trailing 12 months as an isometric 3D calendar.                                                                        |
+| `composition`   | Per-year stacked bars of commits, pull requests, issues, reviews, and private contributions, with the overall private share.                                 |
+| `rhythm`        | Contributions of every type by weekday and by month of the year.                                                                                             |
+| `cadence`       | Weekday × hour punch card of commits on owned default branches over the trailing year, in author-local time, with an hour-of-day histogram and volume stats. |
+| `repositories`  | Top public repositories by commits over the trailing year — including repositories the user does not own — as a ranked bar list with language and stars.     |
+| `languages`     | A treemap of languages by bytes across public source repositories, beside a ranked list of every language.                                                   |
 
 Cards are drawn at the 846px width of the profile README column, use GitHub's Primer color tokens so they blend into both themes, animate only on entry (CSS only, disabled under `prefers-reduced-motion`), and contain no scripts or external references.
 
@@ -64,14 +64,14 @@ Each sample is wrapped in a `<picture>`, so the card you see matches your GitHub
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="examples/rhythm.dark.svg" />
-  <img alt="Rhythm card: contributions by weekday and by month of the year" src="examples/rhythm.light.svg" width="100%" />
+  <img alt="Rhythm card: contributions of every type by weekday and by month of the year" src="examples/rhythm.light.svg" width="100%" />
 </picture>
 
 **`cadence`** — when the commits land, hour by hour
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="examples/cadence.dark.svg" />
-  <img alt="Cadence card: commits by weekday and hour of day over the trailing year" src="examples/cadence.light.svg" width="100%" />
+  <img alt="Cadence card: commits by weekday and hour of day over the trailing year, with an hour-of-day histogram" src="examples/cadence.light.svg" width="100%" />
 </picture>
 
 Hours come from each commit's author-local timezone offset, so the card needs no timezone configuration. Commits created through the GitHub web UI are recorded in UTC.
@@ -80,14 +80,14 @@ Hours come from each commit's author-local timezone offset, so the card needs no
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="examples/repositories.dark.svg" />
-  <img alt="Repositories card: top repositories ranked by commits over the trailing year" src="examples/repositories.light.svg" width="100%" />
+  <img alt="Repositories card: top repositories ranked by commits over the trailing year, with primary language and stars" src="examples/repositories.light.svg" width="100%" />
 </picture>
 
-**`languages`** — language treemap by bytes
+**`languages`** — ranked language list and treemap by bytes
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="examples/languages.dark.svg" />
-  <img alt="Languages card: treemap of languages by bytes across public source repositories, with a labeled legend" src="examples/languages.light.svg" width="100%" />
+  <img alt="Languages card: ranked list of languages by bytes beside a treemap, across public source repositories" src="examples/languages.light.svg" width="100%" />
 </picture>
 
 Badge pills render at their natural size. `GitHub`, `TypeScript`, and `npm` match a simple-icons glyph; `Findy` has none, so it falls back to a text-only pill:

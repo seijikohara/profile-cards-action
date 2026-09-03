@@ -16,6 +16,7 @@ import { el, num, textNode } from '../svg/dsl.js';
 import { formatDate, formatDateRange, formatInt, formatUtcTimestamp } from '../svg/text.js';
 import { shade, type Theme } from '../theme.js';
 import { cardFrame, tileRow, type TileSpec } from './frame.js';
+import { rampLegend } from './legend.js';
 
 // Axonometric tile: 24px wide, 8px tall footprint (3:1 — flatter than true
 // isometric, which keeps the 53-week ribbon from eating vertical space).
@@ -158,24 +159,7 @@ export function renderContributions(data: ProfileData, streaks: Streaks, theme: 
 
   // Legend (bottom-left) and refresh caption (bottom-right).
   const legendY = groundBottom + 22;
-  const swatches = theme.contribRamp.map((color, index) =>
-    el('rect', {
-      x: CARD_PADDING + 34 + index * 14,
-      y: legendY - 9,
-      width: 10,
-      height: 10,
-      rx: 2,
-      fill: color,
-    })
-  );
-  const legend =
-    el('text', { x: CARD_PADDING, y: legendY, class: 't-tick' }, textNode('Less')) +
-    swatches.join('') +
-    el(
-      'text',
-      { x: CARD_PADDING + 34 + theme.contribRamp.length * 14 + 4, y: legendY, class: 't-tick' },
-      textNode('More')
-    );
+  const legend = rampLegend(theme, CARD_PADDING, legendY);
   const caption = el(
     'text',
     { x: CARD_WIDTH - CARD_PADDING, y: legendY, class: 't-mono', 'text-anchor': 'end' },
