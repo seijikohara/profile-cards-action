@@ -57923,20 +57923,20 @@ function renderContributions(data, streaks, theme, fontFaceCss) {
 * (categorical palettes must not run past ~8 hues). Percentages use
 * largest-remainder rounding so the printed values total 100.0.
 *
-* The result is sorted by size, "Other" included: the card reads as a ranked
-* list and as a treemap, and both break if one entry sits out of order — a
-* folded tail is regularly larger than the smallest language it outranks.
+* "Other" stays last however large it grows. It is a residual bucket, not a
+* language, so it does not compete for a rank — the convention every legend
+* and breakdown chart follows, and the one a reader arrives with.
 */
 function languageShares(slices, limit = 8) {
 	const total = slices.reduce((sum, slice) => sum + slice.bytes, 0);
 	if (total === 0) return [];
 	const kept = slices.slice(0, limit);
 	const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0);
-	const entries = (otherBytes > 0 ? [...kept, {
+	const entries = otherBytes > 0 ? [...kept, {
 		name: "Other",
 		color: null,
 		bytes: otherBytes
-	}] : [...kept]).toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+	}] : [...kept];
 	const exact = entries.map((entry) => entry.bytes / total * 1e3);
 	const floors = exact.map((value) => Math.floor(value));
 	const remainder = 1e3 - floors.reduce((sum, value) => sum + value, 0);

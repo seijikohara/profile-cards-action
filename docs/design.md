@@ -436,10 +436,12 @@ card and _peak_ on three others, and nothing said so anywhere.
   the panels split, and labels every month bar rather than only the peak.
 - **A ranked list beats a wrapped legend.** The languages legend ran across
   three columns before wrapping, so rank 4 sat directly under rank 1. It is now
-  a single vertical list to the left of the treemap. `languageShares` sorts
-  "Other" by size with everything else: a folded tail is regularly larger than
-  the languages it outranks, and one out-of-order row breaks both the list and
-  the treemap's squarify input.
+  a single vertical list to the left of the treemap.
+- **"Other" stays last, whatever its size.** Sorting the folded tail in with
+  the languages was tried and reverted: a residual bucket does not compete for
+  a rank, and putting a row labelled "Other" above named languages reads as a
+  sorting bug even when it is arithmetically correct. Convention wins over the
+  local monotonicity it costs squarify.
 - **Densification:** `cadence` gained the marginal hour-of-day histogram and
   shaded night bands (behind the histogram only — shading the grid would
   swallow its level-0 dots in the dark theme); `repositories` gained a primary
