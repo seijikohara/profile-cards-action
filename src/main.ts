@@ -44,7 +44,10 @@ async function run(): Promise<void> {
   const files = new Map<string, string>();
   for (const theme of themes) {
     for (const card of inputs.cards) {
-      files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss));
+      files.set(
+        `${card}.${theme.id}.svg`,
+        renderCard(card, data, streaks, theme, fontFaceCss, { languageLimit: inputs.languageLimit })
+      );
     }
   }
   for (const [name, svg] of renderBadges(inputs.badges, themes)) {

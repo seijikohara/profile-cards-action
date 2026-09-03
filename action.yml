@@ -32,6 +32,10 @@ inputs:
     description: 'Google Fonts monospace family.'
     required: false
     default: 'Roboto Mono'
+  language-limit:
+    description: 'Languages the languages card lists before the rest fold into "Other". The card grows one row per language.'
+    required: false
+    default: '8'
   badges:
     description: 'Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to <output-dir>/badges/.'
     required: false

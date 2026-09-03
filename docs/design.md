@@ -436,7 +436,13 @@ card and _peak_ on three others, and nothing said so anywhere.
   the panels split, and labels every month bar rather than only the peak.
 - **A ranked list beats a wrapped legend.** The languages legend ran across
   three columns before wrapping, so rank 4 sat directly under rank 1. It is now
-  a single vertical list to the left of the treemap.
+  a single vertical list beside the treemap — on the **right**, where a chart's
+  key belongs: the figure is read first and the key when it is needed. (It was
+  briefly placed left; that makes the list the subject and the treemap its
+  illustration, which is not what the card is.) Because the list is one column,
+  its length is now a knob: `language-limit` sets how many languages precede
+  "Other", and the treemap grows to match so the figure never sits stranded
+  above a long list.
 - **"Other" stays last, whatever its size.** Sorting the folded tail in with
   the languages was tried and reverted: a residual bucket does not compete for
   a rank, and putting a row labelled "Other" above named languages reads as a

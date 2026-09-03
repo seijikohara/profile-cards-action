@@ -1,5 +1,6 @@
 /** Language share computation for the Languages card. */
 
+import { DEFAULT_LANGUAGE_LIMIT } from '../config.js';
 import type { LanguageSlice } from '../model.js';
 
 export interface LanguageShare {
@@ -11,15 +12,17 @@ export interface LanguageShare {
 }
 
 /**
- * Keep the top `limit` languages and fold the tail into "Other"
- * (categorical palettes must not run past ~8 hues). Percentages use
- * largest-remainder rounding so the printed values total 100.0.
+ * Keep the top `limit` languages and fold the tail into "Other". Percentages
+ * use largest-remainder rounding so the printed values total 100.0.
  *
  * "Other" stays last however large it grows. It is a residual bucket, not a
  * language, so it does not compete for a rank — the convention every legend
  * and breakdown chart follows, and the one a reader arrives with.
  */
-export function languageShares(slices: readonly LanguageSlice[], limit = 8): LanguageShare[] {
+export function languageShares(
+  slices: readonly LanguageSlice[],
+  limit: number = DEFAULT_LANGUAGE_LIMIT
+): LanguageShare[] {
   const total = slices.reduce((sum, slice) => sum + slice.bytes, 0);
   if (total === 0) return [];
 
