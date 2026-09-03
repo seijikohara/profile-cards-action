@@ -16,19 +16,28 @@ describe('languageShares', () => {
     const slices = Array.from({ length: 11 }, (_, index) => slice(`L${index}`, 1000 - index));
     const shares = languageShares(slices, 8);
     expect(shares).toHaveLength(9);
-    const other = shares.find((share) => share.name === 'Other');
-    expect(other?.color).toBeNull();
-    expect(other?.bytes).toBe(992 + 991 + 990);
+    expect(shares.at(-1)?.name).toBe('Other');
+    expect(shares.at(-1)?.color).toBeNull();
+    expect(shares.at(-1)?.bytes).toBe(992 + 991 + 990);
   });
 
-  it('ranks every entry by size, Other included', () => {
-    // The folded tail (3 x ~990) outweighs every language it replaced, so a
-    // list that pinned Other last would open with its smallest row out of order.
+  it('keeps Other last even when the folded tail outweighs every language kept', () => {
+    // 3 x ~990 bytes folded against a top language of 1000: Other outranks the
+    // whole list by size and still belongs at the end, because it is the
+    // remainder rather than an entry competing for a rank.
     const slices = Array.from({ length: 11 }, (_, index) => slice(`L${index}`, 1000 - index));
     const shares = languageShares(slices, 8);
-    const bytes = shares.map((share) => share.bytes);
-    expect(bytes).toEqual(bytes.toSorted((a, b) => b - a));
-    expect(shares[0]?.name).toBe('Other');
+    const other = shares.at(-1);
+    expect(other?.name).toBe('Other');
+    expect(other?.bytes).toBeGreaterThan(shares[0]?.bytes ?? 0);
+  });
+
+  it('ranks the kept languages by size ahead of Other', () => {
+    const slices = Array.from({ length: 11 }, (_, index) => slice(`L${index}`, 1000 - index));
+    const kept = languageShares(slices, 8)
+      .slice(0, -1)
+      .map((share) => share.bytes);
+    expect(kept).toEqual(kept.toSorted((a, b) => b - a));
   });
 
   it('omits Other when everything fits', () => {

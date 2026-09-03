@@ -15,9 +15,9 @@ export interface LanguageShare {
  * (categorical palettes must not run past ~8 hues). Percentages use
  * largest-remainder rounding so the printed values total 100.0.
  *
- * The result is sorted by size, "Other" included: the card reads as a ranked
- * list and as a treemap, and both break if one entry sits out of order — a
- * folded tail is regularly larger than the smallest language it outranks.
+ * "Other" stays last however large it grows. It is a residual bucket, not a
+ * language, so it does not compete for a rank — the convention every legend
+ * and breakdown chart follows, and the one a reader arrives with.
  */
 export function languageShares(slices: readonly LanguageSlice[], limit = 8): LanguageShare[] {
   const total = slices.reduce((sum, slice) => sum + slice.bytes, 0);
@@ -25,9 +25,8 @@ export function languageShares(slices: readonly LanguageSlice[], limit = 8): Lan
 
   const kept = slices.slice(0, limit);
   const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0);
-  const entries: LanguageSlice[] = (
-    otherBytes > 0 ? [...kept, { name: 'Other', color: null, bytes: otherBytes }] : [...kept]
-  ).toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+  const entries: LanguageSlice[] =
+    otherBytes > 0 ? [...kept, { name: 'Other', color: null, bytes: otherBytes }] : [...kept];
 
   // Largest-remainder rounding in tenths of a percent: floor everything, then
   // bump the entries with the largest fractional parts until the tenths sum to
