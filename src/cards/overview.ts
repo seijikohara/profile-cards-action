@@ -40,7 +40,10 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
       value: formatInt(thisYearTotal),
       sub: dailyAverage,
     },
-    { label: 'Stars earned', value: formatInt(data.starsEarned) },
+    // Scope note, not a second statistic: the number counts every owned public
+    // repository including archived ones, which is the first thing a reader
+    // wonders about a star total.
+    { label: 'Stars earned', value: formatInt(data.starsEarned), sub: 'Forks excluded' },
     { label: 'Followers', value: formatInt(data.followers) },
   ];
   const rowB: TileSpec[] = [
@@ -52,10 +55,14 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
       sub: peakOf((year) => year.pullRequests),
     },
     { label: 'Issues opened', value: formatInt(data.issues), sub: peakOf((year) => year.issues) },
-    { label: 'Public repositories', value: formatInt(data.publicSourceRepos) },
+    {
+      label: 'Public repositories',
+      value: formatInt(data.publicSourceRepos),
+      sub: `${formatInt(data.languages.length)} languages`,
+    },
     // The API's repositoriesContributedTo is a rolling recent window, not a
-    // career total — the label must say so.
-    { label: 'Contributed to (recent)', value: formatInt(data.contributedTo) },
+    // career total — the label must say so, and the caption names the filter.
+    { label: 'Contributed to (recent)', value: formatInt(data.contributedTo), sub: 'Excludes own repositories' },
   ];
 
   const top = 60;

@@ -148,18 +148,31 @@ function commitSamples(): readonly CommitSample[] {
   return samples;
 }
 
-/** A ranking with a clear leader, mid-field ties, and a long name to exercise truncation. */
+const TYPESCRIPT = { name: 'TypeScript', color: '#3178c6' };
+const RUST = { name: 'Rust', color: '#dea584' };
+const KOTLIN = { name: 'Kotlin', color: '#A97BFF' };
+
+/**
+ * A ranking with a clear leader, mid-field ties, and a long name to exercise
+ * truncation. The last two rows cover the card's two optional fields: a
+ * repository with no detected language, and one with no stars.
+ */
 function topRepositories(): RepoCommits[] {
   return [
-    { nameWithOwner: 'seijikohara/vizel', commits: 379 },
-    { nameWithOwner: 'seijikohara/femto-car-launcher', commits: 371 },
-    { nameWithOwner: 'seijikohara/kogu', commits: 308 },
-    { nameWithOwner: 'seijikohara/db-tester', commits: 194 },
-    { nameWithOwner: 'seijikohara/seijikohara', commits: 168 },
-    { nameWithOwner: 'seijikohara/profile-cards-action', commits: 130 },
-    { nameWithOwner: 'open-telemetry/opentelemetry-js-contrib-examples', commits: 24 },
-    { nameWithOwner: 'seijikohara/docker-compose-cache-action', commits: 24 },
-    { nameWithOwner: 'seijikohara/dotfiles', commits: 9 },
+    { nameWithOwner: 'seijikohara/vizel', commits: 379, language: TYPESCRIPT, stars: 12 },
+    { nameWithOwner: 'seijikohara/femto-car-launcher', commits: 371, language: RUST, stars: 4 },
+    { nameWithOwner: 'seijikohara/kogu', commits: 308, language: KOTLIN, stars: 31 },
+    { nameWithOwner: 'seijikohara/db-tester', commits: 194, language: KOTLIN, stars: 2 },
+    { nameWithOwner: 'seijikohara/seijikohara', commits: 168, language: TYPESCRIPT, stars: 1 },
+    { nameWithOwner: 'seijikohara/profile-cards-action', commits: 130, language: TYPESCRIPT, stars: 8 },
+    {
+      nameWithOwner: 'open-telemetry/opentelemetry-js-contrib-examples',
+      commits: 24,
+      language: TYPESCRIPT,
+      stars: 1204,
+    },
+    { nameWithOwner: 'seijikohara/docker-compose-cache-action', commits: 24, language: TYPESCRIPT, stars: 3 },
+    { nameWithOwner: 'seijikohara/dotfiles', commits: 9, language: null, stars: 0 },
   ];
 }
 

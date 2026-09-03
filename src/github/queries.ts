@@ -126,6 +126,8 @@ export interface YearQueryData {
  * contributions (verified against live data), so the ranking needs no nested
  * pagination. `isPrivate` feeds the fetch-side privacy filter: a PAT can see
  * private repositories here, and their names must not reach a public card.
+ * `primaryLanguage` and `stargazerCount` give each ranked row an identity
+ * beyond its name — what it is written in, and whether anyone else uses it.
  */
 export const TRAILING_QUERY = `
 query Trailing($login: String!) {
@@ -138,7 +140,12 @@ query Trailing($login: String!) {
         weeks { contributionDays { date contributionCount contributionLevel } }
       }
       commitContributionsByRepository(maxRepositories: 25) {
-        repository { nameWithOwner isPrivate }
+        repository {
+          nameWithOwner
+          isPrivate
+          stargazerCount
+          primaryLanguage { name color }
+        }
         contributions(first: 1) { totalCount }
       }
     }
@@ -152,7 +159,12 @@ export interface TrailingQueryData {
       readonly totalRepositoriesWithContributedCommits: number;
       readonly contributionCalendar: CalendarData;
       readonly commitContributionsByRepository: readonly {
-        readonly repository: { readonly nameWithOwner: string; readonly isPrivate: boolean };
+        readonly repository: {
+          readonly nameWithOwner: string;
+          readonly isPrivate: boolean;
+          readonly stargazerCount: number;
+          readonly primaryLanguage: { readonly name: string; readonly color: string | null } | null;
+        };
         readonly contributions: { readonly totalCount: number };
       }[];
     };

@@ -56837,6 +56837,15 @@ function measureSans(text, size, weight = "regular") {
 		return total + ((code >= 32 && code <= 126 ? HELVETICA_WIDTHS[code - 32] : void 0) ?? DEFAULT_EM * 1e3) / 1e3;
 	}, 0) * size * (weight === "semibold" ? BOLD_FACTOR : 1);
 }
+/**
+* Advance width of the mono stack, in em. Every member of the stack is
+* monospaced, so one constant covers all of them.
+*/
+const MONO_EM = .6;
+/** Estimated rendered width of `text` at `size` px in the mono stack. */
+function measureMono(text, size) {
+	return Array.from(text).length * size * MONO_EM;
+}
 /** 12345 -> "12,345". Hand-rolled so output never depends on ICU data. */
 function formatInt(v) {
 	return (v < 0 ? "-" : "") + String(Math.trunc(Math.abs(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -57080,7 +57089,15 @@ function renderBadges(names, themes) {
 	return out;
 }
 //#endregion
+//#region src/iter.ts
+/** Immutable integer sequences for index-free iteration. */
+/** [start, start + 1, …, start + length - 1]; empty when length <= 0. */
+function range(length, start = 0) {
+	return Array.from({ length: Math.max(0, length) }, (_, index) => start + index);
+}
+//#endregion
 //#region src/compute/cadence.ts
+/** Weekday × hour commit cadence over the trailing-year commit sweep. */
 /**
 * Author-local clock face: the fields before the offset suffix. GitTimestamp
 * keeps the author's own offset, so the local hour reads straight off the
@@ -57158,6 +57175,7 @@ function computeCadence(commits) {
 	const nightCommits = grid.reduce((sum, row) => sum + row.reduce((rowSum, count, hour) => hour >= 22 || hour < 6 ? rowSum + count : rowSum, 0), 0);
 	return {
 		grid,
+		hourTotals: range(24).map((hour) => grid.reduce((sum, row) => sum + (row[hour] ?? 0), 0)),
 		levels,
 		peak,
 		totalCommits: commits.length,
@@ -57167,11 +57185,26 @@ function computeCadence(commits) {
 	};
 }
 //#endregion
-//#region src/iter.ts
-/** Immutable integer sequences for index-free iteration. */
-/** [start, start + 1, …, start + length - 1]; empty when length <= 0. */
-function range(length, start = 0) {
-	return Array.from({ length: Math.max(0, length) }, (_, index) => start + index);
+//#region src/svg/bars.ts
+/** Rounded-data-end bar paths shared by the bar-panel cards. */
+/** Horizontal bar with a rounded data-end (right) and a square start (left). */
+function horizontalBar(x, y, width, height, fill) {
+	const r = Math.min(height / 2, width);
+	const right = x + width;
+	const bottom = y + height;
+	return el("path", {
+		d: `M${num(x)} ${num(y)}H${num(right - r)}Q${num(right)} ${num(y)} ${num(right)} ${num(y + r)}V${num(bottom - r)}Q${num(right)} ${num(bottom)} ${num(right - r)} ${num(bottom)}H${num(x)}Z`,
+		fill
+	});
+}
+/** Vertical bar with a rounded data-end (top) and a square baseline. */
+function verticalBar(x, baseline, width, height, fill) {
+	const r = Math.min(width / 2, height);
+	const top = baseline - height;
+	return el("path", {
+		d: `M${num(x)} ${num(baseline)}V${num(top + r)}Q${num(x)} ${num(top)} ${num(x + r)} ${num(top)}H${num(x + width - r)}Q${num(x + width)} ${num(top)} ${num(x + width)} ${num(top + r)}V${num(baseline)}Z`,
+		fill
+	});
 }
 //#endregion
 //#region src/cards/frame.ts
@@ -57264,14 +57297,87 @@ function tileRow(theme, tiles, y) {
 	};
 }
 //#endregion
+//#region src/cards/legend.ts
+/**
+* The magnitude language shared by every card that answers "how much activity".
+*
+* Four cards encode a quantity, and they only read as one system if the mapping
+* from value to ink is identical everywhere — so it lives here instead of being
+* re-derived per card. The ramp is GitHub's own contribution green, which is
+* what ties these cards to the calendar cards a reader already understands.
+*
+* Nothing here highlights a peak with a different hue: the accent color carries
+* a categorical meaning on the composition card (commits), and a second meaning
+* would make both unreadable.
+*/
+/**
+* Fill for a bar, in the ramp's top three steps.
+*
+* Bars encode magnitude with length, so their ink only has to reinforce it —
+* and it has to stay visible while doing so. Level 1 of the dark ramp (#0e4429)
+* sits at 1.7:1 against the dark canvas, which is fine for a 10px calendar cell
+* a reader scans as texture but not for a bar whose whole job is to be read, so
+* the bar scale starts at level 2 instead.
+*/
+function barFill(theme, value, max) {
+	if (value <= 0 || max <= 0) return theme.contribRamp[0];
+	const share = value / max;
+	if (share > 2 / 3) return theme.contribRamp[4];
+	if (share > 1 / 3) return theme.contribRamp[3];
+	return theme.contribRamp[2];
+}
+const TICK_SIZE$1 = 9.5;
+const CAPTION_GAP = 10;
+const SWATCH = 10;
+const DEFAULT_PITCH = 14;
+/** Rounded square, matching the calendar cards' cells. */
+function squareSwatch(color, _level, cx, cy) {
+	return el("rect", {
+		x: cx - SWATCH / 2,
+		y: cy - SWATCH / 2,
+		width: SWATCH,
+		height: SWATCH,
+		rx: 2,
+		fill: color
+	});
+}
+/**
+* Width of the legend, independent of where it is drawn — callers right-align
+* by subtracting this from their right edge before calling `rampLegend`.
+*/
+function rampLegendWidth(pitch = DEFAULT_PITCH) {
+	return measureMono("Less", TICK_SIZE$1) + CAPTION_GAP + pitch * 5 + CAPTION_GAP + measureMono("More", TICK_SIZE$1);
+}
+/** "Less ▪▪▪▪▪ More" with `x` at the left edge and `y` on the caption baseline. */
+function rampLegend(theme, x, y, options = {}) {
+	const swatch = options.swatch ?? squareSwatch;
+	const pitch = options.pitch ?? DEFAULT_PITCH;
+	const firstCenter = x + measureMono("Less", TICK_SIZE$1) + CAPTION_GAP + pitch / 2;
+	const cy = y - 4;
+	const moreX = firstCenter + (theme.contribRamp.length - .5) * pitch + CAPTION_GAP;
+	return el("text", {
+		x,
+		y,
+		class: "t-tick"
+	}, textNode("Less")) + theme.contribRamp.map((color, level) => swatch(color, level, firstCenter + level * pitch, cy)).join("") + el("text", {
+		x: moreX,
+		y,
+		class: "t-tick"
+	}, textNode("More"));
+}
+//#endregion
 //#region src/cards/cadence.ts
 /**
 * Commit cadence card: a weekday × hour punch card over the trailing-year
-* commit sweep. Dot size and fill encode the quantile level of each cell, the
-* busiest cell is drawn in the accent color, and a footer line carries the
-* sweep's volume stats. Hours are the author's local clock (GitTimestamp keeps
-* the commit's UTC offset), so the card answers "when does this person commit"
-* on their own clock.
+* commit sweep, with the marginal day curve as a histogram above it.
+*
+* Dot size and fill both encode the quantile level of each cell, so the grid
+* speaks the same green as the calendar cards; the busiest cell is ringed
+* rather than recolored, because a second hue here would collide with the
+* composition card's categorical accent. Hours are the author's local clock
+* (GitTimestamp keeps the commit's UTC offset), so the card answers "when does
+* this person commit" on their own clock — and the night hours the footer
+* quantifies are shaded under the histogram.
 */
 const WEEKDAY_LABELS$1 = [
 	"Mon",
@@ -57282,12 +57388,20 @@ const WEEKDAY_LABELS$1 = [
 	"Sat",
 	"Sun"
 ];
-const GRID_TOP = 66;
+/** Night runs 22:00–05:59 author-local — the window the footer's share counts. */
+const NIGHT_FROM = 22;
+const NIGHT_UNTIL = 6;
+const BAND_TOP$2 = 56;
+const EYEBROW_BASELINE$1 = 68;
+const HIST_MAX_HEIGHT = 30;
+const HIST_BASELINE = 102;
+const GRID_TOP = 122;
 const ROW_H$2 = 24;
 const TICK_BASELINE = GRID_TOP + ROW_H$2 * WEEKDAY_LABELS$1.length + 16;
-const FOOTER_BASELINE$1 = TICK_BASELINE + 27;
-const GRID_LEFT = 64;
-const COL_W = 758 / 24;
+const FOOTER_BASELINE$1 = TICK_BASELINE + 29;
+const GRID_LEFT = 76;
+const COL_W = 746 / 24;
+const HIST_BAR_W = Math.min(14, 25.083333333333332);
 /**
 * Dot radius per level 0..4 — area grows with activity. The level-0 dot is
 * large enough to keep the grid's ground visible in sparse regions; 1.6 read
@@ -57300,10 +57414,52 @@ const DOT_RADIUS = [
 	6,
 	7.4
 ];
+const LEGEND_PITCH = 18;
+/** Left edge of the hour column `hour`. */
+function columnX(hour) {
+	return GRID_LEFT + hour * COL_W;
+}
 function renderCadence(data, theme, fontFaceCss) {
 	const cadence = computeCadence(data.commits);
+	const nightBands = [{
+		from: 0,
+		until: NIGHT_UNTIL
+	}, {
+		from: NIGHT_FROM,
+		until: 24
+	}].flatMap((band) => {
+		const x = columnX(band.from);
+		const width = (band.until - band.from) * COL_W;
+		return [el("rect", {
+			x,
+			y: BAND_TOP$2,
+			width,
+			height: 52,
+			rx: 3,
+			fill: theme.bgInset
+		}), el("text", {
+			x: x + width / 2,
+			y: EYEBROW_BASELINE$1,
+			class: "t-mono",
+			"text-anchor": "middle"
+		}, textNode("NIGHT"))];
+	});
+	const histBaseline = el("line", {
+		x1: GRID_LEFT,
+		y1: 102.5,
+		x2: 822,
+		y2: 102.5,
+		stroke: theme.border,
+		"stroke-width": 1
+	});
+	const hourMax = Math.max(0, ...cadence.hourTotals);
+	const histogram = cadence.hourTotals.map((total, hour) => {
+		const height = total === 0 || hourMax === 0 ? 0 : Math.max(2, total / hourMax * HIST_MAX_HEIGHT);
+		if (height === 0) return "";
+		return verticalBar(columnX(hour) + 17.083333333333332 / 2, HIST_BASELINE, HIST_BAR_W, height, barFill(theme, total, hourMax));
+	});
 	const columns = range(24).map((hour) => {
-		const cx = GRID_LEFT + hour * COL_W + COL_W / 2;
+		const cx = columnX(hour) + COL_W / 2;
 		const dots = cadence.levels.map((row, weekday) => {
 			const level = row[hour] ?? 0;
 			const cy = GRID_TOP + weekday * ROW_H$2 + ROW_H$2 / 2;
@@ -57312,8 +57468,8 @@ function renderCadence(data, theme, fontFaceCss) {
 				cx,
 				cy,
 				r: DOT_RADIUS[level],
-				fill: isPeak ? theme.accent : theme.contribRamp[level]
-			});
+				fill: theme.contribRamp[level]
+			}) + (isPeak ? peakRing(cx, cy, level, theme) : "");
 		});
 		return el("g", {
 			class: "dot",
@@ -57321,7 +57477,7 @@ function renderCadence(data, theme, fontFaceCss) {
 		}, ...dots);
 	});
 	const weekdayLabels = WEEKDAY_LABELS$1.map((label, index) => el("text", {
-		x: 54,
+		x: 66,
 		y: GRID_TOP + index * ROW_H$2 + ROW_H$2 / 2 + 4,
 		class: "t-label",
 		"text-anchor": "end"
@@ -57329,24 +57485,40 @@ function renderCadence(data, theme, fontFaceCss) {
 	const hourTicks = range(12).map((half) => {
 		const hour = half * 2;
 		return el("text", {
-			x: GRID_LEFT + hour * COL_W + COL_W / 2,
+			x: columnX(hour) + COL_W / 2,
 			y: TICK_BASELINE,
 			class: "t-tick",
 			"text-anchor": "middle"
 		}, textNode(String(hour)));
 	});
+	const eyebrow = el("text", {
+		x: 24,
+		y: EYEBROW_BASELINE$1,
+		class: "t-mono"
+	}, textNode("BY HOUR"));
 	const footerParts = [el("tspan", { class: "t-stat" }, textNode(formatCompact(cadence.totalCommits))), textNode(" commits")];
 	if (cadence.peak !== void 0) {
 		const peakLabel = `${WEEKDAY_LABELS$1[cadence.peak.weekday] ?? ""} ${String(cadence.peak.hour).padStart(2, "0")}:00`;
 		footerParts.push(textNode(" · peak "), el("tspan", { class: "t-stat" }, textNode(peakLabel)));
 	}
 	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`+${formatCompact(cadence.additions)}`)), textNode(" "), el("tspan", { class: "t-stat" }, textNode(`−${formatCompact(cadence.deletions)}`)), textNode(" lines"));
-	if (cadence.totalCommits > 0) footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`${Math.round(cadence.nightShare * 100)}%`)), textNode(" at night (22-06)"));
+	if (cadence.totalCommits > 0) footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`${Math.round(cadence.nightShare * 100)}%`)), textNode(` at night (${NIGHT_FROM}-0${NIGHT_UNTIL})`));
 	const footer = el("text", {
 		x: 24,
 		y: FOOTER_BASELINE$1,
 		class: "t-label"
 	}, ...footerParts);
+	const legendX = 822 - rampLegendWidth(LEGEND_PITCH);
+	const legend = rampLegend(theme, legendX, FOOTER_BASELINE$1, {
+		pitch: LEGEND_PITCH,
+		swatch: (color, level, cx, cy) => el("circle", {
+			cx,
+			cy,
+			r: DOT_RADIUS[level],
+			fill: color
+		})
+	});
+	const peakKey = cadence.peak === void 0 ? "" : peakKeyChip(legendX - 18 - measureMono("peak", 9.5) - 14, FOOTER_BASELINE$1, theme);
 	return cardFrame({
 		theme,
 		height: FOOTER_BASELINE$1 + 24,
@@ -57355,7 +57527,38 @@ function renderCadence(data, theme, fontFaceCss) {
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
 		extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
 		fontFaceCss
-	}, el("g", { class: "fade" }, ...weekdayLabels, ...hourTicks), ...columns, footer);
+	}, el("g", { class: "fade" }, ...nightBands, eyebrow, histBaseline, ...histogram, ...weekdayLabels, ...hourTicks), ...columns, el("g", { class: "fade" }, footer, peakKey, legend));
+}
+/** Hue-free emphasis for the busiest cell: a thin ring in the foreground ink. */
+function peakRing(cx, cy, level, theme) {
+	return el("circle", {
+		cx,
+		cy,
+		r: DOT_RADIUS[level] + 3.4,
+		fill: "none",
+		stroke: theme.fg,
+		"stroke-width": 1.2
+	});
+}
+/** Legend chip naming the ring, drawn at `x` on the `y` baseline. */
+function peakKeyChip(x, y, theme) {
+	return el("circle", {
+		cx: x + 6,
+		cy: y - 4,
+		r: 2.6,
+		fill: theme.contribRamp[4]
+	}) + el("circle", {
+		cx: x + 6,
+		cy: y - 4,
+		r: 6,
+		fill: "none",
+		stroke: theme.fg,
+		"stroke-width": 1.2
+	}) + el("text", {
+		x: x + 17,
+		y,
+		class: "t-tick"
+	}, textNode("peak"));
 }
 //#endregion
 //#region src/compute/composition.ts
@@ -57696,23 +57899,7 @@ function renderContributions(data, streaks, theme, fontFaceCss) {
 		}, ...columns);
 	});
 	const legendY = groundBottom + 22;
-	const swatches = theme.contribRamp.map((color, index) => el("rect", {
-		x: 58 + index * 14,
-		y: legendY - 9,
-		width: 10,
-		height: 10,
-		rx: 2,
-		fill: color
-	}));
-	const legend = el("text", {
-		x: 24,
-		y: legendY,
-		class: "t-tick"
-	}, textNode("Less")) + swatches.join("") + el("text", {
-		x: 58 + theme.contribRamp.length * 14 + 4,
-		y: legendY,
-		class: "t-tick"
-	}, textNode("More"));
+	const legend = rampLegend(theme, 24, legendY);
 	const caption = el("text", {
 		x: 822,
 		y: legendY,
@@ -57735,17 +57922,21 @@ function renderContributions(data, streaks, theme, fontFaceCss) {
 * Keep the top `limit` languages and fold the tail into "Other"
 * (categorical palettes must not run past ~8 hues). Percentages use
 * largest-remainder rounding so the printed values total 100.0.
+*
+* The result is sorted by size, "Other" included: the card reads as a ranked
+* list and as a treemap, and both break if one entry sits out of order — a
+* folded tail is regularly larger than the smallest language it outranks.
 */
 function languageShares(slices, limit = 8) {
 	const total = slices.reduce((sum, slice) => sum + slice.bytes, 0);
 	if (total === 0) return [];
 	const kept = slices.slice(0, limit);
 	const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0);
-	const entries = otherBytes > 0 ? [...kept, {
+	const entries = (otherBytes > 0 ? [...kept, {
 		name: "Other",
 		color: null,
 		bytes: otherBytes
-	}] : [...kept];
+	}] : [...kept]).toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
 	const exact = entries.map((entry) => entry.bytes / total * 1e3);
 	const floors = exact.map((value) => Math.floor(value));
 	const remainder = 1e3 - floors.reduce((sum, value) => sum + value, 0);
@@ -57865,11 +58056,24 @@ function layoutRow(row, free, fill) {
 }
 //#endregion
 //#region src/cards/languages.ts
-/** Languages card: a squarified treemap by bytes with a full-coverage legend. */
-const TREE_TOP = 60;
-const TREE_HEIGHT = 190;
-const LEGEND_COLUMNS = 3;
-const LEGEND_ROW_HEIGHT = 30;
+/**
+* Languages card: a ranked list beside a squarified treemap, both by bytes.
+*
+* The list is the card's index and sits on the left, where a reader's eye
+* starts: one row per language, top to bottom in size order, so the ranking is
+* legible without decoding cell areas. The treemap holds the proportions the
+* list cannot show. A three-column legend under the map read in reading order
+* — across, then down — which put rank 4 directly below rank 1.
+*/
+const CONTENT_TOP = 60;
+const LIST_ROW_HEIGHT = 27;
+const LIST_FIRST_BASELINE = 75;
+const LIST_NAME_X = 42;
+const LIST_BYTES_RIGHT = 200;
+const LIST_PCT_RIGHT = 274;
+const TREE_X = 294;
+const TREE_WIDTH = 528;
+const TREE_HEIGHT = 250;
 const LABEL_MIN_WIDTH = 54;
 const NAME_MIN_HEIGHT = 26;
 const PCT_MIN_HEIGHT = 44;
@@ -57917,8 +58121,7 @@ function renderLanguages(data, theme, fontFaceCss) {
 		y: 72,
 		class: "t-label"
 	}, textNode("No language data")));
-	const inner = 798;
-	const rects = squarify(shares.map((share) => share.bytes), 24, TREE_TOP, inner, TREE_HEIGHT);
+	const rects = squarify(shares.map((share) => share.bytes), TREE_X, CONTENT_TOP, TREE_WIDTH, TREE_HEIGHT);
 	const cells = rects.map((rect) => {
 		const share = shares[rect.index];
 		if (share === void 0) return "";
@@ -57931,40 +58134,34 @@ function renderLanguages(data, theme, fontFaceCss) {
 			rx: 2,
 			fill
 		});
-		const label = cellLabel(share, rect, fill);
-		return el("g", { class: `fade c${rect.index}` }, rectEl, label);
+		return el("g", { class: `fade c${rect.index}` }, rectEl, cellLabel(share, rect, fill));
 	});
-	const legendTop = 280;
-	const columnWidth = inner / LEGEND_COLUMNS;
-	const legend = shares.map((share, index) => {
-		const column = index % LEGEND_COLUMNS;
-		const row = Math.floor(index / LEGEND_COLUMNS);
-		const x = 24 + column * columnWidth;
-		const y = legendTop + row * LEGEND_ROW_HEIGHT;
+	const list = shares.map((share, index) => {
+		const y = LIST_FIRST_BASELINE + index * LIST_ROW_HEIGHT;
 		return el("g", {}, el("circle", {
-			cx: x + 5,
+			cx: 29,
 			cy: y - 4,
 			r: 5,
 			fill: cellFill(share, theme)
 		}), el("text", {
-			x: x + 18,
+			x: LIST_NAME_X,
 			y,
 			class: "leg-name"
 		}, textNode(share.name)), el("text", {
-			x: x + columnWidth - 70,
+			x: LIST_BYTES_RIGHT,
 			y,
 			class: "t-tick",
 			"text-anchor": "end"
 		}, textNode(formatBytes(share.bytes))), el("text", {
-			x: x + columnWidth - 16,
+			x: LIST_PCT_RIGHT,
 			y,
 			class: "t-tick",
 			"text-anchor": "end"
 		}, textNode(`${share.pct.toFixed(1)}%`)));
 	});
-	const legendBottom = legendTop + (Math.ceil(shares.length / LEGEND_COLUMNS) - 1) * LEGEND_ROW_HEIGHT;
+	const contentBottom = Math.max(310, CONTENT_TOP + shares.length * LIST_ROW_HEIGHT);
 	const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0);
-	const footerBaseline = legendBottom + 30;
+	const footerBaseline = contentBottom + 28;
 	const footer = el("text", {
 		x: 24,
 		y: footerBaseline,
@@ -57983,7 +58180,7 @@ function renderLanguages(data, theme, fontFaceCss) {
 		description: `Language breakdown for ${data.login} by bytes${lead}.`,
 		extraCss,
 		fontFaceCss
-	}, ...cells, el("g", { class: "fade" }, ...legend, footer));
+	}, ...cells, el("g", { class: "fade" }, ...list, footer));
 }
 //#endregion
 //#region src/compute/lifetime.ts
@@ -58174,26 +58371,17 @@ function renderLifetime(data, theme, fontFaceCss) {
 		class: "t-tick",
 		"text-anchor": "end"
 	}, textNode(formatInt(year.total))));
-	const legendY = gridBottom + 17;
-	const swatchLeft = 58;
-	const swatchPitch = 14;
-	const swatches = theme.contribRamp.map((color, i) => el("rect", {
-		x: swatchLeft + i * swatchPitch,
-		y: legendY - 9,
-		width: CELL_H,
-		height: CELL_H,
-		rx: CELL_RADIUS,
-		fill: color
-	}));
-	const legend = el("text", {
-		x: 24,
-		y: legendY,
-		class: "t-tick"
-	}, textNode("Less")) + swatches.join("") + el("text", {
-		x: swatchLeft + theme.contribRamp.length * swatchPitch + 4,
-		y: legendY,
-		class: "t-tick"
-	}, textNode("More"));
+	const legend = rampLegend(theme, 24, gridBottom + 17, {
+		pitch: 14,
+		swatch: (color, _level, cx, cy) => el("rect", {
+			x: cx - CELL_H / 2,
+			y: cy - CELL_H / 2,
+			width: CELL_H,
+			height: CELL_H,
+			rx: CELL_RADIUS,
+			fill: color
+		})
+	});
 	const firstYear = life.years[0]?.year;
 	return cardFrame({
 		theme,
@@ -58239,7 +58427,8 @@ function renderOverview(data, theme, fontFaceCss) {
 		},
 		{
 			label: "Stars earned",
-			value: formatInt(data.starsEarned)
+			value: formatInt(data.starsEarned),
+			sub: "Forks excluded"
 		},
 		{
 			label: "Followers",
@@ -58259,11 +58448,13 @@ function renderOverview(data, theme, fontFaceCss) {
 		},
 		{
 			label: "Public repositories",
-			value: formatInt(data.publicSourceRepos)
+			value: formatInt(data.publicSourceRepos),
+			sub: `${formatInt(data.languages.length)} languages`
 		},
 		{
 			label: "Contributed to (recent)",
-			value: formatInt(data.contributedTo)
+			value: formatInt(data.contributedTo),
+			sub: "Excludes own repositories"
 		}
 	];
 	const top = 60;
@@ -58291,48 +58482,34 @@ function computeRepositories(repos) {
 	};
 }
 //#endregion
-//#region src/svg/bars.ts
-/** Rounded-data-end bar paths shared by the bar-panel cards. */
-/** Horizontal bar with a rounded data-end (right) and a square start (left). */
-function horizontalBar(x, y, width, height, fill) {
-	const r = Math.min(height / 2, width);
-	const right = x + width;
-	const bottom = y + height;
-	return el("path", {
-		d: `M${num(x)} ${num(y)}H${num(right - r)}Q${num(right)} ${num(y)} ${num(right)} ${num(y + r)}V${num(bottom - r)}Q${num(right)} ${num(bottom)} ${num(right - r)} ${num(bottom)}H${num(x)}Z`,
-		fill
-	});
-}
-/** Vertical bar with a rounded data-end (top) and a square baseline. */
-function verticalBar(x, baseline, width, height, fill) {
-	const r = Math.min(width / 2, height);
-	const top = baseline - height;
-	return el("path", {
-		d: `M${num(x)} ${num(baseline)}V${num(top + r)}Q${num(x)} ${num(top)} ${num(x + r)} ${num(top)}H${num(x + width - r)}Q${num(x + width)} ${num(top)} ${num(x + width)} ${num(top + r)}V${num(baseline)}Z`,
-		fill
-	});
-}
-//#endregion
 //#region src/cards/repositories.ts
 /**
 * Top repositories card: ranked horizontal bars of the repositories the user
 * committed to most over the trailing year — including repositories they do
-* not own, so open-source contributions surface. The top repository is drawn
-* in the accent color; the rest reuse the calm contribution green.
+* not own, so open-source contributions surface.
+*
+* Each row carries the repository's identity as well as its rank: a language
+* dot in linguist's color and, where anyone has starred it, a star count. Bars
+* take their fill from the contribution ramp, so the ranking reads the same way
+* as the calendar cards instead of singling the leader out in a second hue.
 */
 const BAND_TOP$1 = 62;
 const ROW_H$1 = 30;
 const BAR_H = 12;
 const RANK_X = 36;
-const LABEL_X = 48;
-const BAR_START_X$1 = 314;
+const DOT_CX = 49;
+const LABEL_X = 60;
+const STARS_RIGHT = 354;
+const BAR_START_X$1 = 368;
 const VALUE_GAP$1 = 8;
-const BAR_MAX_LEN = 462;
+const BAR_MAX_LEN = 408;
 const MIN_BAR$1 = 3;
-const MAX_NAME = 38;
-/** Ellipsize long owner/name labels so they never run under the bars. */
+const MAX_NAME = 36;
+const TICK_SIZE = 9.5;
+const STAR_R = 4.6;
+/** Ellipsize long owner/name labels so they never run under the stars column. */
 function truncate(name) {
-	return name.length > MAX_NAME ? `${name.slice(0, 37)}…` : name;
+	return name.length > MAX_NAME ? `${name.slice(0, 35)}…` : name;
 }
 /**
 * Two-tone label: the owner prefix repeats down the list, so it wears the
@@ -58345,30 +58522,59 @@ function labelSpans(nameWithOwner, fg) {
 	if (slash < 0) return [el("tspan", { fill: fg }, textNode(truncated))];
 	return [textNode(truncated.slice(0, slash + 1)), el("tspan", { fill: fg }, textNode(truncated.slice(slash + 1)))];
 }
+/**
+* Five-pointed star as a path rather than the ★ glyph: the embedded font is
+* subset to the characters the cards actually typeset, and a missing glyph
+* would fall back to whatever the viewer has.
+*/
+function star(cx, cy, radius, fill) {
+	return el("path", {
+		d: `M${range(10).map((index) => {
+			const r = index % 2 === 0 ? radius : radius * .42;
+			const angle = (-90 + index * 36) * Math.PI / 180;
+			return `${num(cx + r * Math.cos(angle))} ${num(cy + r * Math.sin(angle))}`;
+		}).join("L")}Z`,
+		fill
+	});
+}
+/** Star count, right-aligned at `right`; empty for an unstarred repository. */
+function starCount(stars, right, baseline, theme) {
+	if (stars <= 0) return "";
+	const label = formatCompact(stars);
+	return star(right - measureMono(label, TICK_SIZE) - 4 - STAR_R, baseline - 3.4, STAR_R, theme.fgMuted) + el("text", {
+		x: right,
+		y: baseline,
+		class: "t-tick",
+		"text-anchor": "end"
+	}, textNode(label));
+}
 function renderRepositories(data, theme, fontFaceCss) {
 	const ranking = computeRepositories(data.topRepositories);
-	const calmFill = theme.contribRamp[2];
 	const labels = [];
 	const values = [];
 	const bars = [];
 	ranking.rows.forEach((row, index) => {
 		const rowCenter = BAND_TOP$1 + index * ROW_H$1 + ROW_H$1 / 2;
 		const length = ranking.max === 0 ? 0 : Math.max(MIN_BAR$1, row.commits / ranking.max * BAR_MAX_LEN);
-		const fill = index === 0 ? theme.accent : calmFill;
 		labels.push(el("text", {
 			x: RANK_X,
 			y: rowCenter + 3.3,
 			class: "t-tick",
 			"text-anchor": "end"
-		}, textNode(String(index + 1))), el("text", {
+		}, textNode(String(index + 1))), el("circle", {
+			cx: DOT_CX,
+			cy: rowCenter,
+			r: 4.5,
+			fill: row.language?.color ?? theme.border
+		}), el("text", {
 			x: LABEL_X,
 			y: rowCenter + 4,
 			class: "t-label"
-		}, ...labelSpans(row.nameWithOwner, theme.fg)));
+		}, ...labelSpans(row.nameWithOwner, theme.fg)), starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme));
 		bars.push(el("g", {
 			class: "hbar",
 			style: `animation-delay:${index * 55}ms;transform-origin:${BAR_START_X$1}px ${rowCenter}px`
-		}, horizontalBar(BAR_START_X$1, rowCenter - BAR_H / 2, length, BAR_H, fill)));
+		}, horizontalBar(BAR_START_X$1, rowCenter - BAR_H / 2, length, BAR_H, barFill(theme, row.commits, ranking.max))));
 		values.push(el("text", {
 			x: BAR_START_X$1 + length + VALUE_GAP$1,
 			y: rowCenter + 3.3,
@@ -58396,10 +58602,11 @@ function renderRepositories(data, theme, fontFaceCss) {
 		y: footerBaseline,
 		class: "t-label"
 	}, ...footerParts);
+	const key = rowKey(footerBaseline, theme, ranking.rows.length > 0);
 	const axis = el("line", {
-		x1: 313.5,
+		x1: 367.5,
 		y1: BAND_TOP$1,
-		x2: 313.5,
+		x2: 367.5,
 		y2: bandBottom,
 		stroke: theme.border,
 		"stroke-width": 1
@@ -58412,7 +58619,31 @@ function renderRepositories(data, theme, fontFaceCss) {
 		description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
 		extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`,
 		fontFaceCss
-	}, el("g", { class: "fade" }, axis, ...labels, ...values, empty, footer), ...bars);
+	}, el("g", { class: "fade" }, axis, ...labels, ...values, empty, footer, key), ...bars);
+}
+/** Names the two row glyphs, right-aligned on the footer baseline. */
+function rowKey(baseline, theme, visible) {
+	if (!visible) return "";
+	const starsWidth = 14.2 + measureMono("stars", TICK_SIZE);
+	const languageWidth = 14 + measureMono("primary language", TICK_SIZE);
+	const right = 822;
+	const starsX = right - starsWidth;
+	const languageX = starsX - 16 - languageWidth;
+	return el("circle", {
+		cx: languageX + 4.5,
+		cy: baseline - 3.4,
+		r: 4.5,
+		fill: theme.border
+	}) + el("text", {
+		x: languageX + 14,
+		y: baseline,
+		class: "t-tick"
+	}, textNode("primary language")) + star(starsX + STAR_R, baseline - 3.4, STAR_R, theme.fgMuted) + el("text", {
+		x: right,
+		y: baseline,
+		class: "t-tick",
+		"text-anchor": "end"
+	}, textNode("stars"));
 }
 //#endregion
 //#region src/compute/rhythm.ts
@@ -58454,6 +58685,7 @@ function computeRhythm(days) {
 	const total = weekday.reduce((sum, value) => sum + value, 0);
 	const weekendSum = (weekday[5] ?? 0) + (weekday[6] ?? 0);
 	return {
+		total,
 		weekday,
 		month,
 		peakWeekday: indexOfMax(weekday),
@@ -58468,10 +58700,13 @@ function computeRhythm(days) {
 /**
 * Activity rhythm card: two small-multiple panels derived from the lifetime
 * daily series — a weekday profile (horizontal bars, Mon..Sun) and a
-* month-of-year profile (vertical bars, Jan..Dec) sharing one baseline. The
-* peak bar in each panel is drawn in the accent color; the rest use a calmer
-* contribution green so a single reading — "when is this person active" —
-* stays legible at a glance.
+* month-of-year profile (vertical bars, Jan..Dec) sharing one baseline.
+*
+* The series is the contribution calendar's daily count, so the panels cover
+* every contribution type rather than commits alone; the card says so in its
+* note, because "activity" alone leaves a reader guessing. Bars take their fill
+* from the contribution ramp, so length and ink agree and the busiest bar is
+* the darkest without needing a second hue.
 */
 const WEEKDAY_LABELS = [
 	"Mon",
@@ -58497,11 +58732,11 @@ const MONTH_LETTERS = [
 	"D"
 ];
 const EYEBROW_BASELINE = 64;
-const BAND_TOP = 84;
+const BAND_TOP = 90;
 const MONTH_MAX_HEIGHT = 104;
-const BASELINE_Y = 188;
-const MONTH_TICK_BASELINE = 203;
-const FOOTER_BASELINE = 232;
+const BASELINE_Y = 194;
+const MONTH_TICK_BASELINE = 209;
+const FOOTER_BASELINE = 238;
 const LEFT_X = 24;
 const RIGHT_X = 391;
 const RIGHT_W = 431;
@@ -58512,6 +58747,7 @@ const WEEKDAY_MAX_LEN = 259;
 const ROW_H = 104 / WEEKDAY_LABELS.length;
 const MONTH_BAND = RIGHT_W / MONTH_LETTERS.length;
 const MONTH_BAR_W = 22;
+const MONTH_VALUE_GAP = 6;
 const MIN_BAR = 3;
 /** Round a path/transform coordinate to 2 decimals — mirrors the dsl's num(). */
 function coord(value) {
@@ -58519,7 +58755,6 @@ function coord(value) {
 }
 function renderRhythm(data, theme, fontFaceCss) {
 	const rhythm = computeRhythm(data.lifetimeDays);
-	const calmFill = theme.contribRamp[2];
 	const weekdayMax = Math.max(0, ...rhythm.weekday);
 	const weekdayLabels = [];
 	const weekdayValues = [];
@@ -58529,7 +58764,6 @@ function renderRhythm(data, theme, fontFaceCss) {
 		const rowCenter = BAND_TOP + index * ROW_H + ROW_H / 2;
 		const scaled = weekdayMax === 0 ? 0 : value / weekdayMax * WEEKDAY_MAX_LEN;
 		const length = value === 0 ? 0 : Math.max(MIN_BAR, scaled);
-		const fill = index === rhythm.peakWeekday && value > 0 ? theme.accent : calmFill;
 		weekdayLabels.push(el("text", {
 			x: 52,
 			y: rowCenter + 4,
@@ -58539,7 +58773,7 @@ function renderRhythm(data, theme, fontFaceCss) {
 		if (length > 0) weekdayBars.push(el("g", {
 			class: "hbar",
 			style: `animation-delay:${index * 55}ms;transform-origin:${coord(BAR_START_X)}px ${coord(rowCenter)}px`
-		}, horizontalBar(BAR_START_X, rowCenter - WEEKDAY_BAR_H / 2, length, WEEKDAY_BAR_H, fill)));
+		}, horizontalBar(BAR_START_X, rowCenter - WEEKDAY_BAR_H / 2, length, WEEKDAY_BAR_H, barFill(theme, value, weekdayMax))));
 		weekdayValues.push(el("text", {
 			x: BAR_START_X + length + VALUE_GAP,
 			y: rowCenter + 3.3,
@@ -58554,15 +58788,14 @@ function renderRhythm(data, theme, fontFaceCss) {
 		const center = RIGHT_X + index * MONTH_BAND + MONTH_BAND / 2;
 		const scaled = monthMax === 0 ? 0 : value / monthMax * MONTH_MAX_HEIGHT;
 		const height = value === 0 ? 0 : Math.max(MIN_BAR, scaled);
-		const fill = index === rhythm.peakMonth && value > 0 ? theme.accent : calmFill;
 		if (height > 0) {
 			monthBars.push(el("g", {
 				class: "vbar",
 				style: `animation-delay:${index * 40}ms;transform-origin:${coord(center)}px ${coord(BASELINE_Y)}px`
-			}, verticalBar(center - MONTH_BAR_W / 2, BASELINE_Y, MONTH_BAR_W, height, fill)));
-			if (index === rhythm.peakMonth) monthTicks.push(el("text", {
+			}, verticalBar(center - MONTH_BAR_W / 2, BASELINE_Y, MONTH_BAR_W, height, barFill(theme, value, monthMax))));
+			monthTicks.push(el("text", {
 				x: center,
-				y: BASELINE_Y - height - 6,
+				y: BASELINE_Y - height - MONTH_VALUE_GAP,
 				class: "t-tick",
 				"text-anchor": "middle"
 			}, textNode(formatCompact(value))));
@@ -58578,11 +58811,11 @@ function renderRhythm(data, theme, fontFaceCss) {
 		x: LEFT_X,
 		y: EYEBROW_BASELINE,
 		class: "t-mono"
-	}, textNode("WEEKDAY")) + el("text", {
+	}, textNode("BY WEEKDAY")) + el("text", {
 		x: RIGHT_X,
 		y: EYEBROW_BASELINE,
 		class: "t-mono"
-	}, textNode("MONTH"));
+	}, textNode("BY MONTH"));
 	const weekdayAxis = el("line", {
 		x1: 59.5,
 		y1: BAND_TOP,
@@ -58593,13 +58826,18 @@ function renderRhythm(data, theme, fontFaceCss) {
 	});
 	const monthBaseline = el("line", {
 		x1: RIGHT_X,
-		y1: 188.5,
+		y1: 194.5,
 		x2: 822,
-		y2: 188.5,
+		y2: 194.5,
 		stroke: theme.border,
 		"stroke-width": 1
 	});
-	const footerParts = [el("tspan", { class: "t-stat" }, textNode(`${Math.round(rhythm.activeDayRate * 100)}%`)), textNode(" active days")];
+	const footerParts = [
+		el("tspan", { class: "t-stat" }, textNode(formatCompact(rhythm.total))),
+		textNode(" contributions · "),
+		el("tspan", { class: "t-stat" }, textNode(`${Math.round(rhythm.activeDayRate * 100)}%`)),
+		textNode(" active days")
+	];
 	if (rhythm.busiestDay !== void 0) footerParts.push(textNode(" · busiest "), el("tspan", { class: "t-stat" }, textNode(rhythm.busiestDay.date)), textNode(` (${rhythm.busiestDay.count})`));
 	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`${Math.round(rhythm.weekendShare * 100)}%`)), textNode(" on weekends"));
 	const footer = el("text", {
@@ -58609,9 +58847,9 @@ function renderRhythm(data, theme, fontFaceCss) {
 	}, ...footerParts);
 	return cardFrame({
 		theme,
-		height: 256,
+		height: 262,
 		title: "Activity rhythm",
-		note: "all years",
+		note: "all contribution types · all years",
 		description: `Activity rhythm for ${data.login}: contributions by weekday and by month of year.`,
 		extraCss: ".hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}",
 		fontFaceCss
@@ -58995,6 +59233,8 @@ query Year($login: String!, $from: DateTime!, $to: DateTime!) {
 * contributions (verified against live data), so the ranking needs no nested
 * pagination. `isPrivate` feeds the fetch-side privacy filter: a PAT can see
 * private repositories here, and their names must not reach a public card.
+* `primaryLanguage` and `stargazerCount` give each ranked row an identity
+* beyond its name — what it is written in, and whether anyone else uses it.
 */
 const TRAILING_QUERY = `
 query Trailing($login: String!) {
@@ -59007,7 +59247,12 @@ query Trailing($login: String!) {
         weeks { contributionDays { date contributionCount contributionLevel } }
       }
       commitContributionsByRepository(maxRepositories: 25) {
-        repository { nameWithOwner isPrivate }
+        repository {
+          nameWithOwner
+          isPrivate
+          stargazerCount
+          primaryLanguage { name color }
+        }
         contributions(first: 1) { totalCount }
       }
     }
@@ -59160,7 +59405,9 @@ async function fetchProfile(token, login) {
 	};
 	const topRepositories = (trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []).filter((entry) => !entry.repository.isPrivate).map((entry) => ({
 		nameWithOwner: entry.repository.nameWithOwner,
-		commits: entry.contributions.totalCount
+		commits: entry.contributions.totalCount,
+		language: entry.repository.primaryLanguage,
+		stars: entry.repository.stargazerCount
 	}));
 	const trailingCollection = trailingData.user?.contributionsCollection;
 	const trailingCommits = {

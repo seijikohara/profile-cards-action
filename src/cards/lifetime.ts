@@ -17,6 +17,7 @@ import { el, textNode } from '../svg/dsl.js';
 import { formatInt } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
+import { rampLegend } from './legend.js';
 
 /** Top-axis month labels, placed by week ≈ month * COLS / 12. */
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
@@ -131,28 +132,21 @@ export function renderLifetime(data: ProfileData, theme: Theme, fontFaceCss: str
     )
   );
 
-  // Legend: "Less", the five ramp swatches, then "More" — no arrow glyph.
+  // Legend: "Less", the five ramp swatches, then "More" — no arrow glyph. The
+  // swatches copy the wall's own cell, so the key and the data share a shape.
   const legendY = gridBottom + 17;
-  const swatchLeft = CARD_PADDING + 34;
-  const swatchPitch = CELL_H + 4;
-  const swatches = theme.contribRamp.map((color, i) =>
-    el('rect', {
-      x: swatchLeft + i * swatchPitch,
-      y: legendY - 9,
-      width: CELL_H,
-      height: CELL_H,
-      rx: CELL_RADIUS,
-      fill: color,
-    })
-  );
-  const legend =
-    el('text', { x: CARD_PADDING, y: legendY, class: 't-tick' }, textNode('Less')) +
-    swatches.join('') +
-    el(
-      'text',
-      { x: swatchLeft + theme.contribRamp.length * swatchPitch + 4, y: legendY, class: 't-tick' },
-      textNode('More')
-    );
+  const legend = rampLegend(theme, CARD_PADDING, legendY, {
+    pitch: CELL_H + 4,
+    swatch: (color, _level, cx, cy) =>
+      el('rect', {
+        x: cx - CELL_H / 2,
+        y: cy - CELL_H / 2,
+        width: CELL_H,
+        height: CELL_H,
+        rx: CELL_RADIUS,
+        fill: color,
+      }),
+  });
 
   const firstYear = life.years[0]?.year;
   const note = firstYear === undefined ? 'no activity yet · by week' : `${firstYear}–present · by week`;

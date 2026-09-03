@@ -3,6 +3,8 @@
 import type { DayContribution } from '../model.js';
 
 export interface RhythmData {
+  /** Every contribution in the series — the population the panels split. */
+  readonly total: number;
   /** Summed counts per weekday, index 0 = Monday .. 6 = Sunday. */
   readonly weekday: readonly number[]; // length 7
   /** Summed counts per month, index 0 = January .. 11 = December. */
@@ -67,6 +69,7 @@ export function computeRhythm(days: readonly DayContribution[]): RhythmData {
   const weekendSum = (weekday[5] ?? 0) + (weekday[6] ?? 0);
 
   return {
+    total,
     weekday,
     month,
     peakWeekday: indexOfMax(weekday),

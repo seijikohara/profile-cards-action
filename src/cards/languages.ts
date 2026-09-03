@@ -1,4 +1,12 @@
-/** Languages card: a squarified treemap by bytes with a full-coverage legend. */
+/**
+ * Languages card: a ranked list beside a squarified treemap, both by bytes.
+ *
+ * The list is the card's index and sits on the left, where a reader's eye
+ * starts: one row per language, top to bottom in size order, so the ranking is
+ * legible without decoding cell areas. The treemap holds the proportions the
+ * list cannot show. A three-column legend under the map read in reading order
+ * — across, then down — which put rank 4 directly below rank 1.
+ */
 
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { languageShares, type LanguageShare } from '../compute/languages.js';
@@ -10,16 +18,25 @@ import { formatBytes, formatInt } from '../svg/text.js';
 import { contrast, type Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 
-const TREE_TOP = 60;
-const TREE_HEIGHT = 190;
-const LEGEND_TOP_GAP = 30;
-const LEGEND_COLUMNS = 3;
-const LEGEND_ROW_HEIGHT = 30;
+const CONTENT_TOP = 60;
+
+// Left column: the ranked list.
+const LIST_WIDTH = 250;
+const LIST_ROW_HEIGHT = 27;
+const LIST_FIRST_BASELINE = CONTENT_TOP + 15;
+const LIST_NAME_X = CARD_PADDING + 18;
+const LIST_BYTES_RIGHT = CARD_PADDING + 176;
+const LIST_PCT_RIGHT = CARD_PADDING + LIST_WIDTH;
+
+// Right column: the treemap.
+const COLUMN_GAP = 20;
+const TREE_X = CARD_PADDING + LIST_WIDTH + COLUMN_GAP;
+const TREE_WIDTH = CARD_WIDTH - CARD_PADDING - TREE_X;
+const TREE_HEIGHT = 250;
 
 // In-cell label tiers by cell height (at LABEL_MIN_WIDTH or wider): the name
 // needs ~26px, the percentage line ~44px, the bytes line ~64px. Every tier's
-// last baseline clears the cell bottom — the old single 30px threshold let the
-// percentage baseline (y+34) fall outside the cell and clip.
+// last baseline clears the cell bottom.
 const LABEL_MIN_WIDTH = 54;
 const NAME_MIN_HEIGHT = 26;
 const PCT_MIN_HEIGHT = 44;
@@ -63,12 +80,11 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
     );
   }
 
-  const inner = CARD_WIDTH - CARD_PADDING * 2;
   const rects = squarify(
     shares.map((share) => share.bytes),
-    CARD_PADDING,
-    TREE_TOP,
-    inner,
+    TREE_X,
+    CONTENT_TOP,
+    TREE_WIDTH,
     TREE_HEIGHT
   );
 
@@ -88,44 +104,28 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
       fill,
     });
 
-    const label = cellLabel(share, rect, fill);
-
-    return el('g', { class: `fade c${rect.index}` }, rectEl, label);
+    return el('g', { class: `fade c${rect.index}` }, rectEl, cellLabel(share, rect, fill));
   });
 
-  // Legend lists every share, so each name and percentage appears regardless of
-  // how small its treemap cell is.
-  const legendTop = TREE_TOP + TREE_HEIGHT + LEGEND_TOP_GAP;
-  const columnWidth = inner / LEGEND_COLUMNS;
-  const legend = shares.map((share, index) => {
-    const column = index % LEGEND_COLUMNS;
-    const row = Math.floor(index / LEGEND_COLUMNS);
-    const x = CARD_PADDING + column * columnWidth;
-    const y = legendTop + row * LEGEND_ROW_HEIGHT;
+  // The ranked list covers every share, so each name, size, and percentage
+  // appears however small its treemap cell turns out to be.
+  const list = shares.map((share, index) => {
+    const y = LIST_FIRST_BASELINE + index * LIST_ROW_HEIGHT;
     return el(
       'g',
       {},
-      el('circle', { cx: x + 5, cy: y - 4, r: 5, fill: cellFill(share, theme) }),
-      el('text', { x: x + 18, y, class: 'leg-name' }, textNode(share.name)),
-      el(
-        'text',
-        { x: x + columnWidth - 70, y, class: 't-tick', 'text-anchor': 'end' },
-        textNode(formatBytes(share.bytes))
-      ),
-      el(
-        'text',
-        { x: x + columnWidth - 16, y, class: 't-tick', 'text-anchor': 'end' },
-        textNode(`${share.pct.toFixed(1)}%`)
-      )
+      el('circle', { cx: CARD_PADDING + 5, cy: y - 4, r: 5, fill: cellFill(share, theme) }),
+      el('text', { x: LIST_NAME_X, y, class: 'leg-name' }, textNode(share.name)),
+      el('text', { x: LIST_BYTES_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(formatBytes(share.bytes))),
+      el('text', { x: LIST_PCT_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(`${share.pct.toFixed(1)}%`))
     );
   });
 
-  const legendRows = Math.ceil(shares.length / LEGEND_COLUMNS);
-  const legendBottom = legendTop + (legendRows - 1) * LEGEND_ROW_HEIGHT;
+  const contentBottom = Math.max(CONTENT_TOP + TREE_HEIGHT, CONTENT_TOP + shares.length * LIST_ROW_HEIGHT);
 
   // Footer: the population the treemap slices — counts before Other-folding.
   const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0);
-  const footerBaseline = legendBottom + 30;
+  const footerBaseline = contentBottom + 28;
   const footer = el(
     'text',
     { x: CARD_PADDING, y: footerBaseline, class: 't-label' },
@@ -164,6 +164,6 @@ export function renderLanguages(data: ProfileData, theme: Theme, fontFaceCss: st
       fontFaceCss,
     },
     ...cells,
-    el('g', { class: 'fade' }, ...legend, footer)
+    el('g', { class: 'fade' }, ...list, footer)
   );
 }

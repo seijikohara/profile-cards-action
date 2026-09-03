@@ -16,8 +16,19 @@ describe('languageShares', () => {
     const slices = Array.from({ length: 11 }, (_, index) => slice(`L${index}`, 1000 - index));
     const shares = languageShares(slices, 8);
     expect(shares).toHaveLength(9);
-    expect(shares.at(-1)?.name).toBe('Other');
-    expect(shares.at(-1)?.color).toBeNull();
+    const other = shares.find((share) => share.name === 'Other');
+    expect(other?.color).toBeNull();
+    expect(other?.bytes).toBe(992 + 991 + 990);
+  });
+
+  it('ranks every entry by size, Other included', () => {
+    // The folded tail (3 x ~990) outweighs every language it replaced, so a
+    // list that pinned Other last would open with its smallest row out of order.
+    const slices = Array.from({ length: 11 }, (_, index) => slice(`L${index}`, 1000 - index));
+    const shares = languageShares(slices, 8);
+    const bytes = shares.map((share) => share.bytes);
+    expect(bytes).toEqual(bytes.toSorted((a, b) => b - a));
+    expect(shares[0]?.name).toBe('Other');
   });
 
   it('omits Other when everything fits', () => {

@@ -31,6 +31,17 @@ export function measureSans(text: string, size: number, weight: FontWeight = 're
   return em * size * (weight === 'semibold' ? BOLD_FACTOR : 1);
 }
 
+/**
+ * Advance width of the mono stack, in em. Every member of the stack is
+ * monospaced, so one constant covers all of them.
+ */
+const MONO_EM = 0.6;
+
+/** Estimated rendered width of `text` at `size` px in the mono stack. */
+export function measureMono(text: string, size: number): number {
+  return Array.from(text).length * size * MONO_EM;
+}
+
 /** 12345 -> "12,345". Hand-rolled so output never depends on ICU data. */
 export function formatInt(v: number): string {
   const sign = v < 0 ? '-' : '';

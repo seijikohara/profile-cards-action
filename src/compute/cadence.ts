@@ -1,5 +1,6 @@
 /** Weekday × hour commit cadence over the trailing-year commit sweep. */
 
+import { range } from '../iter.js';
 import type { CommitSample } from '../model.js';
 
 export interface CadencePeak {
@@ -13,6 +14,8 @@ export interface CadencePeak {
 export interface CadenceData {
   /** Commit counts, rows Monday..Sunday, columns hour 0..23. */
   readonly grid: readonly (readonly number[])[];
+  /** Commits per hour of day summed over weekdays, index 0..23 — the marginal day curve. */
+  readonly hourTotals: readonly number[];
   /** Quantile level 0..4 per cell, same shape as grid. */
   readonly levels: readonly (readonly (0 | 1 | 2 | 3 | 4)[])[];
   /** The busiest cell; ties resolve to the earliest row-major position. Undefined without commits. */
@@ -113,6 +116,7 @@ export function computeCadence(commits: readonly CommitSample[]): CadenceData {
 
   return {
     grid,
+    hourTotals: range(24).map((hour) => grid.reduce((sum, row) => sum + (row[hour] ?? 0), 0)),
     levels,
     peak,
     totalCommits: commits.length,

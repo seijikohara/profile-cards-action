@@ -39,6 +39,9 @@ export interface TrailingCalendar {
 export interface RepoCommits {
   readonly nameWithOwner: string;
   readonly commits: number;
+  /** Linguist's pick for the repository; null when it has no detected language. */
+  readonly language: { readonly name: string; readonly color: string | null } | null;
+  readonly stars: number;
 }
 
 /** One commit authored by the user on a default branch, from the trailing-year sweep. */
