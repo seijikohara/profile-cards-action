@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barFill, rampLegend, rampLegendWidth } from '../src/cards/legend.js';
+import { barFill, privacyNote, rampLegend, rampLegendWidth } from '../src/cards/legend.js';
 import { DARK, LIGHT } from '../src/theme.js';
 import { assertWellFormed } from './xml.js';
 
@@ -48,5 +48,12 @@ describe('rampLegend', () => {
     });
     expect(svg).not.toContain('<rect ');
     expect(svg.match(/<circle /g)).toHaveLength(LIGHT.contribRamp.length);
+  });
+});
+
+describe('privacyNote', () => {
+  it('names which population the card counted', () => {
+    expect(privacyNote(true)).toBe('incl. private');
+    expect(privacyNote(false)).toBe('public only');
   });
 });

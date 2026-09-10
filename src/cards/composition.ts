@@ -16,6 +16,7 @@ import { el, num, textNode } from '../svg/dsl.js';
 import { formatCompact, measureSans } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
+import { privacyNote } from './legend.js';
 
 const MAX_BAR_HEIGHT = 110;
 const BAR_WIDTH = 30;
@@ -153,7 +154,7 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
       theme,
       height,
       title: 'Contribution composition',
-      note: 'by type · incl. private',
+      note: `by type · ${privacyNote(data.includesPrivate)}`,
       description: `Contribution composition by year for ${data.login}: commits, pull requests, issues, reviews, and private contributions.`,
       extraCss: `.bar{opacity:0;animation:grow ${motionDuration}s cubic-bezier(.2,.7,.3,1) forwards}`,
       fontFaceCss,

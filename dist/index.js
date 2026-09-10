@@ -57367,6 +57367,16 @@ function rampLegend(theme, x, y, options = {}) {
 		class: "t-tick"
 	}, textNode("More"));
 }
+/**
+* Provenance caption for a card's note slot.
+*
+* A contribution count that omits private work and one that includes it are
+* different numbers, and nothing on the card distinguishes them. Naming which
+* one is drawn is the difference between a quiet year and a private one.
+*/
+function privacyNote(includesPrivate) {
+	return includesPrivate ? "incl. private" : "public only";
+}
 //#endregion
 //#region src/cards/cadence.ts
 /**
@@ -57751,7 +57761,7 @@ function renderComposition(data, theme, fontFaceCss) {
 		theme,
 		height,
 		title: "Contribution composition",
-		note: "by type · incl. private",
+		note: `by type · ${privacyNote(data.includesPrivate)}`,
 		description: `Contribution composition by year for ${data.login}: commits, pull requests, issues, reviews, and private contributions.`,
 		extraCss: `.bar{opacity:0;animation:grow ${motionDuration}s cubic-bezier(.2,.7,.3,1) forwards}`,
 		fontFaceCss
@@ -57914,7 +57924,7 @@ function renderContributions(data, streaks, theme, fontFaceCss) {
 		theme,
 		height: legendY + 24 - 8,
 		title: "Contributions",
-		note: "past 12 months · streaks over all years",
+		note: `past 12 months · streaks over all years · ${privacyNote(data.trailing.includesPrivate)}`,
 		description: `Contribution activity for ${data.login}: ${formatInt(data.trailing.total)} contributions in the past 12 months, current streak ${formatInt(streaks.current)} days, longest streak ${formatInt(streaks.longest)} days.`,
 		extraCss: `.iso{opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}`,
 		fontFaceCss
@@ -58400,11 +58410,12 @@ function renderLifetime(data, theme, fontFaceCss) {
 		})
 	});
 	const firstYear = life.years[0]?.year;
+	const privacy = privacyNote(data.includesPrivate);
 	return cardFrame({
 		theme,
 		height,
 		title: "Contribution history",
-		note: firstYear === void 0 ? "no activity yet · by week" : `${firstYear}–present · by week`,
+		note: firstYear === void 0 ? "no activity yet · by week" : `${firstYear}–present · by week · ${privacy}`,
 		description: firstYear === void 0 ? `Contribution history for ${data.login}: no activity yet.` : `Contribution history for ${data.login}, ${firstYear} to present, one row per year.`,
 		extraCss: `.wk{opacity:0;animation:fade .5s ease forwards}`,
 		fontFaceCss
@@ -59259,6 +59270,11 @@ query Year($login: String!, $from: DateTime!, $to: DateTime!) {
 * private repositories here, and their names must not reach a public card.
 * `primaryLanguage` and `stargazerCount` give each ranked row an identity
 * beyond its name — what it is written in, and whether anyone else uses it.
+*
+* `hasAnyRestrictedContributions` says whether the calendar totals count work
+* the viewer cannot see the details of. It follows the profile's "include
+* private contributions" setting, so it is the only way to tell a quiet year
+* from a private one.
 */
 const TRAILING_QUERY = `
 query Trailing($login: String!) {
@@ -59266,6 +59282,7 @@ query Trailing($login: String!) {
     contributionsCollection {
       totalCommitContributions
       totalRepositoriesWithContributedCommits
+      hasAnyRestrictedContributions
       contributionCalendar {
         totalContributions
         weeks { contributionDays { date contributionCount contributionLevel } }
@@ -59430,7 +59447,8 @@ async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 	if (!trailingCalendar) throw new Error("missing trailing calendar");
 	const trailing = {
 		days: flattenCalendar(trailingCalendar),
-		total: trailingCalendar.totalContributions
+		total: trailingCalendar.totalContributions,
+		includesPrivate: trailingData.user?.contributionsCollection.hasAnyRestrictedContributions ?? false
 	};
 	const topRepositories = (trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []).filter((entry) => !entry.repository.isPrivate).map((entry) => ({
 		nameWithOwner: entry.repository.nameWithOwner,
@@ -59462,6 +59480,7 @@ async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 		contributedTo: user.repositoriesContributedTo.totalCount,
 		languages: aggregateLanguages(repoNodes),
 		years: yearActivities,
+		includesPrivate: yearActivities.some((year) => year.restricted > 0),
 		lifetimeDays,
 		trailing,
 		commits,

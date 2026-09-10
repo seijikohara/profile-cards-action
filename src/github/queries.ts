@@ -135,6 +135,11 @@ export interface YearQueryData {
  * private repositories here, and their names must not reach a public card.
  * `primaryLanguage` and `stargazerCount` give each ranked row an identity
  * beyond its name — what it is written in, and whether anyone else uses it.
+ *
+ * `hasAnyRestrictedContributions` says whether the calendar totals count work
+ * the viewer cannot see the details of. It follows the profile's "include
+ * private contributions" setting, so it is the only way to tell a quiet year
+ * from a private one.
  */
 export const TRAILING_QUERY = `
 query Trailing($login: String!) {
@@ -142,6 +147,7 @@ query Trailing($login: String!) {
     contributionsCollection {
       totalCommitContributions
       totalRepositoriesWithContributedCommits
+      hasAnyRestrictedContributions
       contributionCalendar {
         totalContributions
         weeks { contributionDays { date contributionCount contributionLevel } }
@@ -164,6 +170,7 @@ export interface TrailingQueryData {
     readonly contributionsCollection: {
       readonly totalCommitContributions: number;
       readonly totalRepositoriesWithContributedCommits: number;
+      readonly hasAnyRestrictedContributions: boolean;
       readonly contributionCalendar: CalendarData;
       readonly commitContributionsByRepository: readonly {
         readonly repository: {

@@ -17,7 +17,7 @@ import { el, textNode } from '../svg/dsl.js';
 import { formatInt } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
-import { rampLegend } from './legend.js';
+import { privacyNote, rampLegend } from './legend.js';
 
 /** Top-axis month labels, placed by week ≈ month * COLS / 12. */
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
@@ -149,7 +149,8 @@ export function renderLifetime(data: ProfileData, theme: Theme, fontFaceCss: str
   });
 
   const firstYear = life.years[0]?.year;
-  const note = firstYear === undefined ? 'no activity yet · by week' : `${firstYear}–present · by week`;
+  const privacy = privacyNote(data.includesPrivate);
+  const note = firstYear === undefined ? 'no activity yet · by week' : `${firstYear}–present · by week · ${privacy}`;
   const description =
     firstYear === undefined
       ? `Contribution history for ${data.login}: no activity yet.`

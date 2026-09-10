@@ -16,7 +16,7 @@ import { el, num, textNode } from '../svg/dsl.js';
 import { formatDate, formatDateRange, formatInt, formatUtcTimestamp } from '../svg/text.js';
 import { shade, type Theme } from '../theme.js';
 import { cardFrame, tileRow, type TileSpec } from './frame.js';
-import { rampLegend } from './legend.js';
+import { privacyNote, rampLegend } from './legend.js';
 
 // Axonometric tile: 24px wide, 8px tall footprint (3:1 — flatter than true
 // isometric, which keeps the 53-week ribbon from eating vertical space).
@@ -173,7 +173,7 @@ export function renderContributions(data: ProfileData, streaks: Streaks, theme: 
       theme,
       height,
       title: 'Contributions',
-      note: 'past 12 months · streaks over all years',
+      note: `past 12 months · streaks over all years · ${privacyNote(data.trailing.includesPrivate)}`,
       description: `Contribution activity for ${data.login}: ${formatInt(data.trailing.total)} contributions in the past 12 months, current streak ${formatInt(streaks.current)} days, longest streak ${formatInt(streaks.longest)} days.`,
       extraCss: `.iso{opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}`,
       fontFaceCss,
