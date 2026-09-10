@@ -1,7 +1,7 @@
 /** Deterministic synthetic profile data for tests and the preview app. */
 
 import { range } from '../src/iter.js';
-import type { CommitSample, DayContribution, ProfileData, RepoCommits } from '../src/model.js';
+import type { CommitSample, DayContribution, PortfolioRepo, ProfileData, RepoCommits } from '../src/model.js';
 
 const MULBERRY_INCREMENT = 0x6d2b79f5;
 
@@ -176,6 +176,22 @@ function topRepositories(): RepoCommits[] {
   ];
 }
 
+const LICENSES = ['MIT', 'MIT', 'Apache-2.0', 'MIT', null, 'MIT', null, 'MIT', null, 'MIT', null, 'MIT'] as const;
+
+/** Owned source repositories with staggered creation and push dates. */
+function portfolioRepos(): PortfolioRepo[] {
+  return topRepositories().map((repo, index) => ({
+    nameWithOwner: repo.nameWithOwner,
+    createdAt: `${2016 + index}-03-${String(((index * 7) % 27) + 1).padStart(2, '0')}T09:00:00Z`,
+    pushedAt: `2026-0${((index % 7) + 1).toString()}-1${index % 9}T09:00:00Z`,
+    commits: repo.commits * 3 + 40,
+    language: repo.language,
+    stars: repo.stars,
+    diskUsageKb: 1200 * (index + 3),
+    license: LICENSES[index] ?? null,
+  }));
+}
+
 export function makeFixture(): ProfileData {
   const trailing = trailingDays();
   return {
@@ -226,6 +242,7 @@ export function makeFixture(): ProfileData {
     commits: commitSamples(),
     commitSweep: { swept: 18, candidates: 18 },
     topRepositories: topRepositories(),
+    repositories: portfolioRepos(),
     trailingCommits: { total: 1432, repositories: 18 },
     generatedAt: '2026-07-22T03:17:00.000Z',
   };

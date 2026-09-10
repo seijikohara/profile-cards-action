@@ -18,6 +18,7 @@ const CARDS = [
   'rhythm',
   'cadence',
   'repositories',
+  'portfolio',
   'languages',
 ];
 

@@ -41,6 +41,7 @@ const KNOWN_CARDS: readonly string[] = [
   'rhythm',
   'cadence',
   'repositories',
+  'portfolio',
   'languages',
 ];
 

@@ -37,6 +37,29 @@ export interface TrailingCalendar {
   readonly includesPrivate: boolean;
 }
 
+/**
+ * One owned public source repository, as the portfolio card reads it.
+ *
+ * `pushedAt` records a push by ANY author, automation included, so it is a
+ * recency signal and never a health one: a finished, correct library needs no
+ * pushes.
+ */
+export interface PortfolioRepo {
+  readonly nameWithOwner: string;
+  /** ISO datetime the repository was created. */
+  readonly createdAt: string;
+  /** ISO datetime of the last push by any author; null for an empty repository. */
+  readonly pushedAt: string | null;
+  /** Commits on the default branch by every author; 0 for an empty repository. */
+  readonly commits: number;
+  readonly language: { readonly name: string; readonly color: string | null } | null;
+  readonly stars: number;
+  /** Size on disk in KB, 0 when unmeasured. */
+  readonly diskUsageKb: number;
+  /** SPDX identifier, null when the repository carries no recognized license. */
+  readonly license: string | null;
+}
+
 /** One repository and the user's trailing-year commit contributions to it. */
 export interface RepoCommits {
   readonly nameWithOwner: string;
@@ -111,6 +134,8 @@ export interface ProfileData {
   readonly commitSweep: CommitSweep;
   /** Public repositories the user committed to, trailing 12 months, API order. */
   readonly topRepositories: readonly RepoCommits[];
+  /** Owned public source repositories, most commits first. */
+  readonly repositories: readonly PortfolioRepo[];
   /** Trailing-year commit-contribution totals across ALL repositories the viewer can see. */
   readonly trailingCommits: { readonly total: number; readonly repositories: number };
   /** ISO timestamp of generation, minute precision. */

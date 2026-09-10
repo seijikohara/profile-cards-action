@@ -57526,13 +57526,13 @@ const WEEKDAY_LABELS$1 = [
 /** Night runs 22:00–05:59 author-local — the window the footer's share counts. */
 const NIGHT_FROM = 22;
 const NIGHT_UNTIL = 6;
-const BAND_TOP$2 = 56;
+const BAND_TOP$3 = 56;
 const EYEBROW_BASELINE$1 = 68;
 const HIST_MAX_HEIGHT = 30;
 const HIST_BASELINE = 102;
 const GRID_TOP = 122;
-const ROW_H$2 = 24;
-const TICK_BASELINE$1 = GRID_TOP + ROW_H$2 * WEEKDAY_LABELS$1.length + 16;
+const ROW_H$3 = 24;
+const TICK_BASELINE$1 = GRID_TOP + ROW_H$3 * WEEKDAY_LABELS$1.length + 16;
 const FOOTER_BASELINE$2 = TICK_BASELINE$1 + 29;
 const GRID_LEFT = 76;
 const COL_W = 746 / 24;
@@ -57571,7 +57571,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		const width = (band.until - band.from) * COL_W;
 		return [el("rect", {
 			x,
-			y: BAND_TOP$2,
+			y: BAND_TOP$3,
 			width,
 			height: 52,
 			rx: 3,
@@ -57601,7 +57601,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		const cx = columnX(hour) + COL_W / 2;
 		const dots = cadence.levels.map((row, weekday) => {
 			const level = row[hour] ?? 0;
-			const cy = GRID_TOP + weekday * ROW_H$2 + ROW_H$2 / 2;
+			const cy = GRID_TOP + weekday * ROW_H$3 + ROW_H$3 / 2;
 			const isPeak = cadence.peak !== void 0 && cadence.peak.weekday === weekday && cadence.peak.hour === hour;
 			return el("circle", {
 				cx,
@@ -57617,7 +57617,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 	});
 	const weekdayLabels = WEEKDAY_LABELS$1.map((label, index) => el("text", {
 		x: 66,
-		y: GRID_TOP + index * ROW_H$2 + ROW_H$2 / 2 + 4,
+		y: GRID_TOP + index * ROW_H$3 + ROW_H$3 / 2 + 4,
 		class: "t-label",
 		"text-anchor": "end"
 	}, textNode(label)));
@@ -58370,7 +58370,7 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 //#endregion
 //#region src/compute/lifetime.ts
 /** Lifetime weekly heatmap: a "wall of years" of per-week activity levels. */
-const DAY_MS$2 = 864e5;
+const DAY_MS$3 = 864e5;
 const ISO_DATE$1 = /^(\d{4})-(\d{2})-(\d{2})$/;
 /**
 * Map an ISO "YYYY-MM-DD" date to its (year, weekIndex) bucket.
@@ -58386,7 +58386,7 @@ function bucketOf(date) {
 	const year = Number(match[1]);
 	const month = Number(match[2]);
 	const dayOfMonth = Number(match[3]);
-	const ordinal = (Date.UTC(year, month - 1, dayOfMonth) - Date.UTC(year, 0, 1)) / DAY_MS$2 + 1;
+	const ordinal = (Date.UTC(year, month - 1, dayOfMonth) - Date.UTC(year, 0, 1)) / DAY_MS$3 + 1;
 	return {
 		year,
 		weekIndex: Math.floor((ordinal - 1) / 7)
@@ -58591,7 +58591,7 @@ function renderLifetime(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) 
 const WINDOW_DAYS = 365;
 /** Days between samples. Weekly is dense enough to draw and cheap enough to keep. */
 const SAMPLE_STEP = 7;
-const DAY_MS$1 = 864e5;
+const DAY_MS$2 = 864e5;
 function dateStr(ms) {
 	return new Date(ms).toISOString().slice(0, 10);
 }
@@ -58621,8 +58621,8 @@ function computeMomentum(days, years = []) {
 	};
 	const byDate = new Map(days.map((day) => [day.date, day.count]));
 	const startMs = Date.parse(`${first}T00:00:00Z`);
-	const span = Math.round((Date.parse(`${last}T00:00:00Z`) - startMs) / DAY_MS$1) + 1;
-	const counts = range(span).map((offset) => byDate.get(dateStr(startMs + offset * DAY_MS$1)) ?? 0);
+	const span = Math.round((Date.parse(`${last}T00:00:00Z`) - startMs) / DAY_MS$2) + 1;
+	const counts = range(span).map((offset) => byDate.get(dateStr(startMs + offset * DAY_MS$2)) ?? 0);
 	const prefix = [0];
 	for (const count of counts) prefix.push((prefix.at(-1) ?? 0) + count);
 	const windowEndingAt = (index) => (prefix[index + 1] ?? 0) - (prefix[Math.max(0, index + 1 - WINDOW_DAYS)] ?? 0);
@@ -58630,7 +58630,7 @@ function computeMomentum(days, years = []) {
 	const points = span <= oldest ? [] : range(Math.floor((span - 1 - oldest) / SAMPLE_STEP) + 1).map((step) => {
 		const index = span - 1 - step * SAMPLE_STEP;
 		return {
-			date: dateStr(startMs + index * DAY_MS$1),
+			date: dateStr(startMs + index * DAY_MS$2),
 			total: windowEndingAt(index)
 		};
 	}).toReversed();
@@ -58676,13 +58676,13 @@ const Y_HEADROOM = 1.12;
 /** Year ticks closer than this collapse into their neighbour. */
 const MIN_TICK_GAP = 34;
 /** Height of the "not enough history yet" stub, matching the languages card. */
-const STUB_HEIGHT = 96;
+const STUB_HEIGHT$1 = 96;
 function renderMomentum(data, theme, fontFaceCss) {
 	const momentum = computeMomentum(data.lifetimeDays, data.years);
 	const { points, peak, current, since } = momentum;
 	if (points.length < 2 || peak === void 0 || current === void 0 || since === void 0) return cardFrame({
 		theme,
-		height: STUB_HEIGHT,
+		height: STUB_HEIGHT$1,
 		title: "Momentum",
 		note: "rolling 12 months",
 		description: `Momentum for ${data.login}: not enough history to draw a rolling year.`,
@@ -58718,7 +58718,7 @@ function renderMomentum(data, theme, fontFaceCss) {
 		stroke: theme.border,
 		"stroke-width": 1
 	});
-	const ticks = yearTicks(points).reduce((acc, tick) => {
+	const ticks = yearTicks$1(points).reduce((acc, tick) => {
 		const tx = x(tick.index);
 		if (tx - acc.lastX < MIN_TICK_GAP) return acc;
 		return {
@@ -58790,7 +58790,7 @@ function peakMarker(peak, points, theme, x, y) {
 	}, textNode(label));
 }
 /** Index of the first sample in each calendar year the series covers. */
-function yearTicks(points) {
+function yearTicks$1(points) {
 	return range(points.length).flatMap((index) => {
 		const year = points[index]?.date.slice(0, 4);
 		const previous = index === 0 ? void 0 : points[index - 1]?.date.slice(0, 4);
@@ -58904,6 +58904,240 @@ function renderOverview(data, theme, fontFaceCss) {
 	}, el("g", { class: "fade" }, tilesA.svg, tilesB.svg));
 }
 //#endregion
+//#region src/cards/labels.ts
+/** Repository labels shared by the cards that list repositories. */
+/** Ellipsize a label so it cannot run under the column to its right. */
+function truncate(label, maxChars) {
+	return label.length > maxChars ? `${label.slice(0, maxChars - 1)}…` : label;
+}
+/**
+* Two-tone owner/name label.
+*
+* The owner prefix repeats down a list of one person's repositories, so it
+* wears the muted ink while the repository name carries the row's identity in
+* the foreground color.
+*/
+function repoLabelSpans(nameWithOwner, fg, maxChars) {
+	const label = truncate(nameWithOwner, maxChars);
+	const slash = label.indexOf("/");
+	if (slash < 0) return [el("tspan", { fill: fg }, textNode(label))];
+	return [textNode(label.slice(0, slash + 1)), el("tspan", { fill: fg }, textNode(label.slice(slash + 1)))];
+}
+//#endregion
+//#region src/cards/portfolio.ts
+/**
+* Portfolio card: one lifeline per owned repository on a shared time axis.
+*
+* The other repository card ranks by what the user did last year; this one
+* unflattens the dimension every other card sums away — which projects exist,
+* when each started, and when each was last touched.
+*
+* The ramp encodes push recency as magnitude, the same reading the calendar
+* cards teach. It is deliberately never called health: `pushedAt` moves for a
+* push by any author, automation included, and a finished library needs no
+* pushes at all.
+*/
+/** Rows the card draws. Beyond this the lifelines stop resolving as separate. */
+const MAX_ROWS$1 = 12;
+const HEAD_BASELINE = 62;
+const BAND_TOP$2 = 78;
+const ROW_H$2 = 24;
+const DOT_CX$1 = 29;
+const NAME_X = 42;
+const MAX_NAME$1 = 34;
+const TRACK_X = 268;
+const COMMITS_RIGHT = 756;
+const LICENSE_RIGHT = 822;
+const TRACK_WIDTH = 442;
+const LIFELINE_H = 4;
+const END_DOT_R = 3.4;
+const DAY_MS$1 = 864e5;
+/** Height of the stub shown when there is nothing to plot. */
+const STUB_HEIGHT = 96;
+/**
+* Ramp level for how recently a repository was pushed. Level 0 is reserved for
+* "no data", so an ancient repository still reads as a mark rather than a gap.
+*/
+function recencyLevel(pushedAt, nowMs) {
+	if (pushedAt === null) return 1;
+	const days = (nowMs - Date.parse(pushedAt)) / DAY_MS$1;
+	if (days < 30) return 4;
+	if (days < 90) return 3;
+	if (days < 365) return 2;
+	return 1;
+}
+function renderPortfolio(data, theme, fontFaceCss) {
+	const rows = data.repositories.slice(0, MAX_ROWS$1);
+	const totals = data.repositories;
+	if (rows.length === 0) return cardFrame({
+		theme,
+		height: STUB_HEIGHT,
+		title: "Portfolio",
+		note: "public source repositories",
+		description: `No public source repositories for ${data.login}.`,
+		fontFaceCss
+	}, el("text", {
+		x: 24,
+		y: 72,
+		class: "t-label"
+	}, textNode("No public source repositories")));
+	const nowMs = Math.max(...totals.map((repo) => repo.pushedAt === null ? 0 : Date.parse(repo.pushedAt)), Date.parse(data.generatedAt));
+	const startMs = Math.min(...rows.map((repo) => Date.parse(repo.createdAt)));
+	const span = Math.max(1, nowMs - startMs);
+	const x = (ms) => TRACK_X + (ms - startMs) / span * TRACK_WIDTH;
+	const lifelines = rows.map((repo, index) => {
+		const rowCenter = BAND_TOP$2 + index * ROW_H$2 + ROW_H$2 / 2;
+		const level = recencyLevel(repo.pushedAt, nowMs);
+		const fill = theme.contribRamp[level];
+		const from = x(Date.parse(repo.createdAt));
+		const to = repo.pushedAt === null ? from : x(Date.parse(repo.pushedAt));
+		const bar = repo.pushedAt === null ? "" : el("rect", {
+			x: from,
+			y: rowCenter - LIFELINE_H / 2,
+			width: Math.max(LIFELINE_H, to - from),
+			height: LIFELINE_H,
+			rx: LIFELINE_H / 2,
+			fill
+		});
+		return el("g", {
+			class: "life",
+			style: `animation-delay:${index * 45}ms`
+		}, bar, el("circle", {
+			cx: to,
+			cy: rowCenter,
+			r: END_DOT_R,
+			fill
+		}));
+	});
+	const labels = rows.flatMap((repo, index) => {
+		const baseline = BAND_TOP$2 + index * ROW_H$2 + ROW_H$2 / 2 + 4;
+		return [
+			el("circle", {
+				cx: DOT_CX$1,
+				cy: baseline - 4,
+				r: 4.5,
+				fill: repo.language?.color ?? theme.border
+			}),
+			el("text", {
+				x: NAME_X,
+				y: baseline,
+				class: "t-label"
+			}, ...repoLabelSpans(repo.nameWithOwner, theme.fg, MAX_NAME$1)),
+			el("text", {
+				x: COMMITS_RIGHT,
+				y: baseline - .7,
+				class: "t-tick",
+				"text-anchor": "end"
+			}, textNode(formatCompact(repo.commits))),
+			el("text", {
+				x: LICENSE_RIGHT,
+				y: baseline - .7,
+				class: "t-tick",
+				"text-anchor": "end"
+			}, textNode(repo.license ?? "—"))
+		];
+	});
+	const bandBottom = BAND_TOP$2 + rows.length * ROW_H$2;
+	const tickBaseline = bandBottom + 17;
+	const ticks = yearTicks(startMs, nowMs).map((tick) => el("text", {
+		x: x(tick.ms),
+		y: tickBaseline,
+		class: "t-tick",
+		"text-anchor": "middle"
+	}, textNode(String(tick.year))));
+	const axisRule = el("line", {
+		x1: TRACK_X,
+		y1: bandBottom + .5,
+		x2: 710,
+		y2: bandBottom + .5,
+		stroke: theme.border,
+		"stroke-width": 1
+	});
+	const columnHeads = el("text", {
+		x: 24,
+		y: HEAD_BASELINE,
+		class: "t-mono"
+	}, textNode("REPOSITORY")) + el("text", {
+		x: TRACK_X,
+		y: HEAD_BASELINE,
+		class: "t-mono"
+	}, textNode("CREATED → LAST PUSH")) + el("text", {
+		x: COMMITS_RIGHT,
+		y: HEAD_BASELINE,
+		class: "t-mono",
+		"text-anchor": "end"
+	}, textNode("COMMITS")) + el("text", {
+		x: LICENSE_RIGHT,
+		y: HEAD_BASELINE,
+		class: "t-mono",
+		"text-anchor": "end"
+	}, textNode("LICENSE"));
+	const recent = totals.filter((repo) => recencyLevel(repo.pushedAt, nowMs) >= 3).length;
+	const licensed = totals.filter((repo) => repo.license !== null).length;
+	const disk = totals.reduce((sum, repo) => sum + repo.diskUsageKb, 0) * 1e3;
+	const footerBaseline = tickBaseline + 28;
+	const footerParts = [
+		el("tspan", { class: "t-stat" }, textNode(formatInt(totals.length))),
+		textNode(" source repositories · "),
+		el("tspan", { class: "t-stat" }, textNode(formatInt(recent))),
+		textNode(" pushed in the last 90 days · "),
+		el("tspan", { class: "t-stat" }, textNode(formatInt(licensed))),
+		textNode(" licensed · "),
+		el("tspan", { class: "t-stat" }, textNode(formatBytes(disk))),
+		textNode(" on disk")
+	];
+	if (totals.length > rows.length) footerParts.push(textNode(` · top ${rows.length} shown`));
+	const footer = el("text", {
+		x: 24,
+		y: footerBaseline,
+		class: "t-label"
+	}, ...footerParts);
+	const key = recencyKey(theme, footerBaseline);
+	return cardFrame({
+		theme,
+		height: footerBaseline + 24,
+		title: "Portfolio",
+		note: "public source repositories · by commits",
+		description: `Repository portfolio for ${data.login}: ${formatInt(totals.length)} public source repositories, ${formatInt(recent)} pushed in the last 90 days.`,
+		extraCss: `.life{opacity:0;animation:fade .45s ease forwards}`,
+		fontFaceCss
+	}, el("g", { class: "fade" }, columnHeads, axisRule, ...ticks, ...labels, footer, key), ...lifelines);
+}
+/** Ramp key naming what the lifeline colors mean, right-aligned on `baseline`. */
+function recencyKey(theme, baseline) {
+	const caption = "pushed recently, any author";
+	const swatch = 9;
+	const pitch = 12;
+	const captionWidth = measureMono(caption, 9.5);
+	const right = 822;
+	const firstX = right - captionWidth - 8 - 48;
+	return range(4).map((step) => el("rect", {
+		x: firstX + step * pitch,
+		y: baseline - swatch + 1,
+		width: swatch,
+		height: swatch,
+		rx: 2,
+		fill: theme.contribRamp[step + 1]
+	})).join("") + el("text", {
+		x: right,
+		y: baseline,
+		class: "t-tick",
+		"text-anchor": "end"
+	}, textNode(caption));
+}
+/** One tick per January the axis spans, plus the axis start. */
+function yearTicks(startMs, endMs) {
+	const firstYear = new Date(startMs).getUTCFullYear();
+	return range(new Date(endMs).getUTCFullYear() - firstYear + 1).flatMap((offset) => {
+		const year = firstYear + offset;
+		const ms = Date.UTC(year, 0, 1);
+		return ms >= startMs && ms <= endMs ? [{
+			ms,
+			year
+		}] : [];
+	});
+}
+//#endregion
 //#region src/compute/repositories.ts
 const MAX_ROWS = 10;
 /** Sort, drop empty entries, and cap the ranking for the card. */
@@ -58940,21 +59174,6 @@ const MIN_BAR$1 = 3;
 const MAX_NAME = 36;
 const TICK_SIZE = 9.5;
 const STAR_R = 4.6;
-/** Ellipsize long owner/name labels so they never run under the stars column. */
-function truncate(name) {
-	return name.length > MAX_NAME ? `${name.slice(0, 35)}…` : name;
-}
-/**
-* Two-tone label: the owner prefix repeats down the list, so it wears the
-* muted ink while the repository name carries the row's identity in the
-* foreground color.
-*/
-function labelSpans(nameWithOwner, fg) {
-	const truncated = truncate(nameWithOwner);
-	const slash = truncated.indexOf("/");
-	if (slash < 0) return [el("tspan", { fill: fg }, textNode(truncated))];
-	return [textNode(truncated.slice(0, slash + 1)), el("tspan", { fill: fg }, textNode(truncated.slice(slash + 1)))];
-}
 /**
 * Five-pointed star as a path rather than the ★ glyph: the embedded font is
 * subset to the characters the cards actually typeset, and a missing glyph
@@ -59003,7 +59222,7 @@ function renderRepositories(data, theme, fontFaceCss) {
 			x: LABEL_X,
 			y: rowCenter + 4,
 			class: "t-label"
-		}, ...labelSpans(row.nameWithOwner, theme.fg)), starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme));
+		}, ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME)), starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme));
 		bars.push(el("g", {
 			class: "hbar",
 			style: `animation-delay:${index * 55}ms;transform-origin:${BAR_START_X$1}px ${rowCenter}px`
@@ -59306,6 +59525,7 @@ function renderCard(card, data, streaks, theme, fontFaceCss, options = DEFAULT_C
 		case "rhythm": return renderRhythm(data, theme, fontFaceCss);
 		case "cadence": return renderCadence(data, theme, fontFaceCss, options.legend);
 		case "repositories": return renderRepositories(data, theme, fontFaceCss);
+		case "portfolio": return renderPortfolio(data, theme, fontFaceCss);
 		case "languages": return renderLanguages(data, theme, fontFaceCss, options.languageLimit);
 		default: throw new Error(`Unknown card: ${card}`);
 	}
@@ -59609,6 +59829,10 @@ async function attemptRequest(token, query, variables, attempt) {
 /**
 * Everything except calendars, in one cheap query (1 point, ~1.1k nodes).
 *
+* The per-repository scalars beyond `languages` — creation, size, license,
+* fork count, and the default branch's commit count — are what the portfolio
+* card draws. Measured live, adding all of them leaves the query at cost 1.
+*
 * `languages` asks for 30 per repository and reads `totalSize` alongside the
 * edges. The edge list is a truncation, so summing it alone understates the
 * total silently; `totalSize` minus the summed edges is the exact remainder,
@@ -59649,10 +59873,16 @@ query Profile($login: String!, $cursor: String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         name
+        nameWithOwner
         isFork
         isArchived
+        createdAt
         pushedAt
+        diskUsage
         stargazerCount
+        licenseInfo { spdxId }
+        primaryLanguage { name color }
+        defaultBranchRef { target { ... on Commit { history { totalCount } } } }
         languages(first: 30, orderBy: { field: SIZE, direction: DESC }) {
           totalSize
           edges { size node { name color } }
@@ -59896,6 +60126,16 @@ async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 	const lifetimeDays = mergeDailySeries(dailySeries).filter((day) => day.date <= today);
 	const sourceRepos = repoNodes.filter((repo) => !repo.isFork && !repo.isArchived);
 	const languages = aggregateLanguages(repoNodes);
+	const portfolio = sourceRepos.map((repo) => ({
+		nameWithOwner: repo.nameWithOwner,
+		createdAt: repo.createdAt,
+		pushedAt: repo.pushedAt,
+		commits: repo.defaultBranchRef?.target?.history?.totalCount ?? 0,
+		language: repo.primaryLanguage,
+		stars: repo.stargazerCount,
+		diskUsageKb: repo.diskUsage ?? 0,
+		license: repo.licenseInfo?.spdxId ?? null
+	})).toSorted((a, b) => b.commits - a.commits || a.nameWithOwner.localeCompare(b.nameWithOwner));
 	const since = (/* @__PURE__ */ new Date(Date.now() - 31536e6)).toISOString();
 	const sweepCandidates = sourceRepos.filter((repo) => repo.pushedAt !== null && repo.pushedAt >= since).toSorted((a, b) => (b.pushedAt ?? "").localeCompare(a.pushedAt ?? ""));
 	const swept = !options.sweepCommits ? [] : options.sweepLimit > 0 ? sweepCandidates.slice(0, options.sweepLimit) : sweepCandidates;
@@ -59921,6 +60161,7 @@ async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 			candidates: sweepCandidates.length
 		},
 		topRepositories,
+		repositories: portfolio,
 		trailingCommits
 	};
 }
@@ -60069,6 +60310,7 @@ const KNOWN_CARDS = [
 	"rhythm",
 	"cadence",
 	"repositories",
+	"portfolio",
 	"languages"
 ];
 const THEME_IDS = ["light", "dark"];
