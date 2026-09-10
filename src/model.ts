@@ -33,6 +33,8 @@ export interface TrailingCalendar {
   /** Full weeks as returned by the API, oldest day first. */
   readonly days: readonly DayContribution[];
   readonly total: number;
+  /** Whether the totals count private work the viewer cannot see the details of. */
+  readonly includesPrivate: boolean;
 }
 
 /** One repository and the user's trailing-year commit contributions to it. */
@@ -82,6 +84,14 @@ export interface ProfileData {
   readonly languages: readonly LanguageSlice[];
   /** One entry per contribution year, ascending. */
   readonly years: readonly YearActivity[];
+  /**
+   * Whether any year's totals count private work.
+   *
+   * This says the numbers COUNT private contributions, not that the generator
+   * can read them: it follows the profile's "include private contributions"
+   * setting, and which contributions stay restricted depends on the token.
+   */
+  readonly includesPrivate: boolean;
   /** Deduplicated daily series across all years, ascending — streak input. */
   readonly lifetimeDays: readonly DayContribution[];
   /** Trailing ~12 months, for the 3D graph. */

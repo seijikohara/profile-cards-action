@@ -195,6 +195,10 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
 4. **Write** — Emit the SVGs into `output-dir` (and any badge pills into `output-dir/badges/`).
 5. **Commit** — When `commit` is enabled, commit and push the changed files using `commit-message`, and report the `changed` / `files` outputs. If the branch advanced mid-run and the push is rejected, the freshly rendered output is re-committed onto the new tip and pushed again; if that tip already carries identical output, the run reports no change instead.
 
+### Private contributions
+
+GitHub counts private ("restricted") contributions in a profile's calendar only when the profile enables **Include private contributions on my profile**. The two numbers look identical on a card, so `lifetime`, `contributions`, and `composition` state which one they drew — `INCL. PRIVATE` or `PUBLIC ONLY` — in the note beside the title. The disclosure describes what was _counted_: the action never reads private repositories, and how much private work stays restricted depends on the token.
+
 ## Fonts
 
 GitHub renders README images through `<img>`, where SVGs cannot load external fonts — so the chosen faces are embedded directly in each card as Base64 woff2 data URIs.

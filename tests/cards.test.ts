@@ -105,3 +105,32 @@ describe('card rendering', () => {
     expect(svg).toContain('%');
   });
 });
+
+describe('private-contribution disclosure', () => {
+  /** The calendar-derived cards and the flag each one reads. */
+  const CALENDAR_CARDS = ['lifetime', 'contributions', 'composition'];
+
+  function notesFor(profile: ProfileData): string[] {
+    return CALENDAR_CARDS.map((card) => renderCard(card, profile, streaks, LIGHT, fontFaceCss));
+  }
+
+  it('says private work is counted when it is', () => {
+    for (const svg of notesFor(data)) {
+      expect(svg).toContain('INCL. PRIVATE');
+      expect(svg).not.toContain('PUBLIC ONLY');
+    }
+  });
+
+  it('says the count is public-only when no private work is included', () => {
+    const publicOnly: ProfileData = {
+      ...data,
+      includesPrivate: false,
+      trailing: { ...data.trailing, includesPrivate: false },
+      years: data.years.map((year) => ({ ...year, restricted: 0 })),
+    };
+    for (const svg of notesFor(publicOnly)) {
+      expect(svg).toContain('PUBLIC ONLY');
+      expect(svg).not.toContain('INCL. PRIVATE');
+    }
+  });
+});

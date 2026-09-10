@@ -215,10 +215,12 @@ export function makeFixture(): ProfileData {
       { year: 2025, total: 964, commits: 587, pullRequests: 259, issues: 72, reviews: 3, restricted: 34 },
       { year: 2026, total: 3333, commits: 1531, pullRequests: 1213, issues: 269, reviews: 3, restricted: 309 },
     ],
+    includesPrivate: true,
     lifetimeDays: lifetimeDays(),
     trailing: {
       days: trailing,
       total: trailing.reduce((sum, day) => sum + day.count, 0),
+      includesPrivate: true,
     },
     commits: commitSamples(),
     commitSweep: { swept: 18, candidates: 18 },

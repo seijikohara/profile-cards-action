@@ -78,3 +78,14 @@ export function rampLegend(theme: Theme, x: number, y: number, options: RampLege
     el('text', { x: moreX, y, class: 't-tick' }, textNode('More'))
   );
 }
+
+/**
+ * Provenance caption for a card's note slot.
+ *
+ * A contribution count that omits private work and one that includes it are
+ * different numbers, and nothing on the card distinguishes them. Naming which
+ * one is drawn is the difference between a quiet year and a private one.
+ */
+export function privacyNote(includesPrivate: boolean): string {
+  return includesPrivate ? 'incl. private' : 'public only';
+}

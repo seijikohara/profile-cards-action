@@ -195,6 +195,7 @@ export async function fetchProfile(
   const trailing: TrailingCalendar = {
     days: flattenCalendar(trailingCalendar),
     total: trailingCalendar.totalContributions,
+    includesPrivate: trailingData.user?.contributionsCollection.hasAnyRestrictedContributions ?? false,
   };
 
   // Public repositories only, whatever token runs the generator: a PAT sees
@@ -258,6 +259,7 @@ export async function fetchProfile(
     contributedTo: user.repositoriesContributedTo.totalCount,
     languages: aggregateLanguages(repoNodes),
     years: yearActivities,
+    includesPrivate: yearActivities.some((year) => year.restricted > 0),
     lifetimeDays,
     trailing,
     commits,
