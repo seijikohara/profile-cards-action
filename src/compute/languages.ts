@@ -7,6 +7,8 @@ export interface LanguageShare {
   readonly name: string;
   readonly color: string | null;
   readonly bytes: number;
+  /** Repositories the language appears in; 0 for the "Other" bucket. */
+  readonly repos: number;
   /** Percentage with one decimal; all shares sum to exactly 100.0. */
   readonly pct: number;
 }
@@ -34,8 +36,11 @@ export function languageShares(
 
   const kept = slices.slice(0, limit);
   const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0) + unnamedBytes;
+  // "Other" spans an unknown set of repositories — summing per-language counts
+  // would double-count any repository that holds two of them — so it reports
+  // no reach rather than a wrong one.
   const entries: LanguageSlice[] =
-    otherBytes > 0 ? [...kept, { name: 'Other', color: null, bytes: otherBytes }] : [...kept];
+    otherBytes > 0 ? [...kept, { name: 'Other', color: null, bytes: otherBytes, repos: 0 }] : [...kept];
 
   // Largest-remainder rounding in tenths of a percent: floor everything, then
   // bump the entries with the largest fractional parts until the tenths sum to

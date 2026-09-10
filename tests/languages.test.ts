@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { renderLanguages } from '../src/cards/languages.js';
 import { languageShares } from '../src/compute/languages.js';
-import type { LanguageSlice } from '../src/model.js';
+import type { LanguageSlice, ProfileData } from '../src/model.js';
+import { LIGHT } from '../src/theme.js';
+import { makeFixture } from './fixture.js';
+import { assertWellFormed } from './xml.js';
 
 function slice(name: string, bytes: number): LanguageSlice {
-  return { name, color: '#123456', bytes };
+  return { name, color: '#123456', bytes, repos: 1 };
 }
 
 describe('languageShares', () => {
@@ -67,8 +71,8 @@ describe('languageShares', () => {
 
 describe('languageShares with unnamed bytes', () => {
   const slices = [
-    { name: 'TypeScript', color: '#3178c6', bytes: 600 },
-    { name: 'Rust', color: '#dea584', bytes: 300 },
+    { name: 'TypeScript', color: '#3178c6', bytes: 600, repos: 3 },
+    { name: 'Rust', color: '#dea584', bytes: 300, repos: 2 },
   ];
 
   it('counts unnamed bytes in the denominator', () => {
@@ -96,5 +100,30 @@ describe('languageShares with unnamed bytes', () => {
 
   it('leaves shares unchanged when nothing was left unnamed', () => {
     expect(languageShares(slices, 8, 0)).toEqual(languageShares(slices, 8));
+  });
+});
+
+describe('language reach', () => {
+  const slices = [
+    { name: 'TypeScript', color: '#3178c6', bytes: 600, repos: 3 },
+    { name: 'Rust', color: '#dea584', bytes: 300, repos: 2 },
+    { name: 'CSS', color: null, bytes: 100, repos: 9 },
+  ];
+
+  it("carries each language's repository count through to the share", () => {
+    expect(languageShares(slices, 8).map((share) => share.repos)).toEqual([3, 2, 9]);
+  });
+
+  it('reports no reach for Other, which spans an unknown set', () => {
+    const shares = languageShares(slices, 2);
+    expect(shares.at(-1)).toMatchObject({ name: 'Other', repos: 0 });
+  });
+
+  it('renders the count as a dash where there is none', () => {
+    const data: ProfileData = { ...makeFixture(), languages: slices, languageTailBytes: 0 };
+    const svg = renderLanguages(data, LIGHT, '', 2);
+    assertWellFormed(svg);
+    expect(svg).toContain('>REPOS<');
+    expect(svg).toContain('>—<');
   });
 });

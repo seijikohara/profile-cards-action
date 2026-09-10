@@ -27,6 +27,15 @@ export interface LanguageSlice {
   /** Linguist color; null for languages without one. */
   readonly color: string | null;
   readonly bytes: number;
+  /**
+   * Owned source repositories the language appears in.
+   *
+   * Bytes on disk is a weak proxy for effort — one generated file outweighs a
+   * year of careful work — and breadth is the cheapest corrective available.
+   * It is scoped to repositories the user owns, like every other number on the
+   * languages card, and must never be read as "languages I contribute to".
+   */
+  readonly repos: number;
 }
 
 export interface TrailingCalendar {

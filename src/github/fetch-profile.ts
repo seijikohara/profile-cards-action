@@ -58,14 +58,18 @@ type RepoNode = NonNullable<ProfileQueryData['user']>['repositories']['nodes'][n
  */
 function aggregateLanguages(repos: readonly RepoNode[]): { slices: LanguageSlice[]; tailBytes: number } {
   const sources = repos.filter((repo) => !repo.isFork && !repo.isArchived);
-  const totals = new Map<string, { color: string | null; bytes: number }>();
+  const totals = new Map<string, { color: string | null; bytes: number; repos: number }>();
   for (const repo of sources) {
     for (const edge of repo.languages?.edges ?? []) {
       const entry = totals.get(edge.node.name);
       if (entry) {
-        totals.set(edge.node.name, { color: entry.color ?? edge.node.color, bytes: entry.bytes + edge.size });
+        totals.set(edge.node.name, {
+          color: entry.color ?? edge.node.color,
+          bytes: entry.bytes + edge.size,
+          repos: entry.repos + 1,
+        });
       } else {
-        totals.set(edge.node.name, { color: edge.node.color, bytes: edge.size });
+        totals.set(edge.node.name, { color: edge.node.color, bytes: edge.size, repos: 1 });
       }
     }
   }
@@ -75,7 +79,7 @@ function aggregateLanguages(repos: readonly RepoNode[]): { slices: LanguageSlice
     return total + Math.max(0, (repo.languages?.totalSize ?? named) - named);
   }, 0);
   const slices = [...totals.entries()]
-    .map(([name, { color, bytes }]) => ({ name, color, bytes }))
+    .map(([name, entry]) => ({ name, color: entry.color, bytes: entry.bytes, repos: entry.repos }))
     .toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
   return { slices, tailBytes };
 }
