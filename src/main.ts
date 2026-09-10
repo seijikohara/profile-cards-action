@@ -51,7 +51,10 @@ async function run(): Promise<void> {
     for (const card of inputs.cards) {
       files.set(
         `${card}.${theme.id}.svg`,
-        renderCard(card, data, streaks, theme, fontFaceCss, { languageLimit: inputs.languageLimit })
+        renderCard(card, data, streaks, theme, fontFaceCss, {
+          languageLimit: inputs.languageLimit,
+          legend: inputs.legend,
+        })
       );
     }
   }

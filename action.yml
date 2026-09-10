@@ -36,6 +36,13 @@ inputs:
     description: 'Languages the languages card lists before the rest fold into "Other". The card grows one row per language.'
     required: false
     default: '8'
+  legend:
+    description: >-
+      How cards label the green magnitude ramp: "ramp" keeps the calendar's
+      Less…More key, "scale" prints the value band each step stands for
+      (0, 1-7, 8-19, …). Affects contributions, lifetime, and cadence.
+    required: false
+    default: 'ramp'
   commit-sweep-limit:
     description: >-
       Repositories the cadence card's commit sweep visits, most recently pushed first.
