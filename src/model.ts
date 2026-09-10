@@ -89,6 +89,8 @@ export interface CommitSample {
   readonly date: string;
   readonly additions: number;
   readonly deletions: number;
+  /** Files touched, or null when GitHub has not computed the commit's diff. */
+  readonly changedFiles: number | null;
 }
 
 export interface ProfileData {

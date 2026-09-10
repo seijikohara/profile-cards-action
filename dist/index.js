@@ -57116,6 +57116,46 @@ function range(length, start = 0) {
 //#region src/compute/cadence.ts
 /** Weekday × hour commit cadence over the trailing-year commit sweep. */
 /**
+* Log-spaced buckets of lines changed per commit.
+*
+* A raw churn total says nothing a reader can use — one regenerated bundle
+* swamps a year of hand edits. The shape of the distribution does: it separates
+* a habit of small commits from a habit of large ones.
+*/
+const SIZE_BUCKETS = [
+	{
+		label: "0",
+		min: 0
+	},
+	{
+		label: "1–9",
+		min: 1
+	},
+	{
+		label: "10–99",
+		min: 10
+	},
+	{
+		label: "100–999",
+		min: 100
+	},
+	{
+		label: "1k+",
+		min: 1e3
+	}
+];
+/** Index of the bucket a commit of `lines` belongs to. */
+function sizeBucket(lines) {
+	return SIZE_BUCKETS.reduce((best, bucket, index) => lines >= bucket.min ? index : best, 0);
+}
+/** Median of a non-empty numeric sample, averaging the middle pair when even. */
+function median(values) {
+	if (values.length === 0) return void 0;
+	const sorted = values.toSorted((a, b) => a - b);
+	const mid = Math.floor(sorted.length / 2);
+	return sorted.length % 2 === 1 ? sorted[mid] : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+}
+/**
 * Author-local clock face: the fields before the offset suffix. GitTimestamp
 * keeps the author's own offset, so the local hour reads straight off the
 * string — parsing through `Date` would re-normalize to UTC and shift every
@@ -57189,6 +57229,12 @@ function computeCadence(commits) {
 		hour,
 		count
 	} : rowBest, best), void 0);
+	const sizeBuckets = commits.reduce((buckets, sample) => {
+		const index = sizeBucket(sample.additions + sample.deletions);
+		buckets[index] = (buckets[index] ?? 0) + 1;
+		return buckets;
+	}, SIZE_BUCKETS.map(() => 0));
+	const perFile = commits.flatMap((sample) => sample.changedFiles !== null && sample.changedFiles > 0 ? [(sample.additions + sample.deletions) / sample.changedFiles] : []);
 	const nightCommits = grid.reduce((sum, row) => sum + row.reduce((rowSum, count, hour) => hour >= 22 || hour < 6 ? rowSum + count : rowSum, 0), 0);
 	return {
 		grid,
@@ -57199,7 +57245,10 @@ function computeCadence(commits) {
 		totalCommits: commits.length,
 		additions,
 		deletions,
-		nightShare: commits.length === 0 ? 0 : nightCommits / commits.length
+		nightShare: commits.length === 0 ? 0 : nightCommits / commits.length,
+		sizeBuckets,
+		medianLinesPerFile: median(perFile),
+		medianLines: median(commits.map((sample) => sample.additions + sample.deletions))
 	};
 }
 //#endregion
@@ -57533,7 +57582,12 @@ const HIST_BASELINE = 102;
 const GRID_TOP = 122;
 const ROW_H$3 = 24;
 const TICK_BASELINE$1 = GRID_TOP + ROW_H$3 * WEEKDAY_LABELS$1.length + 16;
-const FOOTER_BASELINE$2 = TICK_BASELINE$1 + 29;
+const SIZE_MAX_HEIGHT = 34;
+const SIZE_BASELINE = TICK_BASELINE$1 + 18 + SIZE_MAX_HEIGHT;
+const SIZE_LABEL_BASELINE = SIZE_BASELINE + 13;
+const SIZE_BAR_W = 30;
+const SIZE_BAR_GAP = 34;
+const FOOTER_BASELINE$2 = SIZE_LABEL_BASELINE + 28;
 const GRID_LEFT = 76;
 const COL_W = 746 / 24;
 const HIST_BAR_W = Math.min(14, 25.083333333333332);
@@ -57635,6 +57689,46 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		y: EYEBROW_BASELINE$1,
 		class: "t-mono"
 	}, textNode("BY HOUR"));
+	const sizeMax = Math.max(0, ...cadence.sizeBuckets);
+	const sizeBand = SIZE_BUCKETS.flatMap((bucket, index) => {
+		const count = cadence.sizeBuckets[index] ?? 0;
+		const x = GRID_LEFT + index * 64;
+		const height = count === 0 || sizeMax === 0 ? 0 : Math.max(2, count / sizeMax * SIZE_MAX_HEIGHT);
+		return [
+			height === 0 ? "" : verticalBar(x, SIZE_BASELINE, SIZE_BAR_W, height, barFill(theme, count, sizeMax)),
+			count === 0 ? "" : el("text", {
+				x: x + SIZE_BAR_W / 2,
+				y: SIZE_BASELINE - height - 5,
+				class: "t-tick",
+				"text-anchor": "middle"
+			}, textNode(formatCompact(count))),
+			el("text", {
+				x: x + SIZE_BAR_W / 2,
+				y: SIZE_LABEL_BASELINE,
+				class: "t-tick",
+				"text-anchor": "middle"
+			}, textNode(bucket.label))
+		];
+	});
+	const sizeEyebrow = el("text", {
+		x: 24,
+		y: SIZE_BASELINE - 12,
+		class: "t-mono"
+	}, textNode("BY SIZE"));
+	const sizeBaselineRule = el("line", {
+		x1: GRID_LEFT,
+		y1: SIZE_BASELINE + .5,
+		x2: GRID_LEFT + SIZE_BUCKETS.length * SIZE_BAR_W + (SIZE_BUCKETS.length - 1) * SIZE_BAR_GAP,
+		y2: SIZE_BASELINE + .5,
+		stroke: theme.border,
+		"stroke-width": 1
+	});
+	const perFileNote = cadence.medianLinesPerFile === void 0 ? "" : el("text", {
+		x: 822,
+		y: SIZE_LABEL_BASELINE,
+		class: "t-label",
+		"text-anchor": "end"
+	}, textNode("lines per commit · median "), el("tspan", { class: "t-stat" }, textNode(String(Math.round(cadence.medianLinesPerFile)))), textNode(" per file"));
 	const { swept, candidates } = data.commitSweep;
 	const capped = swept < candidates;
 	const footerParts = [el("tspan", { class: "t-stat" }, textNode(formatCompact(cadence.totalCommits))), textNode(capped ? " commits swept" : " commits")];
@@ -57642,7 +57736,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		const peakLabel = `${WEEKDAY_LABELS$1[cadence.peak.weekday] ?? ""} ${String(cadence.peak.hour).padStart(2, "0")}:00`;
 		footerParts.push(textNode(" · peak "), el("tspan", { class: "t-stat" }, textNode(peakLabel)));
 	}
-	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`+${formatCompact(cadence.additions)}`)), textNode(" "), el("tspan", { class: "t-stat" }, textNode(`−${formatCompact(cadence.deletions)}`)), textNode(" lines"));
+	if (cadence.medianLines !== void 0) footerParts.push(textNode(" · median "), el("tspan", { class: "t-stat" }, textNode(formatCompact(Math.round(cadence.medianLines)))), textNode(" lines per commit"));
 	if (cadence.totalCommits > 0) footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`${Math.round(cadence.nightShare * 100)}%`)), textNode(` at night (${NIGHT_FROM}-0${NIGHT_UNTIL})`));
 	const footer = el("text", {
 		x: 24,
@@ -57670,7 +57764,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
 		extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
 		fontFaceCss
-	}, el("g", { class: "fade" }, ...nightBands, eyebrow, histBaseline, ...histogram, ...weekdayLabels, ...hourTicks), ...columns, el("g", { class: "fade" }, footer, peakKey, legend));
+	}, el("g", { class: "fade" }, ...nightBands, eyebrow, histBaseline, ...histogram, ...weekdayLabels, ...hourTicks, sizeEyebrow, sizeBaselineRule, ...sizeBand, perFileNote), ...columns, el("g", { class: "fade" }, footer, peakKey, legend));
 }
 /** Hue-free emphasis for the busiest cell: a thin ring in the foreground ink. */
 function peakRing(cx, cy, level, theme) {
@@ -60043,6 +60137,11 @@ query Trailing($login: String!) {
 /**
 * One page of commits the user authored on a repository's default branch.
 *
+* `changedFilesIfAvailable` is what turns a line count into a rate: lines per
+* commit says little on its own, while lines per file separates a hand edit
+* from a regenerated bundle. It is nullable because GitHub computes the diff
+* lazily, so every consumer has to tolerate its absence.
+*
 * `author { date }` is a GitTimestamp: unlike DateTime it keeps the author's
 * UTC offset, which is what lets the cadence card bucket by the author's own
 * clock. `authoredDate`/`committedDate` are DateTime (UTC-normalized) and must
@@ -60056,7 +60155,7 @@ query Commits($owner: String!, $name: String!, $authorId: ID!, $since: GitTimest
         ... on Commit {
           history(author: { id: $authorId }, since: $since, first: 100, after: $cursor) {
             pageInfo { hasNextPage endCursor }
-            nodes { author { date } additions deletions }
+            nodes { author { date } additions deletions changedFilesIfAvailable }
           }
         }
       }
@@ -60145,7 +60244,8 @@ async function fetchRepoCommits(token, owner, name, authorId, since, cursor = nu
 		return date === null || date === void 0 ? [] : [{
 			date,
 			additions: node.additions,
-			deletions: node.deletions
+			deletions: node.deletions,
+			changedFiles: node.changedFilesIfAvailable
 		}];
 	});
 	const { pageInfo } = history;

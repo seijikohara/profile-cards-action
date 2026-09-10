@@ -218,6 +218,11 @@ export interface TrailingQueryData {
 /**
  * One page of commits the user authored on a repository's default branch.
  *
+ * `changedFilesIfAvailable` is what turns a line count into a rate: lines per
+ * commit says little on its own, while lines per file separates a hand edit
+ * from a regenerated bundle. It is nullable because GitHub computes the diff
+ * lazily, so every consumer has to tolerate its absence.
+ *
  * `author { date }` is a GitTimestamp: unlike DateTime it keeps the author's
  * UTC offset, which is what lets the cadence card bucket by the author's own
  * clock. `authoredDate`/`committedDate` are DateTime (UTC-normalized) and must
@@ -231,7 +236,7 @@ query Commits($owner: String!, $name: String!, $authorId: ID!, $since: GitTimest
         ... on Commit {
           history(author: { id: $authorId }, since: $since, first: 100, after: $cursor) {
             pageInfo { hasNextPage endCursor }
-            nodes { author { date } additions deletions }
+            nodes { author { date } additions deletions changedFilesIfAvailable }
           }
         }
       }
@@ -250,6 +255,8 @@ export interface CommitsQueryData {
             readonly author: { readonly date: string | null } | null;
             readonly additions: number;
             readonly deletions: number;
+            /** Null when GitHub has not computed the diff for this commit. */
+            readonly changedFilesIfAvailable: number | null;
           }[];
         };
       } | null;

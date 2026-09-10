@@ -27,6 +27,40 @@ export interface CadenceData {
   readonly deletions: number;
   /** Commits between 22:00 and 05:59 author-local over all commits, in [0,1]; 0 without commits. */
   readonly nightShare: number;
+  /** Commit counts per size bucket, in SIZE_BUCKETS order. */
+  readonly sizeBuckets: readonly number[];
+  /** Median lines changed per file; undefined when no commit reported a file count. */
+  readonly medianLinesPerFile: number | undefined;
+  /** Median lines changed per commit; undefined without commits. */
+  readonly medianLines: number | undefined;
+}
+
+/**
+ * Log-spaced buckets of lines changed per commit.
+ *
+ * A raw churn total says nothing a reader can use — one regenerated bundle
+ * swamps a year of hand edits. The shape of the distribution does: it separates
+ * a habit of small commits from a habit of large ones.
+ */
+export const SIZE_BUCKETS: readonly { readonly label: string; readonly min: number }[] = [
+  { label: '0', min: 0 },
+  { label: '1–9', min: 1 },
+  { label: '10–99', min: 10 },
+  { label: '100–999', min: 100 },
+  { label: '1k+', min: 1000 },
+];
+
+/** Index of the bucket a commit of `lines` belongs to. */
+function sizeBucket(lines: number): number {
+  return SIZE_BUCKETS.reduce((best, bucket, index) => (lines >= bucket.min ? index : best), 0);
+}
+
+/** Median of a non-empty numeric sample, averaging the middle pair when even. */
+function median(values: readonly number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = values.toSorted((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 }
 
 /**
@@ -111,6 +145,24 @@ export function computeCadence(commits: readonly CommitSample[]): CadenceData {
     undefined
   );
 
+  const sizeBuckets = commits.reduce<number[]>(
+    (buckets, sample) => {
+      const index = sizeBucket(sample.additions + sample.deletions);
+      buckets[index] = (buckets[index] ?? 0) + 1;
+      return buckets;
+    },
+    SIZE_BUCKETS.map(() => 0)
+  );
+
+  // Lines per file, not per commit: the ratio is what separates a hand edit
+  // from a regenerated bundle, and it is unavailable for commits whose diff
+  // GitHub has not computed.
+  const perFile = commits.flatMap((sample) =>
+    sample.changedFiles !== null && sample.changedFiles > 0
+      ? [(sample.additions + sample.deletions) / sample.changedFiles]
+      : []
+  );
+
   const nightCommits = grid.reduce(
     (sum, row) => sum + row.reduce((rowSum, count, hour) => (hour >= 22 || hour < 6 ? rowSum + count : rowSum), 0),
     0
@@ -126,5 +178,8 @@ export function computeCadence(commits: readonly CommitSample[]): CadenceData {
     additions,
     deletions,
     nightShare: commits.length === 0 ? 0 : nightCommits / commits.length,
+    sizeBuckets,
+    medianLinesPerFile: median(perFile),
+    medianLines: median(commits.map((sample) => sample.additions + sample.deletions)),
   };
 }
