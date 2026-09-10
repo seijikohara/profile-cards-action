@@ -12,8 +12,13 @@ export interface LanguageShare {
 }
 
 /**
- * Keep the top `limit` languages and fold the tail into "Other". Percentages
+ * Keep the top `limit` languages and fold the rest into "Other". Percentages
  * use largest-remainder rounding so the printed values total 100.0.
+ *
+ * `unnamedBytes` is code the query counted but never named — languages past
+ * the per-repository edge cap. It joins "Other" for the same reason the tail
+ * does, and it belongs in the denominator either way: a percentage of the named
+ * bytes alone would be a share of the wrong total.
  *
  * "Other" stays last however large it grows. It is a residual bucket, not a
  * language, so it does not compete for a rank — the convention every legend
@@ -21,13 +26,14 @@ export interface LanguageShare {
  */
 export function languageShares(
   slices: readonly LanguageSlice[],
-  limit: number = DEFAULT_LANGUAGE_LIMIT
+  limit: number = DEFAULT_LANGUAGE_LIMIT,
+  unnamedBytes = 0
 ): LanguageShare[] {
-  const total = slices.reduce((sum, slice) => sum + slice.bytes, 0);
+  const total = slices.reduce((sum, slice) => sum + slice.bytes, 0) + unnamedBytes;
   if (total === 0) return [];
 
   const kept = slices.slice(0, limit);
-  const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0);
+  const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0) + unnamedBytes;
   const entries: LanguageSlice[] =
     otherBytes > 0 ? [...kept, { name: 'Other', color: null, bytes: otherBytes }] : [...kept];
 

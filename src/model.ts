@@ -82,6 +82,15 @@ export interface ProfileData {
   readonly contributedTo: number;
   /** Aggregated bytes per language across owned source repos, descending. */
   readonly languages: readonly LanguageSlice[];
+  /**
+   * Bytes in languages past the per-repository edge cap, summed over source
+   * repositories.
+   *
+   * These bytes have no language identity — the query never named them — so
+   * they can only join "Other". Counting them keeps the percentages a share of
+   * the real total rather than of what happened to fit.
+   */
+  readonly languageTailBytes: number;
   /** One entry per contribution year, ascending. */
   readonly years: readonly YearActivity[];
   /**

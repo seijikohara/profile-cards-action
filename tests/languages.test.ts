@@ -64,3 +64,37 @@ describe('languageShares', () => {
     expect(Math.round(total * 10)).toBe(1000);
   });
 });
+
+describe('languageShares with unnamed bytes', () => {
+  const slices = [
+    { name: 'TypeScript', color: '#3178c6', bytes: 600 },
+    { name: 'Rust', color: '#dea584', bytes: 300 },
+  ];
+
+  it('counts unnamed bytes in the denominator', () => {
+    const shares = languageShares(slices, 8, 100);
+    expect(shares.find((share) => share.name === 'TypeScript')?.pct).toBe(60);
+    expect(shares.find((share) => share.name === 'Rust')?.pct).toBe(30);
+  });
+
+  it('folds unnamed bytes into a trailing Other row', () => {
+    const shares = languageShares(slices, 8, 100);
+    expect(shares.at(-1)).toMatchObject({ name: 'Other', bytes: 100, pct: 10 });
+  });
+
+  it('merges unnamed bytes with the truncated tail rather than replacing it', () => {
+    const shares = languageShares(slices, 1, 100);
+    expect(shares).toHaveLength(2);
+    expect(shares.at(-1)).toMatchObject({ name: 'Other', bytes: 400 });
+  });
+
+  it('still sums to exactly 100.0', () => {
+    const shares = languageShares(slices, 8, 7);
+    const sum = shares.reduce((total, share) => total + share.pct, 0);
+    expect(Math.round(sum * 10) / 10).toBe(100);
+  });
+
+  it('leaves shares unchanged when nothing was left unnamed', () => {
+    expect(languageShares(slices, 8, 0)).toEqual(languageShares(slices, 8));
+  });
+});

@@ -85,7 +85,7 @@ export function renderLanguages(
   fontFaceCss: string,
   languageLimit: number = DEFAULT_LANGUAGE_LIMIT
 ): string {
-  const shares = languageShares(data.languages, languageLimit);
+  const shares = languageShares(data.languages, languageLimit, data.languageTailBytes);
 
   if (shares.length === 0) {
     return cardFrame(
@@ -145,12 +145,15 @@ export function renderLanguages(
   const contentBottom = CONTENT_TOP + treeHeight;
 
   // Footer: the population the treemap slices — counts before Other-folding.
-  const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0);
+  // The named languages are a floor, not a census: bytes past the query's
+  // per-repository cap are counted but unnamed, so the count carries a "+".
+  const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0) + data.languageTailBytes;
+  const languageCount = `${data.languages.length}${data.languageTailBytes > 0 ? '+' : ''}`;
   const footerBaseline = contentBottom + 28;
   const footer = el(
     'text',
     { x: CARD_PADDING, y: footerBaseline, class: 't-label' },
-    el('tspan', { class: 't-stat' }, textNode(String(data.languages.length))),
+    el('tspan', { class: 't-stat' }, textNode(languageCount)),
     textNode(' languages across '),
     el('tspan', { class: 't-stat' }, textNode(formatInt(data.publicSourceRepos))),
     textNode(' source repositories · '),
