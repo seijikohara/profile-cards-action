@@ -70,13 +70,9 @@ runs:
         git push --force "${authed_remote}" "refs/tags/${major_tag}"
 
         # Publish a GitHub Release for the patch tag the first time it shows
-        # up. The major tag is deliberately left alone here: it is a moving
-        # pointer, so a Release generated against it would describe whichever
-        # patch happened to be current when it was cut and then go stale on the
-        # next bump. A `v0` Release does exist — Marketplace publishes from a
-        # Release, and the patch releases were already taken — but it is
-        # maintained by hand and says only what the moving tag means. The check
-        # is idempotent so re-runs (manual dispatch, retries) don't error.
+        # up. Generated notes describe one version, which is exactly what a
+        # version tag should carry. The check is idempotent so re-runs (manual
+        # dispatch, retries) don't error.
         if gh release view "${version_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
           release_status="already existed"
         else
@@ -85,6 +81,47 @@ runs:
             --title "${version_tag}" \
             --generate-notes
           release_status="created"
+        fi
+
+        # One Release on the moving major tag as well, created once and never
+        # regenerated.
+        #
+        # Marketplace publishes from a Release, and its "Publish this Action to
+        # the GitHub Marketplace" checkbox is per-release and exists only in the
+        # web release form: there is no REST field and no GraphQL mutation for
+        # it. An automated release line therefore cannot list its own versions,
+        # and this repository proved it — on 2026-09-11 the listing's published
+        # set was [v0] while the newest release was v1.14.0.
+        #
+        # A Release on the moving tag is the way out. Publish this one by hand
+        # once and the listing stays current for every later version, because
+        # the tag is re-pointed under it above. Its body names no version for
+        # exactly that reason, so it cannot go stale; --latest=false keeps it
+        # from displacing the version Release at the top of the releases list.
+        if gh release view "${major_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+          major_release_status="already existed"
+        else
+          notes_file="$(mktemp)"
+          cat > "${notes_file}" <<'MAJOR_NOTES'
+        ## `MAJOR_TAG` is a moving tag, not a version
+
+        This Release describes the tag rather than a version. `MAJOR_TAG` is re-pointed
+        at the newest `MAJOR_TAG.x.y` release every time one is cut, so
+
+            - uses: OWNER_REPO@MAJOR_TAG
+
+        picks up fixes and features without a workflow edit.
+
+        Per-version notes live on the individual releases. Pin an exact version tag or a
+        commit SHA when you need a reference that never changes.
+        MAJOR_NOTES
+          sed -i "s|MAJOR_TAG|${major_tag}|g; s|OWNER_REPO|${GITHUB_REPOSITORY}|g" "${notes_file}"
+          gh release create "${major_tag}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${major_tag}" \
+            --latest=false \
+            --notes-file "${notes_file}"
+          major_release_status="created"
         fi
 
         short_sha=$(git rev-parse --short "${target_commit}")
@@ -97,4 +134,11 @@ runs:
           echo "| \`${major_tag}\` | \`${short_sha}\` | force-updated |"
           echo ""
           echo "GitHub Release \`${version_tag}\`: ${release_status}."
+          echo ""
+          echo "GitHub Release \`${major_tag}\`: ${major_release_status}."
+          if [[ "${major_release_status}" == "created" ]]; then
+            echo ""
+            echo "> Publish \`${major_tag}\` to the Marketplace by hand once — the checkbox is"
+            echo "> web-UI only, and the moving tag keeps the listing current afterwards."
+          fi
         } >> "$GITHUB_STEP_SUMMARY"

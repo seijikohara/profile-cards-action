@@ -403,9 +403,24 @@ never rebind.
   version. So: patch releases stay fully automatic; a minor or major is cut by
   bumping the version inside the PR that earns it, nothing more. The v1.0.0
   cut itself used this path.
-- **Marketplace:** an already-listed action surfaces new releases by itself.
-  v1.0.0 appeared as Latest with no web-UI step; the per-release publish
-  checkbox matters for the first listing and for delisting, not for updates.
+- **Marketplace:** publishing a release to the Marketplace is a **per-release**
+  checkbox that exists only in the web release form. There is no REST field on
+  the release object and no GraphQL mutation for it, so `gh release create`
+  cannot set it and an automated release line can never list its own versions.
+
+  _Corrected 2026-09-11._ This section previously claimed a listed action
+  surfaces new releases by itself. It does not: measured that day, the
+  listing's published-release set was `[v0]` while the repository's newest
+  release was v1.14.0 — every release from v1.0.0 on was created by the bot and
+  is absent from the Marketplace. Nothing downstream broke, because
+  `uses: …@v1` resolves a git ref and never consults the Marketplace; only the
+  listing's version list was stale.
+
+  The fix is one Release on the **moving major tag**, which `sync-release-tags`
+  now creates. Publishing that single Release by hand keeps the listing current
+  for every later version, because the tag is re-pointed under it on each
+  release. Its body names no version, so it cannot go stale.
+
   The interim `v0` Release — the pre-1.0 listing anchor — was kept, its notes
   rewritten as a frozen-line notice, and the `v0` tag stays frozen at v0.0.11
   for consumers pinned to `@v0`.
