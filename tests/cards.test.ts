@@ -11,9 +11,9 @@ import { assertWellFormed } from './xml.js';
 
 const CARDS = [
   'overview',
-  'lifetime',
   'momentum',
   'contributions',
+  'lifetime',
   'composition',
   'rhythm',
   'cadence',

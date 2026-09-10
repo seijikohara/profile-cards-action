@@ -73,9 +73,9 @@ describe('readInputs', () => {
     const inputs = readInputs();
     expect(inputs.cards).toEqual([
       'overview',
-      'lifetime',
       'momentum',
       'contributions',
+      'lifetime',
       'composition',
       'rhythm',
       'cadence',
@@ -102,7 +102,7 @@ describe('readInputs', () => {
   it('should reject an unknown card', () => {
     setInputs({ ...VALID_INPUTS, cards: 'overview,bogus' });
     expect(() => readInputs()).toThrow(
-      'Unknown card "bogus". Valid: overview, lifetime, momentum, contributions, composition, rhythm, cadence, repositories, portfolio, languages.'
+      'Unknown card "bogus". Valid: overview, momentum, contributions, lifetime, composition, rhythm, cadence, repositories, portfolio, languages.'
     );
   });
 

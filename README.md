@@ -16,9 +16,9 @@ Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme
 | Card            | Shows                                                                                                                                                                                                                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `overview`      | Eight stat tiles: lifetime and current-year contributions, stars, followers, merged PRs, issues, public repositories, recently contributed-to repositories. Counters with a per-year series carry a sparkline, and the current year carries its change against the same window a year back. |
-| `lifetime`      | Contribution history — one row per year since the first contribution, each week shaded by activity.                                                                                                                                                                                         |
 | `momentum`      | Contributions in each trailing twelve months, sampled weekly across the whole account history — the one chart here that can fall.                                                                                                                                                           |
 | `contributions` | Current and longest streaks, plus the trailing 12 months as an isometric 3D calendar.                                                                                                                                                                                                       |
+| `lifetime`      | Contribution history — one row per year since the first contribution, each week shaded by activity.                                                                                                                                                                                         |
 | `composition`   | Per-year stacked bars of commits, pull requests, issues, reviews, and private contributions, with the overall private share.                                                                                                                                                                |
 | `rhythm`        | Contributions of every type by weekday and by month of the year, each bar marked with where the trailing year sits in its own panel.                                                                                                                                                        |
 | `cadence`       | Weekday × hour punch card of commits on owned default branches over the trailing year, in author-local time, with an hour-of-day histogram and a commit-size distribution.                                                                                                                  |
@@ -41,13 +41,6 @@ Each sample is wrapped in a `<picture>`, so the card you see matches your GitHub
   <img alt="Overview card: lifetime and current-year contributions, stars, followers, merged pull requests, issues, repositories" src="examples/overview.light.svg" width="100%" />
 </picture>
 
-**`lifetime`** — one shaded row per contribution year
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="examples/lifetime.dark.svg" />
-  <img alt="Lifetime card: contribution history with one row per year, each week shaded by activity" src="examples/lifetime.light.svg" width="100%" />
-</picture>
-
 **`momentum`** — the trailing twelve months, rolled across the whole history
 
 <picture>
@@ -60,6 +53,13 @@ Each sample is wrapped in a `<picture>`, so the card you see matches your GitHub
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="examples/contributions.dark.svg" />
   <img alt="Contributions card: current and longest streaks above a 3D calendar of the trailing 12 months" src="examples/contributions.light.svg" width="100%" />
+</picture>
+
+**`lifetime`** — one shaded row per contribution year
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/lifetime.dark.svg" />
+  <img alt="Lifetime card: contribution history with one row per year, each week shaded by activity" src="examples/lifetime.light.svg" width="100%" />
 </picture>
 
 **`composition`** — what the contributions are made of
@@ -82,8 +82,6 @@ Each sample is wrapped in a `<picture>`, so the card you see matches your GitHub
   <source media="(prefers-color-scheme: dark)" srcset="examples/cadence.dark.svg" />
   <img alt="Cadence card: commits by weekday and hour of day over the trailing year, with an hour-of-day histogram" src="examples/cadence.light.svg" width="100%" />
 </picture>
-
-Hours come from each commit's author-local timezone offset, so the card needs no timezone configuration. Commits created through the GitHub web UI are recorded in UTC.
 
 **`repositories`** — where the commits went
 
@@ -152,7 +150,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           username: seijikohara
-          cards: overview,lifetime,momentum,contributions,composition,rhythm,cadence,repositories,portfolio,languages
+          cards: overview,momentum,contributions,lifetime,composition,rhythm,cadence,repositories,portfolio,languages
           output-dir: assets
           themes: light,dark
           commit: true
@@ -182,7 +180,7 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
 | `github-token`       | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                                                                          | `true`   | —                                                                                                      |
 | `username`           | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                                                                        | `false`  | `''`                                                                                                   |
-| `cards`              | Cards to render (comma/space/newline separated).                                                                                                                                             | `false`  | `overview,lifetime,momentum,contributions,composition,rhythm,cadence,repositories,portfolio,languages` |
+| `cards`              | Cards to render (comma/space/newline separated).                                                                                                                                             | `false`  | `overview,momentum,contributions,lifetime,composition,rhythm,cadence,repositories,portfolio,languages` |
 | `output-dir`         | Directory to write card SVGs into.                                                                                                                                                           | `false`  | `assets`                                                                                               |
 | `themes`             | Themes to render (comma separated): `light`, `dark`.                                                                                                                                         | `false`  | `light,dark`                                                                                           |
 | `font`               | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                                                                   | `false`  | `Roboto`                                                                                               |

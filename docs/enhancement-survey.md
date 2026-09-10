@@ -1,7 +1,9 @@
 # Enhancement survey — what more the GitHub API can tell us
 
 - **Date:** 2026-09-10
-- **Status:** Accepted; sequencing below drives releases v1.3.0 onward.
+- **Status:** Delivered. Every recommendation below shipped across v1.3.0–v1.13.0;
+  see [What shipped](#what-shipped). The rejections and dead ends stand as written
+  and should not be re-investigated without new evidence.
 - **Method:** A parallel survey swept the GitHub GraphQL and REST APIs for
   signal this action does not yet use, and inventoried the eight existing cards
   to find what they leave unanswered. Four independent lenses proposed
@@ -27,6 +29,36 @@ on top of `PROFILE_QUERY` (cost 1, nodeCount 1,100), twelve `YEAR_QUERY` calls,
 and `TRAILING_QUERY` (cost 1) — roughly **58 points, growing linearly with owned
 repository count**. The first item in the sequence is therefore a cost fix, not a
 card.
+
+---
+
+## What shipped
+
+| Item                                 | Shipped as                                                                                                                                                            | Release |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| I1 · bound the commit sweep          | `pushedAt` gate (drops nothing), `commit-sweep-limit` input, and the cadence card discloses a capped sweep. Dropping `cadence` from `cards` skips the sweep entirely. | v1.3.0  |
+| E2 · private-contribution disclosure | `lifetime`, `contributions`, `composition` print `INCL. PRIVATE` or `PUBLIC ONLY` beside the title.                                                                   | v1.4.0  |
+| E3 · exact language total            | `languages(first: 30)` with `totalSize`; the unnamed remainder joins `Other` and the denominator.                                                                     | v1.5.0  |
+| E7 · numeric ramp legend             | `legend: scale` prints the band each ramp step covers, per card, in that card's unit.                                                                                 | v1.6.0  |
+| N1 · `momentum`                      | Rolling twelve-month total, sampled weekly — the deck's only chart that can fall.                                                                                     | v1.7.0  |
+| E4 · overview trends                 | Sparklines on the four tiles with a real series, plus a YTD change chip.                                                                                              | v1.8.0  |
+| N2 · `portfolio`                     | One lifeline per owned repository, creation to last push, with language, commits, license.                                                                            | v1.9.0  |
+| E8 · rhythm then vs now              | Every bar carries a reference tick at the trailing year's position in its own panel.                                                                                  | v1.10.0 |
+| E5 · commit-size strip               | Five log buckets of lines per commit, `changedFilesIfAvailable` for lines per file; the raw churn total became a median.                                              | v1.11.0 |
+| E6 + E9 · repositories depth         | Issues column, most-discussed-PR caption, and each bar set on a lifetime track.                                                                                       | v1.12.0 |
+| E3b · language reach                 | The ranked list reports how many repositories each language turns up in.                                                                                              | v1.13.0 |
+
+Two things were learned while building that the survey did not predict:
+
+- **The frame's reduced-motion reset applies `opacity: 1 !important` to every
+  element.** Any static opacity is therefore ignored for those viewers, and a
+  `clip-path` reveal is _not_ undone by it. Both bit during `momentum`; the fix
+  is `fill-opacity` for tints and an explicit `clip-path: none` under
+  `prefers-reduced-motion`.
+- **Card lists repeated outside the renderer go stale silently.** The example
+  gallery had its own list in two places and never rendered the new cards, which
+  left the README pointing at files that did not exist. `KNOWN_CARDS` is now the
+  only list.
 
 ---
 
