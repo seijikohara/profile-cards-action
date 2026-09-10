@@ -33,7 +33,25 @@ interface GraphQlEnvelope<T> {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function requestOnce<T>(token: string, query: string, variables: Record<string, unknown>): Promise<T> {
+/** Per-call behaviour beyond the defaults. */
+export interface GraphQlOptions {
+  /**
+   * GraphQL error types to ignore when the response still carries data.
+   *
+   * A query with one alias per repository resolves each alias independently: a
+   * repository deleted or renamed since an earlier query fails its own alias
+   * and leaves the rest intact. Failing the whole run there would make a card
+   * hostage to any repository that disappears between two requests.
+   */
+  readonly tolerate?: readonly string[];
+}
+
+async function requestOnce<T>(
+  token: string,
+  query: string,
+  variables: Record<string, unknown>,
+  options: GraphQlOptions
+): Promise<T> {
   const response = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
@@ -55,8 +73,12 @@ async function requestOnce<T>(token: string, query: string, variables: Record<st
   }
 
   const envelope: GraphQlEnvelope<T> = await response.json();
-  if (envelope.errors && envelope.errors.length > 0) {
-    const first = envelope.errors[0];
+  const tolerated = options.tolerate ?? [];
+  const fatal = (envelope.errors ?? []).filter(
+    (error) => envelope.data === undefined || error.type === undefined || !tolerated.includes(error.type)
+  );
+  if (fatal.length > 0) {
+    const first = fatal[0];
     const retryable = first?.type === 'RATE_LIMITED';
     throw new GitHubApiError(
       `GraphQL error${first?.type ? ` [${first.type}]` : ''}: ${first?.message ?? 'unknown'}`,
@@ -70,22 +92,28 @@ async function requestOnce<T>(token: string, query: string, variables: Record<st
 }
 
 /** Execute a query with retries (exponential backoff + jitter) for transient failures. */
-export async function graphql<T>(token: string, query: string, variables: Record<string, unknown> = {}): Promise<T> {
-  return attemptRequest<T>(token, query, variables, 1);
+export async function graphql<T>(
+  token: string,
+  query: string,
+  variables: Record<string, unknown> = {},
+  options: GraphQlOptions = {}
+): Promise<T> {
+  return attemptRequest<T>(token, query, variables, options, 1);
 }
 
 async function attemptRequest<T>(
   token: string,
   query: string,
   variables: Record<string, unknown>,
+  options: GraphQlOptions,
   attempt: number
 ): Promise<T> {
   try {
-    return await requestOnce<T>(token, query, variables);
+    return await requestOnce<T>(token, query, variables, options);
   } catch (error) {
     const retryable = error instanceof GitHubApiError && error.retryable;
     if (!retryable || attempt === ATTEMPTS) throw error;
     await sleep(BASE_BACKOFF_MS * 4 ** (attempt - 1) + Math.random() * 500);
-    return attemptRequest<T>(token, query, variables, attempt + 1);
+    return attemptRequest<T>(token, query, variables, options, attempt + 1);
   }
 }

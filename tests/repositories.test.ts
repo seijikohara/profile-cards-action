@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { renderRepositories } from '../src/cards/repositories.js';
 import { computeRepositories } from '../src/compute/repositories.js';
-import type { RepoCommits } from '../src/model.js';
+import type { ProfileData, RepoCommits } from '../src/model.js';
+import { LIGHT } from '../src/theme.js';
+import { makeFixture } from './fixture.js';
+import { assertWellFormed } from './xml.js';
 
 function repo(nameWithOwner: string, commits: number): RepoCommits {
-  return { nameWithOwner, commits, language: null, stars: 0 };
+  return { nameWithOwner, commits, issues: 0, lifetimeCommits: commits, language: null, stars: 0 };
 }
 
 describe('computeRepositories', () => {
@@ -35,5 +39,51 @@ describe('computeRepositories', () => {
     const result = computeRepositories([]);
     expect(result.rows).toEqual([]);
     expect(result.max).toBe(0);
+  });
+});
+
+describe('renderRepositories depth', () => {
+  const data: ProfileData = makeFixture();
+
+  it('draws a track behind a bar whose repository has deeper history', () => {
+    const svg = renderRepositories(data, LIGHT, '');
+    assertWellFormed(svg);
+    // vizel: 379 of 540 lifetime commits.
+    expect(svg).toContain('>379 / 540<');
+  });
+
+  it('prints one number where the lifetime count adds nothing', () => {
+    const single: ProfileData = {
+      ...data,
+      topRepositories: [
+        { nameWithOwner: 'a/one', commits: 50, issues: 0, lifetimeCommits: 50, language: null, stars: 0 },
+      ],
+    };
+    const svg = renderRepositories(single, LIGHT, '');
+    expect(svg).toContain('>50<');
+    expect(svg).not.toContain('50 / 50');
+  });
+
+  it('clamps a bar that outruns its own track', () => {
+    // Commits on non-default branches are counted by the trailing query and not
+    // by the lifetime one, so the trailing figure can be the larger.
+    const branchy: ProfileData = {
+      ...data,
+      topRepositories: [
+        { nameWithOwner: 'a/branchy', commits: 90, issues: 0, lifetimeCommits: 10, language: null, stars: 0 },
+      ],
+    };
+    const svg = renderRepositories(branchy, LIGHT, '');
+    assertWellFormed(svg);
+    expect(svg).toContain('>90<');
+  });
+
+  it('names the issues column in the key', () => {
+    expect(renderRepositories(data, LIGHT, '')).toContain('>issues opened<');
+  });
+
+  it('surfaces the most discussed pull request, and degrades without one', () => {
+    expect(renderRepositories(data, LIGHT, '')).toContain('MOST DISCUSSED PR · kovidgoyal/kitty · Add mouse');
+    expect(renderRepositories({ ...data, popularPullRequest: null }, LIGHT, '')).not.toContain('MOST DISCUSSED PR');
   });
 });

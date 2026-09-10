@@ -14,12 +14,14 @@ import type {
 import { graphql } from './client.js';
 import {
   COMMITS_QUERY,
+  lifetimeCommitsQuery,
   PROFILE_QUERY,
   TRAILING_QUERY,
   YEAR_QUERY,
   type CalendarData,
   type CommitsQueryData,
   type ContributionLevelName,
+  type LifetimeCommitsQueryData,
   type ProfileQueryData,
   type TrailingQueryData,
   type YearQueryData,
@@ -135,6 +137,35 @@ async function fetchRepoCommits(
 }
 
 /**
+ * Lifetime default-branch commits by the author, one alias per repository.
+ *
+ * Returns an empty map for an empty list rather than sending a query with no
+ * selections, which the API rejects.
+ */
+async function fetchLifetimeCommits(
+  token: string,
+  authorId: string,
+  names: readonly string[]
+): Promise<Map<string, number>> {
+  if (names.length === 0) return new Map();
+  const variables: Record<string, unknown> = { authorId };
+  for (const [index, name] of names.entries()) {
+    const [owner, repo] = name.split('/');
+    variables[`o${index}`] = owner ?? '';
+    variables[`n${index}`] = repo ?? '';
+  }
+  const data = await graphql<LifetimeCommitsQueryData>(token, lifetimeCommitsQuery(names.length), variables, {
+    tolerate: ['NOT_FOUND'],
+  });
+  return new Map(
+    names.flatMap((name, index) => {
+      const total = data[`r${index}`]?.defaultBranchRef?.target?.history?.totalCount;
+      return total === undefined ? [] : [[name, total] as const];
+    })
+  );
+}
+
+/**
  * Merge per-year daily series into one ascending run.
  * Year calendars are week-aligned, so edges spill a few days into neighboring
  * years; keep the higher count when the same date appears twice.
@@ -226,16 +257,42 @@ export async function fetchProfile(
   // Public repositories only, whatever token runs the generator: a PAT sees
   // private repositories in this list, and their names must not leak onto a
   // publicly served card.
-  const topRepositories: RepoCommits[] = (
-    trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []
-  )
-    .filter((entry) => !entry.repository.isPrivate)
-    .map((entry) => ({
-      nameWithOwner: entry.repository.nameWithOwner,
-      commits: entry.contributions.totalCount,
-      language: entry.repository.primaryLanguage,
-      stars: entry.repository.stargazerCount,
-    }));
+  // Issues are keyed by repository name so the ranking can carry them without
+  // a second ordering; the privacy filter applies here for the same reason it
+  // applies to commits.
+  const issuesByRepo = new Map(
+    (trailingData.user?.contributionsCollection.issueContributionsByRepository ?? [])
+      .filter((entry) => !entry.repository.isPrivate)
+      .map((entry) => [entry.repository.nameWithOwner, entry.contributions.totalCount])
+  );
+
+  const rankedRepos = (trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []).filter(
+    (entry) => !entry.repository.isPrivate
+  );
+
+  // One aliased selection per repository, in one request. Aliases resolve
+  // independently, so a repository that vanished since the trailing query
+  // fails only its own alias.
+  const lifetimeCommits = await fetchLifetimeCommits(
+    token,
+    user.id,
+    rankedRepos.map((entry) => entry.repository.nameWithOwner)
+  );
+
+  const topRepositories: RepoCommits[] = rankedRepos.map((entry) => ({
+    nameWithOwner: entry.repository.nameWithOwner,
+    commits: entry.contributions.totalCount,
+    issues: issuesByRepo.get(entry.repository.nameWithOwner) ?? 0,
+    lifetimeCommits: lifetimeCommits.get(entry.repository.nameWithOwner) ?? 0,
+    language: entry.repository.primaryLanguage,
+    stars: entry.repository.stargazerCount,
+  }));
+
+  const popular = trailingData.user?.contributionsCollection.popularPullRequestContribution?.pullRequest;
+  const popularPullRequest =
+    popular === undefined || popular.repository.isPrivate
+      ? null
+      : { title: popular.title, nameWithOwner: popular.repository.nameWithOwner };
 
   const trailingCollection = trailingData.user?.contributionsCollection;
   const trailingCommits = {
@@ -305,6 +362,7 @@ export async function fetchProfile(
     commits,
     commitSweep: { swept: swept.length, candidates: sweepCandidates.length },
     topRepositories,
+    popularPullRequest,
     repositories: portfolio,
     trailingCommits,
   };

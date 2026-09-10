@@ -1,5 +1,7 @@
 /** GraphQL documents and their response shapes. */
 
+import { range } from '../iter.js';
+
 /**
  * Everything except calendars, in one cheap query (1 point, ~1.1k nodes).
  *
@@ -191,6 +193,13 @@ query Trailing($login: String!) {
         }
         contributions(first: 1) { totalCount }
       }
+      issueContributionsByRepository(maxRepositories: 25) {
+        repository { nameWithOwner isPrivate }
+        contributions(first: 1) { totalCount }
+      }
+      popularPullRequestContribution {
+        pullRequest { title repository { nameWithOwner isPrivate } }
+      }
     }
   }
 }`;
@@ -211,9 +220,55 @@ export interface TrailingQueryData {
         };
         readonly contributions: { readonly totalCount: number };
       }[];
+      readonly issueContributionsByRepository: readonly {
+        readonly repository: { readonly nameWithOwner: string; readonly isPrivate: boolean };
+        readonly contributions: { readonly totalCount: number };
+      }[];
+      /** Null when the window holds no pull request the API considers notable. */
+      readonly popularPullRequestContribution: {
+        readonly pullRequest: {
+          readonly title: string;
+          readonly repository: { readonly nameWithOwner: string; readonly isPrivate: boolean };
+        };
+      } | null;
     };
   } | null;
 }
+
+/**
+ * Lifetime commits the user authored on each named repository's default branch.
+ *
+ * Built rather than declared, because one aliased selection per repository is
+ * what keeps this to a single request: ten aliases measured at cost 1 with
+ * nodeCount 0 against the live API, and the same shape resolves on
+ * repositories the token has no relationship with.
+ *
+ * Aliases resolve independently, so a repository deleted or renamed since the
+ * trailing query fails only its own alias — callers must tolerate NOT_FOUND.
+ */
+export function lifetimeCommitsQuery(count: number): string {
+  const params = range(count)
+    .map((index) => `$o${index}: String!, $n${index}: String!`)
+    .join(', ');
+  const selections = range(count)
+    .map(
+      (index) =>
+        `  r${index}: repository(owner: $o${index}, name: $n${index}) {` +
+        ` defaultBranchRef { target { ... on Commit { history(author: { id: $authorId }) { totalCount } } } } }`
+    )
+    .join('\n');
+  return `query LifetimeCommits($authorId: ID!, ${params}) {\n${selections}\n}`;
+}
+
+/** Alias -> that repository's lifetime commit count, or null when it vanished. */
+export type LifetimeCommitsQueryData = Record<
+  string,
+  {
+    readonly defaultBranchRef: {
+      readonly target: { readonly history?: { readonly totalCount: number } } | null;
+    } | null;
+  } | null
+>;
 
 /**
  * One page of commits the user authored on a repository's default branch.

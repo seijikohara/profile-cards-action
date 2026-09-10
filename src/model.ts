@@ -64,6 +64,17 @@ export interface PortfolioRepo {
 export interface RepoCommits {
   readonly nameWithOwner: string;
   readonly commits: number;
+  /** Issues the user opened here in the same window; 0 when none. */
+  readonly issues: number;
+  /**
+   * Commits the user authored here on the default branch over its whole life,
+   * 0 when unknown.
+   *
+   * `commits` counts every branch, this counts the default branch only, so a
+   * repository worked on through feature branches can report more trailing
+   * commits than lifetime ones.
+   */
+  readonly lifetimeCommits: number;
   /** Linguist's pick for the repository; null when it has no detected language. */
   readonly language: { readonly name: string; readonly color: string | null } | null;
   readonly stars: number;
@@ -138,6 +149,13 @@ export interface ProfileData {
   readonly topRepositories: readonly RepoCommits[];
   /** Owned public source repositories, most commits first. */
   readonly repositories: readonly PortfolioRepo[];
+  /**
+   * The trailing year's most-discussed pull request, wherever it landed.
+   *
+   * The only place on the deck where work outside the user's own repositories
+   * surfaces by name. Null when the API nominates none.
+   */
+  readonly popularPullRequest: { readonly title: string; readonly nameWithOwner: string } | null;
   /** Trailing-year commit-contribution totals across ALL repositories the viewer can see. */
   readonly trailingCommits: { readonly total: number; readonly repositories: number };
   /** ISO timestamp of generation, minute precision. */
