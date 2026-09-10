@@ -27,7 +27,7 @@ const CONTENT_TOP = 60;
 // Left column: the treemap. It sets the card's height, growing to match the
 // list so a long list never leaves the figure stranded at the top.
 const COLUMN_GAP = 20;
-const LIST_WIDTH = 250;
+const LIST_WIDTH = 300;
 const TREE_X = CARD_PADDING;
 const TREE_WIDTH = CARD_WIDTH - CARD_PADDING * 2 - LIST_WIDTH - COLUMN_GAP;
 const TREE_MIN_HEIGHT = 250;
@@ -35,9 +35,11 @@ const TREE_MIN_HEIGHT = 250;
 // Right column: the ranked list, closing flush with the card's right padding.
 const LIST_X = TREE_X + TREE_WIDTH + COLUMN_GAP;
 const LIST_ROW_HEIGHT = 27;
+const LIST_HEAD_BASELINE = CONTENT_TOP - 3;
 const LIST_FIRST_BASELINE = CONTENT_TOP + 15;
 const LIST_NAME_X = LIST_X + 18;
-const LIST_BYTES_RIGHT = LIST_X + 176;
+const LIST_REPOS_RIGHT = LIST_X + 152;
+const LIST_BYTES_RIGHT = LIST_X + 226;
 const LIST_PCT_RIGHT = LIST_X + LIST_WIDTH;
 
 // In-cell label tiers by cell height (at LABEL_MIN_WIDTH or wider): the name
@@ -137,10 +139,33 @@ export function renderLanguages(
       {},
       el('circle', { cx: LIST_X + 5, cy: y - 4, r: 5, fill: cellFill(share, theme) }),
       el('text', { x: LIST_NAME_X, y, class: 'leg-name' }, textNode(share.name)),
+      // Reach, not rank: how many repositories the language turns up in, which
+      // is the cheapest corrective to bytes-on-disk as a measure of effort.
+      el(
+        'text',
+        { x: LIST_REPOS_RIGHT, y, class: 't-tick', 'text-anchor': 'end' },
+        textNode(share.repos === 0 ? '—' : String(share.repos))
+      ),
       el('text', { x: LIST_BYTES_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(formatBytes(share.bytes))),
       el('text', { x: LIST_PCT_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(pctLabel(share)))
     );
   });
+
+  // Column heads: a bare count needs naming, and the other two columns are
+  // only self-evident once one of them is not.
+  const listHead =
+    el('text', { x: LIST_NAME_X, y: LIST_HEAD_BASELINE, class: 't-mono' }, textNode('LANGUAGE')) +
+    el(
+      'text',
+      { x: LIST_REPOS_RIGHT, y: LIST_HEAD_BASELINE, class: 't-mono', 'text-anchor': 'end' },
+      textNode('REPOS')
+    ) +
+    el(
+      'text',
+      { x: LIST_BYTES_RIGHT, y: LIST_HEAD_BASELINE, class: 't-mono', 'text-anchor': 'end' },
+      textNode('BYTES')
+    ) +
+    el('text', { x: LIST_PCT_RIGHT, y: LIST_HEAD_BASELINE, class: 't-mono', 'text-anchor': 'end' }, textNode('SHARE'));
 
   const contentBottom = CONTENT_TOP + treeHeight;
 
@@ -188,6 +213,6 @@ export function renderLanguages(
       fontFaceCss,
     },
     ...cells,
-    el('g', { class: 'fade' }, ...list, footer)
+    el('g', { class: 'fade' }, listHead, ...list, footer)
   );
 }
