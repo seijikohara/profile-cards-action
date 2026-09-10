@@ -60395,7 +60395,12 @@ async function commitAndPush(options) {
 //#endregion
 //#region src/inputs.ts
 /** Read and validate the action's inputs into a typed configuration object. */
-/** Cards the renderer knows how to draw. */
+/**
+* Cards the renderer knows how to draw, in the order action.yml lists them.
+*
+* Exported so the example gallery renders exactly this set: a hand-maintained
+* second list is a gallery that silently loses a card the day one is added.
+*/
 const KNOWN_CARDS = [
 	"overview",
 	"lifetime",
