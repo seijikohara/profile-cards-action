@@ -18,6 +18,8 @@ export interface CadenceData {
   readonly hourTotals: readonly number[];
   /** Quantile level 0..4 per cell, same shape as grid. */
   readonly levels: readonly (readonly (0 | 1 | 2 | 3 | 4)[])[];
+  /** Lower bounds of levels 1..4, so the legend can name what a shade is worth. */
+  readonly thresholds: readonly [number, number, number, number];
   /** The busiest cell; ties resolve to the earliest row-major position. Undefined without commits. */
   readonly peak: CadencePeak | undefined;
   readonly totalCommits: number;
@@ -118,6 +120,7 @@ export function computeCadence(commits: readonly CommitSample[]): CadenceData {
     grid,
     hourTotals: range(24).map((hour) => grid.reduce((sum, row) => sum + (row[hour] ?? 0), 0)),
     levels,
+    thresholds,
     peak,
     totalCommits: commits.length,
     additions,

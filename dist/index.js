@@ -57091,6 +57091,14 @@ function renderBadges(names, themes) {
 	return out;
 }
 //#endregion
+//#region src/config.ts
+/**
+* How the magnitude ramp is labelled. Mirrors action.yml's `legend` default:
+* "ramp" keeps the calendar's familiar Less…More, "scale" prints the counts
+* each step stands for.
+*/
+const DEFAULT_LEGEND = "ramp";
+//#endregion
 //#region src/iter.ts
 /** Immutable integer sequences for index-free iteration. */
 /** [start, start + 1, …, start + length - 1]; empty when length <= 0. */
@@ -57179,6 +57187,7 @@ function computeCadence(commits) {
 		grid,
 		hourTotals: range(24).map((hour) => grid.reduce((sum, row) => sum + (row[hour] ?? 0), 0)),
 		levels,
+		thresholds,
 		peak,
 		totalCommits: commits.length,
 		additions,
@@ -57332,6 +57341,40 @@ const TICK_SIZE$1 = 9.5;
 const CAPTION_GAP = 10;
 const SWATCH = 10;
 const DEFAULT_PITCH = 14;
+/**
+* Caption per level: the half-open band each step covers, with the top step
+* open-ended. An empty band — two thresholds that coincide, because no value
+* landed between them — reads as a dash rather than as a backwards range.
+*/
+function band(lo, hi) {
+	return hi < lo ? "—" : lo === hi ? formatInt(lo) : `${formatInt(lo)}–${formatInt(hi)}`;
+}
+function scaleCaptions(scale) {
+	const [q1, q2, q3, q4] = scale.thresholds;
+	return [
+		"0",
+		band(q1, q2 - 1),
+		band(q2, q3 - 1),
+		band(q3, q4 - 1),
+		`${formatInt(q4)}+`
+	];
+}
+/** The scale to draw, or undefined when its distribution carries no information. */
+function usableScale(options) {
+	const scale = options.scale;
+	return scale === void 0 || scale.thresholds[3] <= 0 ? void 0 : scale;
+}
+/** Layout shared by `rampLegend` and `rampLegendWidth`, so they cannot drift. */
+function layout(options) {
+	const scale = usableScale(options);
+	const captions = scale === void 0 ? void 0 : scaleCaptions(scale);
+	const widest = captions === void 0 ? 0 : Math.max(...captions.map((caption) => measureMono(caption, TICK_SIZE$1)));
+	return {
+		lead: scale?.unit ?? "Less",
+		captions,
+		pitch: Math.max(options.pitch ?? DEFAULT_PITCH, widest + 8)
+	};
+}
 /** Rounded square, matching the calendar cards' cells. */
 function squareSwatch(color, _level, cx, cy) {
 	return el("rect", {
@@ -57347,25 +57390,38 @@ function squareSwatch(color, _level, cx, cy) {
 * Width of the legend, independent of where it is drawn — callers right-align
 * by subtracting this from their right edge before calling `rampLegend`.
 */
-function rampLegendWidth(pitch = DEFAULT_PITCH) {
-	return measureMono("Less", TICK_SIZE$1) + CAPTION_GAP + pitch * 5 + CAPTION_GAP + measureMono("More", TICK_SIZE$1);
+function rampLegendWidth(options = {}) {
+	const { lead, captions, pitch } = layout(options);
+	const trailing = captions === void 0 ? CAPTION_GAP + measureMono("More", TICK_SIZE$1) : 0;
+	return measureMono(lead, TICK_SIZE$1) + CAPTION_GAP + pitch * 5 + trailing;
 }
-/** "Less ▪▪▪▪▪ More" with `x` at the left edge and `y` on the caption baseline. */
+/**
+* "Less ▪▪▪▪▪ More" with `x` at the left edge and `y` on the caption baseline,
+* or — when `scale` is given — the same swatch row over a caption row naming
+* the value band each step covers.
+*/
 function rampLegend(theme, x, y, options = {}) {
 	const swatch = options.swatch ?? squareSwatch;
-	const pitch = options.pitch ?? DEFAULT_PITCH;
-	const firstCenter = x + measureMono("Less", TICK_SIZE$1) + CAPTION_GAP + pitch / 2;
+	const { lead, captions, pitch } = layout(options);
+	const firstCenter = x + measureMono(lead, TICK_SIZE$1) + CAPTION_GAP + pitch / 2;
 	const cy = y - 4;
-	const moreX = firstCenter + (theme.contribRamp.length - .5) * pitch + CAPTION_GAP;
+	const centerOf = (level) => firstCenter + level * pitch;
+	const swatches = theme.contribRamp.map((color, level) => swatch(color, level, centerOf(level), cy)).join("");
+	const trailing = captions === void 0 ? el("text", {
+		x: centerOf(theme.contribRamp.length - .5) + CAPTION_GAP,
+		y,
+		class: "t-tick"
+	}, textNode("More")) : captions.map((caption, level) => el("text", {
+		x: centerOf(level),
+		y: y + 12 - 1,
+		class: "t-tick",
+		"text-anchor": "middle"
+	}, textNode(caption))).join("");
 	return el("text", {
 		x,
 		y,
 		class: "t-tick"
-	}, textNode("Less")) + theme.contribRamp.map((color, level) => swatch(color, level, firstCenter + level * pitch, cy)).join("") + el("text", {
-		x: moreX,
-		y,
-		class: "t-tick"
-	}, textNode("More"));
+	}, textNode(lead)) + swatches + trailing;
 }
 /**
 * Provenance caption for a card's note slot.
@@ -57379,18 +57435,6 @@ function privacyNote(includesPrivate) {
 }
 //#endregion
 //#region src/cards/cadence.ts
-/**
-* Commit cadence card: a weekday × hour punch card over the trailing-year
-* commit sweep, with the marginal day curve as a histogram above it.
-*
-* Dot size and fill both encode the quantile level of each cell, so the grid
-* speaks the same green as the calendar cards; the busiest cell is ringed
-* rather than recolored, because a second hue here would collide with the
-* composition card's categorical accent. Hours are the author's local clock
-* (GitTimestamp keeps the commit's UTC offset), so the card answers "when does
-* this person commit" on their own clock — and the night hours the footer
-* quantifies are shaded under the histogram.
-*/
 const WEEKDAY_LABELS$1 = [
 	"Mon",
 	"Tue",
@@ -57431,8 +57475,12 @@ const LEGEND_PITCH = 18;
 function columnX(hour) {
 	return GRID_LEFT + hour * COL_W;
 }
-function renderCadence(data, theme, fontFaceCss) {
+function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 	const cadence = computeCadence(data.commits);
+	const scale = legendStyle === "scale" ? {
+		thresholds: cadence.thresholds,
+		unit: "per slot"
+	} : void 0;
 	const nightBands = [{
 		from: 0,
 		until: NIGHT_UNTIL
@@ -57522,20 +57570,22 @@ function renderCadence(data, theme, fontFaceCss) {
 		y: FOOTER_BASELINE$1,
 		class: "t-label"
 	}, ...footerParts);
-	const legendX = 822 - rampLegendWidth(LEGEND_PITCH);
-	const legend = rampLegend(theme, legendX, FOOTER_BASELINE$1, {
+	const legendOptions = {
 		pitch: LEGEND_PITCH,
 		swatch: (color, level, cx, cy) => el("circle", {
 			cx,
 			cy,
-			r: DOT_RADIUS[level],
+			r: DOT_RADIUS[level] ?? DOT_RADIUS[0],
 			fill: color
-		})
-	});
+		}),
+		...scale === void 0 ? {} : { scale }
+	};
+	const legendX = 822 - rampLegendWidth(legendOptions);
+	const legend = rampLegend(theme, legendX, FOOTER_BASELINE$1, legendOptions);
 	const peakKey = cadence.peak === void 0 ? "" : peakKeyChip(legendX - 18 - measureMono("peak", 9.5) - 14, FOOTER_BASELINE$1, theme);
 	return cardFrame({
 		theme,
-		height: FOOTER_BASELINE$1 + 24,
+		height: FOOTER_BASELINE$1 + (scale === void 0 ? 0 : 12) + 24,
 		title: "Commit cadence",
 		note: capped ? `trailing 12 months · author local time · ${swept} of ${candidates} repositories` : "trailing 12 months · author local time",
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
@@ -57768,17 +57818,36 @@ function renderComposition(data, theme, fontFaceCss) {
 	}, el("g", { class: "fade" }, baselineRule, ...ticks, ...totals, ...legend, privateCaption), ...bars);
 }
 //#endregion
-//#region src/cards/contributions.ts
+//#region src/compute/thresholds.ts
 /**
-* Contributions card: streak tiles plus the trailing-12-month contribution
-* calendar as an isometric 3D graph (flat axonometric projection, pure static
-* polygons).
+* Lower bounds of levels 1..4 for a calendar the API already leveled.
 *
-* Color carries the API's exact quartile encoding; column height reinforces it
-* on a square-root scale, chosen so one spike day cannot flatten every typical
-* day to invisibility. Height is redundant decoration over the honest color
-* channel, never the primary encoding.
+* The contribution calendar ships a quartile level per day but never the cuts
+* it used, so the ramp on a card is a scale with no units. Each level's lowest
+* observed count IS its lower bound, which recovers the cuts exactly from data
+* already fetched.
+*
+* A level nobody reached has no observed minimum. It inherits the next level's
+* floor, which keeps the bounds non-decreasing and makes the empty band render
+* as a dash instead of as a range starting at zero.
 */
+function calendarThresholds(days) {
+	const floorAt = (level) => {
+		const counts = days.filter((day) => day.level === level).map((day) => day.count);
+		return counts.length === 0 ? 0 : Math.min(...counts);
+	};
+	const q4 = floorAt(4);
+	const q3 = floorAt(3) || q4;
+	const q2 = floorAt(2) || q3;
+	return [
+		floorAt(1) || q2,
+		q2,
+		q3,
+		q4
+	];
+}
+//#endregion
+//#region src/cards/contributions.ts
 const HW = 12;
 const HH = 4;
 const MAX_COLUMN = 40;
@@ -57852,7 +57921,7 @@ function dayColumn(x, y, height, topFill, leftFill, rightFill) {
 function toWeeks(days) {
 	return range(Math.ceil(days.length / 7)).map((week) => days.slice(week * 7, week * 7 + 7));
 }
-function renderContributions(data, streaks, theme, fontFaceCss) {
+function renderContributions(data, streaks, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 	const weeks = toWeeks(data.trailing.days);
 	const weekCount = weeks.length;
 	const maxCount = Math.max(1, ...data.trailing.days.map((day) => day.count));
@@ -57913,7 +57982,11 @@ function renderContributions(data, streaks, theme, fontFaceCss) {
 		}, ...columns);
 	});
 	const legendY = groundBottom + 22;
-	const legend = rampLegend(theme, 24, legendY);
+	const scale = legendStyle === "scale" ? {
+		thresholds: calendarThresholds(data.trailing.days),
+		unit: "per day"
+	} : void 0;
+	const legend = rampLegend(theme, 24, legendY, scale === void 0 ? {} : { scale });
 	const caption = el("text", {
 		x: 822,
 		y: legendY,
@@ -57922,7 +57995,7 @@ function renderContributions(data, streaks, theme, fontFaceCss) {
 	}, textNode(`REFRESHED ${formatUtcTimestamp(data.generatedAt)}`));
 	return cardFrame({
 		theme,
-		height: legendY + 24 - 8,
+		height: legendY + (scale === void 0 ? 0 : 12) + 24 - 8,
 		title: "Contributions",
 		note: `past 12 months · streaks over all years · ${privacyNote(data.trailing.includesPrivate)}`,
 		description: `Contribution activity for ${data.login}: ${formatInt(data.trailing.total)} contributions in the past 12 months, current streak ${formatInt(streaks.current)} days, longest streak ${formatInt(streaks.longest)} days.`,
@@ -58354,8 +58427,12 @@ const CELL_RADIUS = 2;
 const LEGEND_ROW = 26;
 const COL_STEP_MS = 16;
 const SWEEP_MS = 900;
-function renderLifetime(data, theme, fontFaceCss) {
+function renderLifetime(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 	const life = computeLifetime(data.lifetimeDays);
+	const scale = legendStyle === "scale" ? {
+		thresholds: life.thresholds,
+		unit: "per week"
+	} : void 0;
 	const rows = life.years.length;
 	const rampColor = (level) => {
 		const index = level < 1 ? 0 : level > 4 ? 4 : level;
@@ -58366,7 +58443,7 @@ function renderLifetime(data, theme, fontFaceCss) {
 	const cellW = 10.471698113207546;
 	const gridTop = 68;
 	const gridBottom = gridTop + rows * ROW_PITCH;
-	const height = gridBottom + LEGEND_ROW + 24;
+	const height = gridBottom + LEGEND_ROW + (scale === void 0 ? 0 : 12) + 24;
 	const maxCols = Math.min(COLS, Math.max(0, ...life.years.map((year) => year.weeks.length)));
 	const step = Math.min(COL_STEP_MS, SWEEP_MS / Math.max(1, maxCols - 1));
 	const columns = range(maxCols).map((c) => {
@@ -58405,6 +58482,7 @@ function renderLifetime(data, theme, fontFaceCss) {
 		"text-anchor": "end"
 	}, textNode(formatInt(year.total))));
 	const legend = rampLegend(theme, 24, gridBottom + 17, {
+		...scale === void 0 ? {} : { scale },
 		pitch: 14,
 		swatch: (color, _level, cx, cy) => el("rect", {
 			x: cx - CELL_H / 2,
@@ -58892,16 +58970,19 @@ function renderRhythm(data, theme, fontFaceCss) {
 //#endregion
 //#region src/cards.ts
 /** @fileoverview Dispatch a card name to its renderer, threading the resolved font CSS. */
-const DEFAULT_CARD_OPTIONS = { languageLimit: 8 };
+const DEFAULT_CARD_OPTIONS = {
+	languageLimit: 8,
+	legend: DEFAULT_LEGEND
+};
 /** Render one card by id. `fontFaceCss` is the resolved @font-face block injected into the frame. */
 function renderCard(card, data, streaks, theme, fontFaceCss, options = DEFAULT_CARD_OPTIONS) {
 	switch (card) {
 		case "overview": return renderOverview(data, theme, fontFaceCss);
-		case "lifetime": return renderLifetime(data, theme, fontFaceCss);
-		case "contributions": return renderContributions(data, streaks, theme, fontFaceCss);
+		case "lifetime": return renderLifetime(data, theme, fontFaceCss, options.legend);
+		case "contributions": return renderContributions(data, streaks, theme, fontFaceCss, options.legend);
 		case "composition": return renderComposition(data, theme, fontFaceCss);
 		case "rhythm": return renderRhythm(data, theme, fontFaceCss);
-		case "cadence": return renderCadence(data, theme, fontFaceCss);
+		case "cadence": return renderCadence(data, theme, fontFaceCss, options.legend);
 		case "repositories": return renderRepositories(data, theme, fontFaceCss);
 		case "languages": return renderLanguages(data, theme, fontFaceCss, options.languageLimit);
 		default: throw new Error(`Unknown card: ${card}`);
@@ -59722,6 +59803,14 @@ function parseCommitSweepLimit(raw) {
 	if (!Number.isInteger(value) || value < 0) throw new Error(`Invalid commit-sweep-limit "${trimmed}". Expected a non-negative integer.`);
 	return value;
 }
+const LEGEND_STYLES = ["ramp", "scale"];
+/** Parse `legend`: one of the known styles, or the default when empty. */
+function parseLegend(raw) {
+	const value = raw.trim().toLowerCase();
+	if (value === "") return DEFAULT_LEGEND;
+	if (value !== "ramp" && value !== "scale") throw new Error(`Unknown legend "${value}". Valid: ${LEGEND_STYLES.join(", ")}.`);
+	return value;
+}
 /** Resolve the login, falling back to the repository owner. */
 function resolveUsername(raw) {
 	const username = raw.trim() || process.env["GITHUB_REPOSITORY_OWNER"] || "";
@@ -59745,6 +59834,7 @@ function readInputs() {
 		monoFont: getInput("mono-font").trim() || DEFAULT_MONO_FONT,
 		languageLimit: parseLanguageLimit(getInput("language-limit")),
 		commitSweepLimit: parseCommitSweepLimit(getInput("commit-sweep-limit")),
+		legend: parseLegend(getInput("legend")),
 		badges: getMultilineInput("badges").map((name) => name.trim()).filter((name) => name.length > 0),
 		commit: readCommit(),
 		commitMessage: getInput("commit-message").trim() || DEFAULT_COMMIT_MESSAGE
@@ -59788,7 +59878,10 @@ async function run() {
 	const fontFaceCss = await resolveFonts(inputs.font, inputs.monoFont);
 	const themes = inputs.themeIds.map((id) => THEME_BY_ID[id]);
 	const files = /* @__PURE__ */ new Map();
-	for (const theme of themes) for (const card of inputs.cards) files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss, { languageLimit: inputs.languageLimit }));
+	for (const theme of themes) for (const card of inputs.cards) files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss, {
+		languageLimit: inputs.languageLimit,
+		legend: inputs.legend
+	}));
 	for (const [name, svg] of renderBadges(inputs.badges, themes)) files.set(join("badges", name), svg);
 	const written = [];
 	for (const [rel, svg] of files) {

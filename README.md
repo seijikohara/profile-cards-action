@@ -162,20 +162,21 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
 
 ## Inputs
 
-| Input                | Description                                                                                                                                                   | Required | Default                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------- |
-| `github-token`       | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                                           | `true`   | —                                                                                   |
-| `username`           | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                                         | `false`  | `''`                                                                                |
-| `cards`              | Cards to render (comma/space/newline separated).                                                                                                              | `false`  | `overview,lifetime,contributions,composition,rhythm,cadence,repositories,languages` |
-| `output-dir`         | Directory to write card SVGs into.                                                                                                                            | `false`  | `assets`                                                                            |
-| `themes`             | Themes to render (comma separated): `light`, `dark`.                                                                                                          | `false`  | `light,dark`                                                                        |
-| `font`               | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                                    | `false`  | `Roboto`                                                                            |
-| `mono-font`          | Google Fonts monospace family.                                                                                                                                | `false`  | `Roboto Mono`                                                                       |
-| `language-limit`     | Languages the `languages` card lists before the rest fold into "Other". The card grows one row per language.                                                  | `false`  | `8`                                                                                 |
-| `commit-sweep-limit` | Repositories the `cadence` card's commit sweep visits, most recently pushed first. `0` visits every repository that could hold a commit in the trailing year. | `false`  | `0`                                                                                 |
-| `badges`             | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`.             | `false`  | `''`                                                                                |
-| `commit`             | Commit changed files back to the repository.                                                                                                                  | `false`  | `true`                                                                              |
-| `commit-message`     | Commit subject used when `commit` is true.                                                                                                                    | `false`  | `chore(profile): refresh generated cards [skip ci]`                                 |
+| Input                | Description                                                                                                                                                                                  | Required | Default                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `github-token`       | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                                                                          | `true`   | —                                                                                   |
+| `username`           | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                                                                        | `false`  | `''`                                                                                |
+| `cards`              | Cards to render (comma/space/newline separated).                                                                                                                                             | `false`  | `overview,lifetime,contributions,composition,rhythm,cadence,repositories,languages` |
+| `output-dir`         | Directory to write card SVGs into.                                                                                                                                                           | `false`  | `assets`                                                                            |
+| `themes`             | Themes to render (comma separated): `light`, `dark`.                                                                                                                                         | `false`  | `light,dark`                                                                        |
+| `font`               | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                                                                   | `false`  | `Roboto`                                                                            |
+| `mono-font`          | Google Fonts monospace family.                                                                                                                                                               | `false`  | `Roboto Mono`                                                                       |
+| `language-limit`     | Languages the `languages` card lists before the rest fold into "Other". The card grows one row per language.                                                                                 | `false`  | `8`                                                                                 |
+| `legend`             | How cards label the green magnitude ramp: `ramp` keeps the calendar's Less…More key, `scale` prints the value band each step stands for. Affects `contributions`, `lifetime`, and `cadence`. | `false`  | `ramp`                                                                              |
+| `commit-sweep-limit` | Repositories the `cadence` card's commit sweep visits, most recently pushed first. `0` visits every repository that could hold a commit in the trailing year.                                | `false`  | `0`                                                                                 |
+| `badges`             | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`.                                            | `false`  | `''`                                                                                |
+| `commit`             | Commit changed files back to the repository.                                                                                                                                                 | `false`  | `true`                                                                              |
+| `commit-message`     | Commit subject used when `commit` is true.                                                                                                                                                   | `false`  | `chore(profile): refresh generated cards [skip ci]`                                 |
 
 ## Outputs
 
@@ -194,6 +195,20 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
 3. **Render** — Draw each requested card to SVG for every requested theme, embedding the fonts as Base64 data URIs so the cards need no external resources.
 4. **Write** — Emit the SVGs into `output-dir` (and any badge pills into `output-dir/badges/`).
 5. **Commit** — When `commit` is enabled, commit and push the changed files using `commit-message`, and report the `changed` / `files` outputs. If the branch advanced mid-run and the push is rejected, the freshly rendered output is re-committed onto the new tip and pushed again; if that tip already carries identical output, the run reports no change instead.
+
+### Reading the ramp
+
+Every card that answers "how much" fills from GitHub's own contribution green, so the deck reads as one system. What a given shade is _worth_, though, differs per card and is invisible by default.
+
+Set `legend: scale` to replace the `Less … More` key with the value band each step covers, in the unit that card counts:
+
+```
+per week   0    1–14   15–20   21–25   26+
+per day    0    1–7    8–22    —       23+
+per slot   0    1–3    4–6     7–11    12+
+```
+
+The bounds are the ones each card already computes to level its own data — quartiles of weekly sums for `lifetime`, GitHub's own daily quartiles for `contributions`, quartiles of weekday-hour cells for `cadence`. A band nobody reached prints as a dash rather than as a range starting at zero.
 
 ### Private contributions
 

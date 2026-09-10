@@ -38,7 +38,7 @@ describe('rampLegend', () => {
   });
 
   it('grows with the swatch pitch', () => {
-    expect(rampLegendWidth(18)).toBeGreaterThan(rampLegendWidth(14));
+    expect(rampLegendWidth({ pitch: 18 })).toBeGreaterThan(rampLegendWidth({ pitch: 14 }));
   });
 
   it('takes a custom swatch shape', () => {
@@ -55,5 +55,34 @@ describe('privacyNote', () => {
   it('names which population the card counted', () => {
     expect(privacyNote(true)).toBe('incl. private');
     expect(privacyNote(false)).toBe('public only');
+  });
+});
+
+describe('rampLegend scale mode', () => {
+  const scale = { thresholds: [1, 8, 20, 42] as const, unit: 'per day' };
+
+  it('names the band each step covers and drops Less/More', () => {
+    const svg = rampLegend(LIGHT, 0, 20, { scale });
+    assertWellFormed(`<svg xmlns="http://www.w3.org/2000/svg">${svg}</svg>`);
+    for (const caption of ['per day', '0', '1–7', '8–19', '20–41', '42+']) {
+      expect(svg).toContain(`>${caption}<`);
+    }
+    expect(svg).not.toContain('>Less<');
+    expect(svg).not.toContain('>More<');
+  });
+
+  it('renders an unreachable band as a dash rather than a backwards range', () => {
+    const svg = rampLegend(LIGHT, 0, 20, { scale: { thresholds: [1, 1, 20, 42], unit: 'per day' } });
+    expect(svg).toContain('>—<');
+  });
+
+  it('falls back to Less/More when the distribution is empty', () => {
+    const svg = rampLegend(LIGHT, 0, 20, { scale: { thresholds: [0, 0, 0, 0], unit: 'per day' } });
+    expect(svg).toContain('>Less<');
+    expect(svg).toContain('>More<');
+  });
+
+  it('widens to fit its captions so callers can still right-align', () => {
+    expect(rampLegendWidth({ scale })).toBeGreaterThan(rampLegendWidth());
   });
 });

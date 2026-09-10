@@ -1,7 +1,8 @@
 /** Read and validate the action's inputs into a typed configuration object. */
 
 import * as core from '@actions/core';
-import { DEFAULT_COMMIT_SWEEP_LIMIT, DEFAULT_LANGUAGE_LIMIT } from './config.js';
+import type { LegendStyle } from './cards.js';
+import { DEFAULT_COMMIT_SWEEP_LIMIT, DEFAULT_LANGUAGE_LIMIT, DEFAULT_LEGEND } from './config.js';
 
 /** Theme identifier accepted by the `themes` input. */
 type ThemeId = 'light' | 'dark';
@@ -22,6 +23,8 @@ export interface ActionInputs {
   readonly languageLimit: number;
   /** Repositories the commit sweep visits, most recently pushed first; 0 = no cap. */
   readonly commitSweepLimit: number;
+  /** How the magnitude ramp is labelled on the cards that draw one. */
+  readonly legend: LegendStyle;
   /** Badge brand names, trimmed and non-empty. */
   readonly badges: readonly string[];
   readonly commit: boolean;
@@ -115,6 +118,18 @@ function parseCommitSweepLimit(raw: string): number {
   return value;
 }
 
+const LEGEND_STYLES: readonly LegendStyle[] = ['ramp', 'scale'];
+
+/** Parse `legend`: one of the known styles, or the default when empty. */
+function parseLegend(raw: string): LegendStyle {
+  const value = raw.trim().toLowerCase();
+  if (value === '') return DEFAULT_LEGEND;
+  if (value !== 'ramp' && value !== 'scale') {
+    throw new Error(`Unknown legend "${value}". Valid: ${LEGEND_STYLES.join(', ')}.`);
+  }
+  return value;
+}
+
 /** Resolve the login, falling back to the repository owner. */
 function resolveUsername(raw: string): string {
   const username = raw.trim() || process.env['GITHUB_REPOSITORY_OWNER'] || '';
@@ -144,6 +159,7 @@ export function readInputs(): ActionInputs {
   const monoFont = core.getInput('mono-font').trim() || DEFAULT_MONO_FONT;
   const languageLimit = parseLanguageLimit(core.getInput('language-limit'));
   const commitSweepLimit = parseCommitSweepLimit(core.getInput('commit-sweep-limit'));
+  const legend = parseLegend(core.getInput('legend'));
   const badges = core
     .getMultilineInput('badges')
     .map((name) => name.trim())
@@ -161,6 +177,7 @@ export function readInputs(): ActionInputs {
     monoFont,
     languageLimit,
     commitSweepLimit,
+    legend,
     badges,
     commit,
     commitMessage,

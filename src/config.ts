@@ -13,6 +13,13 @@ export const CARD_RADIUS = 6;
 export const DEFAULT_LANGUAGE_LIMIT = 8;
 
 /**
+ * How the magnitude ramp is labelled. Mirrors action.yml's `legend` default:
+ * "ramp" keeps the calendar's familiar Less…More, "scale" prints the counts
+ * each step stands for.
+ */
+export const DEFAULT_LEGEND: 'ramp' | 'scale' = 'ramp';
+
+/**
  * Repositories the trailing-year commit sweep visits, most recently pushed
  * first. Mirrors action.yml's `commit-sweep-limit` default; 0 means every
  * repository that could hold a commit in the window.

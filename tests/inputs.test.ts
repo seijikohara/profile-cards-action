@@ -28,6 +28,7 @@ const VALID_INPUTS: Record<string, string> = {
   'mono-font': 'Roboto Mono',
   'language-limit': '8',
   'commit-sweep-limit': '0',
+  legend: 'ramp',
   badges: '',
   commit: 'true',
   'commit-message': 'chore(profile): refresh generated cards [skip ci]',
@@ -60,6 +61,7 @@ describe('readInputs', () => {
       monoFont: 'Roboto Mono',
       languageLimit: 8,
       commitSweepLimit: 0,
+      legend: 'ramp',
       badges: [],
       commit: true,
       commitMessage: 'chore(profile): refresh generated cards [skip ci]',
@@ -85,6 +87,7 @@ describe('readInputs', () => {
     expect(inputs.monoFont).toBe('Roboto Mono');
     expect(inputs.languageLimit).toBe(8);
     expect(inputs.commitSweepLimit).toBe(0);
+    expect(inputs.legend).toBe('ramp');
     expect(inputs.commit).toBe(true);
     expect(inputs.commitMessage).toBe('chore(profile): refresh generated cards [skip ci]');
   });
@@ -150,6 +153,16 @@ describe('readInputs', () => {
   it('should read commit-sweep-limit 0 as uncapped', () => {
     setInputs({ ...VALID_INPUTS, 'commit-sweep-limit': '0' });
     expect(readInputs().commitSweepLimit).toBe(0);
+  });
+
+  it('should parse the scale legend style, case-insensitively', () => {
+    setInputs({ ...VALID_INPUTS, legend: ' Scale ' });
+    expect(readInputs().legend).toBe('scale');
+  });
+
+  it('should reject an unknown legend style', () => {
+    setInputs({ ...VALID_INPUTS, legend: 'numbers' });
+    expect(() => readInputs()).toThrow(/legend/);
   });
 
   it('should parse badges: trim, drop empties, preserve order', () => {

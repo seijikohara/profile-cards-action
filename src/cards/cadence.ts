@@ -11,7 +11,8 @@
  * quantifies are shaded under the histogram.
  */
 
-import { CARD_PADDING, CARD_WIDTH } from '../config.js';
+import type { LegendStyle } from '../cards.js';
+import { CARD_PADDING, CARD_WIDTH, DEFAULT_LEGEND } from '../config.js';
 import { computeCadence } from '../compute/cadence.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
@@ -20,7 +21,7 @@ import { verticalBar } from '../svg/bars.js';
 import { formatCompact, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
-import { barFill, rampLegend, rampLegendWidth } from './legend.js';
+import { barFill, rampLegend, rampLegendWidth, RAMP_SCALE_ROW } from './legend.js';
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
@@ -63,8 +64,15 @@ function columnX(hour: number): number {
   return GRID_LEFT + hour * COL_W;
 }
 
-export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: string): string {
+export function renderCadence(
+  data: ProfileData,
+  theme: Theme,
+  fontFaceCss: string,
+  legendStyle: LegendStyle = DEFAULT_LEGEND
+): string {
   const cadence = computeCadence(data.commits);
+  // One grid cell is one weekday-hour slot, so the scale counts commits in it.
+  const scale = legendStyle === 'scale' ? { thresholds: cadence.thresholds, unit: 'per slot' } : undefined;
 
   // Night bands shade the hour axis behind the histogram and carry their own
   // caption, so the footer's night share has something to point at. They stop
@@ -179,15 +187,18 @@ export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: stri
 
   // Color and dot size are the grid's only quantity channels, so this card is
   // the one that has to spell the ramp out.
-  const legendX = CARD_WIDTH - CARD_PADDING - rampLegendWidth(LEGEND_PITCH);
-  const legend = rampLegend(theme, legendX, FOOTER_BASELINE, {
+  const legendOptions = {
     pitch: LEGEND_PITCH,
-    swatch: (color, level, cx, cy) => el('circle', { cx, cy, r: DOT_RADIUS[level], fill: color }),
-  });
+    swatch: (color: string, level: number, cx: number, cy: number) =>
+      el('circle', { cx, cy, r: DOT_RADIUS[level] ?? DOT_RADIUS[0], fill: color }),
+    ...(scale === undefined ? {} : { scale }),
+  };
+  const legendX = CARD_WIDTH - CARD_PADDING - rampLegendWidth(legendOptions);
+  const legend = rampLegend(theme, legendX, FOOTER_BASELINE, legendOptions);
   const peakKey =
     cadence.peak === undefined ? '' : peakKeyChip(legendX - 18 - measureMono('peak', 9.5) - 14, FOOTER_BASELINE, theme);
 
-  const height = FOOTER_BASELINE + CARD_PADDING;
+  const height = FOOTER_BASELINE + (scale === undefined ? 0 : RAMP_SCALE_ROW) + CARD_PADDING;
 
   return cardFrame(
     {
