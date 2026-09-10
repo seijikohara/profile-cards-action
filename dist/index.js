@@ -60627,9 +60627,9 @@ async function commitAndPush(options) {
 */
 const KNOWN_CARDS = [
 	"overview",
-	"lifetime",
 	"momentum",
 	"contributions",
+	"lifetime",
 	"composition",
 	"rhythm",
 	"cadence",

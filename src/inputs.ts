@@ -38,10 +38,13 @@ export interface ActionInputs {
  * second list is a gallery that silently loses a card the day one is added.
  */
 export const KNOWN_CARDS: readonly string[] = [
+  // Reading order, not alphabetical: who this is, whether the work is rising or
+  // falling, the last year in detail, the whole record, what the contributions
+  // are made of, when they happen, where they go, what they are written in.
   'overview',
-  'lifetime',
   'momentum',
   'contributions',
+  'lifetime',
   'composition',
   'rhythm',
   'cadence',
