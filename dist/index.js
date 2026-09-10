@@ -59260,10 +59260,12 @@ const BAR_H = 12;
 const RANK_X = 36;
 const DOT_CX = 49;
 const LABEL_X = 60;
-const STARS_RIGHT = 354;
-const BAR_START_X$1 = 368;
+const STARS_RIGHT = 340;
+const ISSUE_X = 352;
+const ISSUE_SIZE = 10;
+const BAR_START_X$1 = 376;
 const VALUE_GAP$1 = 8;
-const BAR_MAX_LEN = 408;
+const BAR_MAX_LEN = 360;
 const MIN_BAR$1 = 3;
 const MAX_NAME = 36;
 const TICK_SIZE = 9.5;
@@ -59296,12 +59298,15 @@ function starCount(stars, right, baseline, theme) {
 }
 function renderRepositories(data, theme, fontFaceCss) {
 	const ranking = computeRepositories(data.topRepositories);
+	const issueMax = Math.max(0, ...ranking.rows.map((row) => row.issues));
+	const trackMax = Math.max(ranking.max, ...ranking.rows.map((row) => row.lifetimeCommits));
 	const labels = [];
 	const values = [];
 	const bars = [];
 	ranking.rows.forEach((row, index) => {
 		const rowCenter = BAND_TOP$1 + index * ROW_H$1 + ROW_H$1 / 2;
-		const length = ranking.max === 0 ? 0 : Math.max(MIN_BAR$1, row.commits / ranking.max * BAR_MAX_LEN);
+		const trackLength = trackMax === 0 ? 0 : Math.max(row.lifetimeCommits, row.commits) / trackMax * BAR_MAX_LEN;
+		const length = trackMax === 0 ? 0 : Math.max(MIN_BAR$1, row.commits / trackMax * BAR_MAX_LEN);
 		labels.push(el("text", {
 			x: RANK_X,
 			y: rowCenter + 3.3,
@@ -59316,16 +59321,30 @@ function renderRepositories(data, theme, fontFaceCss) {
 			x: LABEL_X,
 			y: rowCenter + 4,
 			class: "t-label"
-		}, ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME)), starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme));
+		}, ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME)), starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme), el("rect", {
+			x: ISSUE_X,
+			y: rowCenter - ISSUE_SIZE / 2,
+			width: ISSUE_SIZE,
+			height: ISSUE_SIZE,
+			rx: 2,
+			fill: row.issues === 0 ? theme.bgInset : barFill(theme, row.issues, issueMax)
+		}), trackLength <= length ? "" : el("rect", {
+			x: BAR_START_X$1,
+			y: rowCenter - BAR_H / 2,
+			width: trackLength,
+			height: BAR_H,
+			rx: BAR_H / 2,
+			fill: theme.bgInset
+		}));
 		bars.push(el("g", {
 			class: "hbar",
 			style: `animation-delay:${index * 55}ms;transform-origin:${BAR_START_X$1}px ${rowCenter}px`
 		}, horizontalBar(BAR_START_X$1, rowCenter - BAR_H / 2, length, BAR_H, barFill(theme, row.commits, ranking.max))));
 		values.push(el("text", {
-			x: BAR_START_X$1 + length + VALUE_GAP$1,
+			x: BAR_START_X$1 + Math.max(length, trackLength) + VALUE_GAP$1,
 			y: rowCenter + 3.3,
 			class: "t-tick"
-		}, textNode(String(row.commits))));
+		}, textNode(row.lifetimeCommits > row.commits ? `${formatCompact(row.commits)} / ${formatCompact(row.lifetimeCommits)}` : String(row.commits))));
 	});
 	const empty = ranking.rows.length === 0 ? el("text", {
 		x: 24,
@@ -59349,31 +59368,40 @@ function renderRepositories(data, theme, fontFaceCss) {
 		class: "t-label"
 	}, ...footerParts);
 	const key = rowKey(footerBaseline, theme, ranking.rows.length > 0);
+	const popular = data.popularPullRequest;
+	const popularBaseline = footerBaseline + 17;
+	const popularLine = popular === null ? "" : el("text", {
+		x: 24,
+		y: popularBaseline,
+		class: "t-mono"
+	}, textNode(`MOST DISCUSSED PR · ${popular.nameWithOwner} · ${truncate(popular.title, 62)}`));
 	const axis = el("line", {
-		x1: 367.5,
+		x1: 375.5,
 		y1: BAND_TOP$1,
-		x2: 367.5,
+		x2: 375.5,
 		y2: bandBottom,
 		stroke: theme.border,
 		"stroke-width": 1
 	});
 	return cardFrame({
 		theme,
-		height: footerBaseline + 24,
+		height: (popular === null ? footerBaseline : popularBaseline) + 24,
 		title: "Top repositories",
-		note: "trailing 12 months · by commits",
+		note: "trailing 12 months · by commits · bars over lifetime",
 		description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
 		extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`,
 		fontFaceCss
-	}, el("g", { class: "fade" }, axis, ...labels, ...values, empty, footer, key), ...bars);
+	}, el("g", { class: "fade" }, axis, ...labels, ...values, empty, footer, key, popularLine), ...bars);
 }
-/** Names the two row glyphs, right-aligned on the footer baseline. */
+/** Names the three row glyphs, right-aligned on the footer baseline. */
 function rowKey(baseline, theme, visible) {
 	if (!visible) return "";
+	const right = 822;
+	const issuesWidth = 15 + measureMono("issues opened", TICK_SIZE);
 	const starsWidth = 14.2 + measureMono("stars", TICK_SIZE);
 	const languageWidth = 14 + measureMono("primary language", TICK_SIZE);
-	const right = 822;
-	const starsX = right - starsWidth;
+	const issuesX = right - issuesWidth;
+	const starsX = issuesX - 16 - starsWidth;
 	const languageX = starsX - 16 - languageWidth;
 	return el("circle", {
 		cx: languageX + 4.5,
@@ -59385,11 +59413,22 @@ function rowKey(baseline, theme, visible) {
 		y: baseline,
 		class: "t-tick"
 	}, textNode("primary language")) + star(starsX + STAR_R, baseline - 3.4, STAR_R, theme.fgMuted) + el("text", {
+		x: starsX + STAR_R * 2 + 5,
+		y: baseline,
+		class: "t-tick"
+	}, textNode("stars")) + el("rect", {
+		x: issuesX,
+		y: baseline - 8,
+		width: ISSUE_SIZE,
+		height: ISSUE_SIZE,
+		rx: 2,
+		fill: theme.contribRamp[3]
+	}) + el("text", {
 		x: right,
 		y: baseline,
 		class: "t-tick",
 		"text-anchor": "end"
-	}, textNode("stars"));
+	}, textNode("issues opened"));
 }
 //#endregion
 //#region src/compute/rhythm.ts
@@ -59969,7 +60008,7 @@ var GitHubApiError = class extends Error {
 	}
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function requestOnce(token, query, variables) {
+async function requestOnce(token, query, variables, options) {
 	const response = await fetch(ENDPOINT, {
 		method: "POST",
 		headers: {
@@ -59991,8 +60030,10 @@ async function requestOnce(token, query, variables) {
 		throw new GitHubApiError(`HTTP ${response.status}: ${body.slice(0, 200)}`, retryable);
 	}
 	const envelope = await response.json();
-	if (envelope.errors && envelope.errors.length > 0) {
-		const first = envelope.errors[0];
+	const tolerated = options.tolerate ?? [];
+	const fatal = (envelope.errors ?? []).filter((error) => envelope.data === void 0 || error.type === void 0 || !tolerated.includes(error.type));
+	if (fatal.length > 0) {
+		const first = fatal[0];
 		const retryable = first?.type === "RATE_LIMITED";
 		throw new GitHubApiError(`GraphQL error${first?.type ? ` [${first.type}]` : ""}: ${first?.message ?? "unknown"}`, retryable);
 	}
@@ -60000,16 +60041,16 @@ async function requestOnce(token, query, variables) {
 	return envelope.data;
 }
 /** Execute a query with retries (exponential backoff + jitter) for transient failures. */
-async function graphql(token, query, variables = {}) {
-	return attemptRequest(token, query, variables, 1);
+async function graphql(token, query, variables = {}, options = {}) {
+	return attemptRequest(token, query, variables, options, 1);
 }
-async function attemptRequest(token, query, variables, attempt) {
+async function attemptRequest(token, query, variables, options, attempt) {
 	try {
-		return await requestOnce(token, query, variables);
+		return await requestOnce(token, query, variables, options);
 	} catch (error) {
 		if (!(error instanceof GitHubApiError && error.retryable) || attempt === ATTEMPTS) throw error;
 		await sleep(BASE_BACKOFF_MS * 4 ** (attempt - 1) + Math.random() * 500);
-		return attemptRequest(token, query, variables, attempt + 1);
+		return attemptRequest(token, query, variables, options, attempt + 1);
 	}
 }
 //#endregion
@@ -60131,9 +60172,30 @@ query Trailing($login: String!) {
         }
         contributions(first: 1) { totalCount }
       }
+      issueContributionsByRepository(maxRepositories: 25) {
+        repository { nameWithOwner isPrivate }
+        contributions(first: 1) { totalCount }
+      }
+      popularPullRequestContribution {
+        pullRequest { title repository { nameWithOwner isPrivate } }
+      }
     }
   }
 }`;
+/**
+* Lifetime commits the user authored on each named repository's default branch.
+*
+* Built rather than declared, because one aliased selection per repository is
+* what keeps this to a single request: ten aliases measured at cost 1 with
+* nodeCount 0 against the live API, and the same shape resolves on
+* repositories the token has no relationship with.
+*
+* Aliases resolve independently, so a repository deleted or renamed since the
+* trailing query fails only its own alias — callers must tolerate NOT_FOUND.
+*/
+function lifetimeCommitsQuery(count) {
+	return `query LifetimeCommits($authorId: ID!, ${range(count).map((index) => `$o${index}: String!, $n${index}: String!`).join(", ")}) {\n${range(count).map((index) => `  r${index}: repository(owner: $o${index}, name: $n${index}) { defaultBranchRef { target { ... on Commit { history(author: { id: $authorId }) { totalCount } } } } }`).join("\n")}\n}`;
+}
 /**
 * One page of commits the user authored on a repository's default branch.
 *
@@ -60253,6 +60315,26 @@ async function fetchRepoCommits(token, owner, name, authorId, since, cursor = nu
 	return [...samples, ...rest];
 }
 /**
+* Lifetime default-branch commits by the author, one alias per repository.
+*
+* Returns an empty map for an empty list rather than sending a query with no
+* selections, which the API rejects.
+*/
+async function fetchLifetimeCommits(token, authorId, names) {
+	if (names.length === 0) return /* @__PURE__ */ new Map();
+	const variables = { authorId };
+	for (const [index, name] of names.entries()) {
+		const [owner, repo] = name.split("/");
+		variables[`o${index}`] = owner ?? "";
+		variables[`n${index}`] = repo ?? "";
+	}
+	const data = await graphql(token, lifetimeCommitsQuery(names.length), variables, { tolerate: ["NOT_FOUND"] });
+	return new Map(names.flatMap((name, index) => {
+		const total = data[`r${index}`]?.defaultBranchRef?.target?.history?.totalCount;
+		return total === void 0 ? [] : [[name, total]];
+	}));
+}
+/**
 * Merge per-year daily series into one ascending run.
 * Year calendars are week-aligned, so edges spill a few days into neighboring
 * years; keep the higher count when the same date appears twice.
@@ -60305,12 +60387,22 @@ async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 		total: trailingCalendar.totalContributions,
 		includesPrivate: trailingData.user?.contributionsCollection.hasAnyRestrictedContributions ?? false
 	};
-	const topRepositories = (trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []).filter((entry) => !entry.repository.isPrivate).map((entry) => ({
+	const issuesByRepo = new Map((trailingData.user?.contributionsCollection.issueContributionsByRepository ?? []).filter((entry) => !entry.repository.isPrivate).map((entry) => [entry.repository.nameWithOwner, entry.contributions.totalCount]));
+	const rankedRepos = (trailingData.user?.contributionsCollection.commitContributionsByRepository ?? []).filter((entry) => !entry.repository.isPrivate);
+	const lifetimeCommits = await fetchLifetimeCommits(token, user.id, rankedRepos.map((entry) => entry.repository.nameWithOwner));
+	const topRepositories = rankedRepos.map((entry) => ({
 		nameWithOwner: entry.repository.nameWithOwner,
 		commits: entry.contributions.totalCount,
+		issues: issuesByRepo.get(entry.repository.nameWithOwner) ?? 0,
+		lifetimeCommits: lifetimeCommits.get(entry.repository.nameWithOwner) ?? 0,
 		language: entry.repository.primaryLanguage,
 		stars: entry.repository.stargazerCount
 	}));
+	const popular = trailingData.user?.contributionsCollection.popularPullRequestContribution?.pullRequest;
+	const popularPullRequest = popular === void 0 || popular.repository.isPrivate ? null : {
+		title: popular.title,
+		nameWithOwner: popular.repository.nameWithOwner
+	};
 	const trailingCollection = trailingData.user?.contributionsCollection;
 	const trailingCommits = {
 		total: trailingCollection?.totalCommitContributions ?? 0,
@@ -60356,6 +60448,7 @@ async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 			candidates: sweepCandidates.length
 		},
 		topRepositories,
+		popularPullRequest,
 		repositories: portfolio,
 		trailingCommits
 	};
