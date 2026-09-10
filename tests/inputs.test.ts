@@ -27,6 +27,7 @@ const VALID_INPUTS: Record<string, string> = {
   font: 'Roboto',
   'mono-font': 'Roboto Mono',
   'language-limit': '8',
+  'commit-sweep-limit': '0',
   badges: '',
   commit: 'true',
   'commit-message': 'chore(profile): refresh generated cards [skip ci]',
@@ -58,6 +59,7 @@ describe('readInputs', () => {
       font: 'Roboto',
       monoFont: 'Roboto Mono',
       languageLimit: 8,
+      commitSweepLimit: 0,
       badges: [],
       commit: true,
       commitMessage: 'chore(profile): refresh generated cards [skip ci]',
@@ -82,6 +84,7 @@ describe('readInputs', () => {
     expect(inputs.font).toBe('Roboto');
     expect(inputs.monoFont).toBe('Roboto Mono');
     expect(inputs.languageLimit).toBe(8);
+    expect(inputs.commitSweepLimit).toBe(0);
     expect(inputs.commit).toBe(true);
     expect(inputs.commitMessage).toBe('chore(profile): refresh generated cards [skip ci]');
   });
@@ -132,6 +135,21 @@ describe('readInputs', () => {
   it('should fall back to the default when language-limit is blank', () => {
     setInputs({ ...VALID_INPUTS, 'language-limit': '  ' });
     expect(readInputs().languageLimit).toBe(8);
+  });
+
+  it('should parse a capped commit-sweep-limit', () => {
+    setInputs({ ...VALID_INPUTS, 'commit-sweep-limit': '15' });
+    expect(readInputs().commitSweepLimit).toBe(15);
+  });
+
+  it.each(['-1', '2.5', 'all'])('should reject commit-sweep-limit %s', (raw) => {
+    setInputs({ ...VALID_INPUTS, 'commit-sweep-limit': raw });
+    expect(() => readInputs()).toThrow(/commit-sweep-limit/);
+  });
+
+  it('should read commit-sweep-limit 0 as uncapped', () => {
+    setInputs({ ...VALID_INPUTS, 'commit-sweep-limit': '0' });
+    expect(readInputs().commitSweepLimit).toBe(0);
   });
 
   it('should parse badges: trim, drop empties, preserve order', () => {

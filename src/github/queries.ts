@@ -3,6 +3,10 @@
 /**
  * Everything except calendars, in one cheap query (1 point, ~1.1k nodes).
  *
+ * `pushedAt` is what bounds the commit sweep: it is an upper bound on every
+ * commit date in the repository, so a repository last pushed before the sweep
+ * window cannot hold a commit inside it.
+ *
  * `privacy: PUBLIC` pins the repository-derived numbers (stars, languages,
  * repo count) to public data whatever token runs the generator. The flat
  * counters (pullRequests, issues, repositoriesContributedTo) are still
@@ -35,6 +39,7 @@ query Profile($login: String!, $cursor: String) {
         name
         isFork
         isArchived
+        pushedAt
         stargazerCount
         languages(first: 10, orderBy: { field: SIZE, direction: DESC }) {
           edges { size node { name color } }
@@ -59,6 +64,8 @@ export interface ProfileQueryData {
         readonly name: string;
         readonly isFork: boolean;
         readonly isArchived: boolean;
+        /** Last push to any branch; null for an empty repository. */
+        readonly pushedAt: string | null;
         readonly stargazerCount: number;
         readonly languages: {
           readonly edges: readonly {

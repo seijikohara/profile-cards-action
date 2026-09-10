@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { renderCadence } from '../src/cards/cadence.js';
 import { computeCadence } from '../src/compute/cadence.js';
 import { range } from '../src/iter.js';
-import type { CommitSample } from '../src/model.js';
+import type { CommitSample, ProfileData } from '../src/model.js';
+import { LIGHT } from '../src/theme.js';
+import { makeFixture } from './fixture.js';
 
 function commit(date: string, additions = 0, deletions = 0): CommitSample {
   return { date, additions, deletions };
@@ -115,5 +118,23 @@ describe('computeCadence', () => {
     expect(() => computeCadence([commit('2026-08-17 08:00:00')])).toThrow('invalid commit date');
     expect(() => computeCadence([commit('2026-08-17T25:00:00Z')])).toThrow('invalid commit date');
     expect(() => computeCadence([commit('2026-13-01T08:00:00Z')])).toThrow('invalid commit date');
+  });
+});
+
+describe('renderCadence sweep disclosure', () => {
+  const fixture: ProfileData = makeFixture();
+
+  it('says nothing about scope when the sweep visited every candidate', () => {
+    const svg = renderCadence({ ...fixture, commitSweep: { swept: 18, candidates: 18 } }, LIGHT, '');
+    expect(svg).toContain('TRAILING 12 MONTHS · AUTHOR LOCAL TIME');
+    expect(svg).not.toContain('REPOSITORIES');
+    expect(svg).toContain('commits');
+    expect(svg).not.toContain('commits swept');
+  });
+
+  it('names the shortfall and softens the count when the cap bit', () => {
+    const svg = renderCadence({ ...fixture, commitSweep: { swept: 5, candidates: 18 } }, LIGHT, '');
+    expect(svg).toContain('5 OF 18 REPOSITORIES');
+    expect(svg).toContain('commits swept');
   });
 });

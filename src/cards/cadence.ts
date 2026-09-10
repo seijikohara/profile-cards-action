@@ -147,9 +147,15 @@ export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: stri
 
   const eyebrow = el('text', { x: CARD_PADDING, y: EYEBROW_BASELINE, class: 't-mono' }, textNode('BY HOUR'));
 
+  // A capped sweep undercounts, so the card says so rather than presenting a
+  // partial grid as the whole year. An uncapped sweep visited every repository
+  // that could hold a commit in the window, so it needs no caveat.
+  const { swept, candidates } = data.commitSweep;
+  const capped = swept < candidates;
+
   const footerParts: string[] = [
     el('tspan', { class: 't-stat' }, textNode(formatCompact(cadence.totalCommits))),
-    textNode(' commits'),
+    textNode(capped ? ' commits swept' : ' commits'),
   ];
   if (cadence.peak !== undefined) {
     const peakLabel = `${WEEKDAY_LABELS[cadence.peak.weekday] ?? ''} ${String(cadence.peak.hour).padStart(2, '0')}:00`;
@@ -188,7 +194,9 @@ export function renderCadence(data: ProfileData, theme: Theme, fontFaceCss: stri
       theme,
       height,
       title: 'Commit cadence',
-      note: 'trailing 12 months · author local time',
+      note: capped
+        ? `trailing 12 months · author local time · ${swept} of ${candidates} repositories`
+        : 'trailing 12 months · author local time',
       description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
       extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
       fontFaceCss,

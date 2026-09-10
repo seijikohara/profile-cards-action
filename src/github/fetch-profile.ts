@@ -1,5 +1,6 @@
 /** Orchestrates the API calls and normalizes them into the domain model. */
 
+import { DEFAULT_COMMIT_SWEEP_LIMIT } from '../config.js';
 import type {
   CommitSample,
   DayContribution,
@@ -124,7 +125,28 @@ export function mergeDailySeries(seriesPerYear: readonly (readonly DayContributi
   return [...byDate.values()].toSorted((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function fetchProfile(token: string, login: string): Promise<Omit<ProfileData, 'generatedAt'>> {
+/** How much of the per-repository commit sweep to run. */
+export interface FetchOptions {
+  /**
+   * Sweep commits at all. The sweep exists only for the cadence card, and it is
+   * the run's only cost that grows with repository count, so a run that does
+   * not render that card should not pay for it.
+   */
+  readonly sweepCommits: boolean;
+  /** Repositories the sweep visits, most recently pushed first; 0 = no cap. */
+  readonly sweepLimit: number;
+}
+
+export const DEFAULT_FETCH_OPTIONS: FetchOptions = {
+  sweepCommits: true,
+  sweepLimit: DEFAULT_COMMIT_SWEEP_LIMIT,
+};
+
+export async function fetchProfile(
+  token: string,
+  login: string,
+  options: FetchOptions = DEFAULT_FETCH_OPTIONS
+): Promise<Omit<ProfileData, 'generatedAt'>> {
   // Page through owned public repositories (1 point per page). Every page
   // repeats the user scalars; the first snapshot serves them.
   const profilePages = await fetchProfilePages(token, login, null);
@@ -206,10 +228,23 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
 
   // Sweep commits the user authored across owned source repositories over the
   // trailing 365 days — one paginated 1-point query per repository, fanned out
-  // like the year queries. This powers the cadence card.
+  // like the year queries. This powers the cadence card, and it is the only
+  // part of a run whose cost grows with the number of repositories owned.
   const since = new Date(Date.now() - 365 * 86_400_000).toISOString();
+  // `pushedAt` is an upper bound on every commit date in the repository, so a
+  // repository last pushed before the window cannot hold a commit inside it:
+  // dropping it removes a query without dropping a sample. Newest first, so a
+  // cap keeps the repositories most likely to carry commits.
+  const sweepCandidates = sourceRepos
+    .filter((repo) => repo.pushedAt !== null && repo.pushedAt >= since)
+    .toSorted((a, b) => (b.pushedAt ?? '').localeCompare(a.pushedAt ?? ''));
+  const swept = !options.sweepCommits
+    ? []
+    : options.sweepLimit > 0
+      ? sweepCandidates.slice(0, options.sweepLimit)
+      : sweepCandidates;
   const commits = (
-    await Promise.all(sourceRepos.map((repo) => fetchRepoCommits(token, login, repo.name, user.id, since)))
+    await Promise.all(swept.map((repo) => fetchRepoCommits(token, login, repo.name, user.id, since)))
   ).flat();
 
   return {
@@ -226,6 +261,7 @@ export async function fetchProfile(token: string, login: string): Promise<Omit<P
     lifetimeDays,
     trailing,
     commits,
+    commitSweep: { swept: swept.length, candidates: sweepCandidates.length },
     topRepositories,
     trailingCommits,
   };
