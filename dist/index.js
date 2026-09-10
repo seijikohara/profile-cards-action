@@ -59359,6 +59359,12 @@ function computeRhythm(days) {
 * note, because "activity" alone leaves a reader guessing. Bars take their fill
 * from the contribution ramp, so length and ink agree and the busiest bar is
 * the darkest without needing a second hue.
+*
+* Each bar also carries a reference tick at the trailing year's position in its
+* own panel, so the card answers "and has that changed?" without a second set
+* of bars. Both series are normalised against their own maximum: the comparison
+* is between shapes, not volumes, which is the only comparison an eleven-year
+* profile and a one-year window can honestly support.
 */
 const WEEKDAY_LABELS = [
 	"Mon",
@@ -59401,12 +59407,78 @@ const MONTH_BAND = RIGHT_W / MONTH_LETTERS.length;
 const MONTH_BAR_W = 22;
 const MONTH_VALUE_GAP = 6;
 const MIN_BAR = 3;
+const TICK_OVERHANG = 3;
+const TICK_WIDTH = 2;
+/**
+* The comparison needs two windows that are actually different. Below this many
+* days of history the trailing year IS most of the record, and the tick would
+* sit on the end of every bar telling the reader nothing.
+*/
+const MIN_HISTORY_DAYS = 550;
+const MONTH_NAMES = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December"
+];
+/** Whole-percent label for a [0,1] share. */
+function pct(share) {
+	return `${Math.round(share * 100)}%`;
+}
+/**
+* Key naming the two marks, right-aligned on `baseline`. The bars are the
+* record; the tick is where the trailing year sits in its own panel.
+*/
+function trailingKey(theme, baseline) {
+	const right = 822;
+	const tickCaption = "trailing year";
+	const barCaption = "all years";
+	const tickTextX = right;
+	const tickMarkX = tickTextX - measureMono(tickCaption, 9.5) - 12;
+	const barTextX = tickMarkX - 22;
+	return el("rect", {
+		x: barTextX - measureMono(barCaption, 9.5) - 16,
+		y: baseline - 8,
+		width: 12,
+		height: 8,
+		rx: 2,
+		fill: theme.contribRamp[3]
+	}) + el("text", {
+		x: barTextX,
+		y: baseline,
+		class: "t-tick",
+		"text-anchor": "end"
+	}, textNode(barCaption)) + el("rect", {
+		x: tickMarkX,
+		y: baseline - 11,
+		width: TICK_WIDTH,
+		height: 14,
+		fill: theme.fg
+	}) + el("text", {
+		x: tickTextX,
+		y: baseline,
+		class: "t-tick",
+		"text-anchor": "end"
+	}, textNode(tickCaption));
+}
 /** Round a path/transform coordinate to 2 decimals — mirrors the dsl's num(). */
 function coord(value) {
 	return String(Math.round(value * 100) / 100);
 }
 function renderRhythm(data, theme, fontFaceCss) {
 	const rhythm = computeRhythm(data.lifetimeDays);
+	const recent = computeRhythm(data.trailing.days);
+	const comparable = data.lifetimeDays.length >= MIN_HISTORY_DAYS;
+	const recentWeekdayMax = Math.max(0, ...recent.weekday);
+	const recentMonthMax = Math.max(0, ...recent.month);
 	const weekdayMax = Math.max(0, ...rhythm.weekday);
 	const weekdayLabels = [];
 	const weekdayValues = [];
@@ -59426,6 +59498,16 @@ function renderRhythm(data, theme, fontFaceCss) {
 			class: "hbar",
 			style: `animation-delay:${index * 55}ms;transform-origin:${coord(BAR_START_X)}px ${coord(rowCenter)}px`
 		}, horizontalBar(BAR_START_X, rowCenter - WEEKDAY_BAR_H / 2, length, WEEKDAY_BAR_H, barFill(theme, value, weekdayMax))));
+		if (comparable && recentWeekdayMax > 0) {
+			const share = (recent.weekday[index] ?? 0) / recentWeekdayMax;
+			weekdayLabels.push(el("rect", {
+				x: BAR_START_X + share * WEEKDAY_MAX_LEN - TICK_WIDTH / 2,
+				y: rowCenter - WEEKDAY_BAR_H / 2 - TICK_OVERHANG,
+				width: TICK_WIDTH,
+				height: 16,
+				fill: theme.fg
+			}));
+		}
 		weekdayValues.push(el("text", {
 			x: BAR_START_X + length + VALUE_GAP,
 			y: rowCenter + 3.3,
@@ -59451,6 +59533,16 @@ function renderRhythm(data, theme, fontFaceCss) {
 				class: "t-tick",
 				"text-anchor": "middle"
 			}, textNode(formatCompact(value))));
+		}
+		if (comparable && recentMonthMax > 0) {
+			const share = (recent.month[index] ?? 0) / recentMonthMax;
+			monthTicks.push(el("rect", {
+				x: center - MONTH_BAR_W / 2 - TICK_OVERHANG,
+				y: BASELINE_Y - share * MONTH_MAX_HEIGHT - TICK_WIDTH / 2,
+				width: 28,
+				height: TICK_WIDTH,
+				fill: theme.fg
+			}));
 		}
 		monthTicks.push(el("text", {
 			x: center,
@@ -59491,21 +59583,24 @@ function renderRhythm(data, theme, fontFaceCss) {
 		textNode(" active days")
 	];
 	if (rhythm.busiestDay !== void 0) footerParts.push(textNode(" · busiest "), el("tspan", { class: "t-stat" }, textNode(rhythm.busiestDay.date)), textNode(` (${rhythm.busiestDay.count})`));
-	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`${Math.round(rhythm.weekendShare * 100)}%`)), textNode(" on weekends"));
+	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(pct(rhythm.weekendShare))));
+	if (comparable) footerParts.push(textNode(" → "), el("tspan", { class: "t-stat" }, textNode(pct(recent.weekendShare))));
+	footerParts.push(textNode(" on weekends"));
 	const footer = el("text", {
 		x: LEFT_X,
 		y: FOOTER_BASELINE,
 		class: "t-label"
 	}, ...footerParts);
+	const key = comparable ? trailingKey(theme, FOOTER_BASELINE) : "";
 	return cardFrame({
 		theme,
 		height: 262,
 		title: "Activity rhythm",
-		note: "all contribution types · all years",
-		description: `Activity rhythm for ${data.login}: contributions by weekday and by month of year.`,
+		note: comparable ? "all contribution types · all years vs trailing year" : "all contribution types · all years",
+		description: `Activity rhythm for ${data.login}: contributions by weekday and by month of year, busiest on ${WEEKDAY_LABELS[rhythm.peakWeekday] ?? "Mon"} and in ${MONTH_NAMES[rhythm.peakMonth] ?? "January"}.`,
 		extraCss: ".hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}",
 		fontFaceCss
-	}, el("g", { class: "fade" }, eyebrows, weekdayAxis, monthBaseline, ...weekdayLabels, ...weekdayValues, ...monthTicks, footer), ...weekdayBars, ...monthBars);
+	}, el("g", { class: "fade" }, eyebrows, key, weekdayAxis, monthBaseline, ...weekdayLabels, ...weekdayValues, ...monthTicks, footer), ...weekdayBars, ...monthBars);
 }
 //#endregion
 //#region src/cards.ts
