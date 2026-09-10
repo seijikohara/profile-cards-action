@@ -58200,7 +58200,8 @@ function languageShares(slices, limit = 8, unnamedBytes = 0) {
 	const entries = otherBytes > 0 ? [...kept, {
 		name: "Other",
 		color: null,
-		bytes: otherBytes
+		bytes: otherBytes,
+		repos: 0
 	}] : [...kept];
 	const exact = entries.map((entry) => entry.bytes / total * 1e3);
 	const floors = exact.map((value) => Math.floor(value));
@@ -58336,11 +58337,13 @@ function layoutRow(row, free, fill) {
 */
 const CONTENT_TOP = 60;
 const TREE_X = 24;
-const TREE_WIDTH = 528;
+const TREE_WIDTH = 478;
 const TREE_MIN_HEIGHT = 250;
 const LIST_ROW_HEIGHT = 27;
+const LIST_HEAD_BASELINE = 57;
 const LIST_FIRST_BASELINE = 75;
-const LIST_NAME_X = 590;
+const LIST_NAME_X = 540;
+const LIST_REPOS_RIGHT = 674;
 const LIST_BYTES_RIGHT = 748;
 const LIST_PCT_RIGHT = 822;
 const LABEL_MIN_WIDTH = 54;
@@ -58417,7 +58420,7 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 	const list = shares.map((share, index) => {
 		const y = LIST_FIRST_BASELINE + index * LIST_ROW_HEIGHT;
 		return el("g", {}, el("circle", {
-			cx: 577,
+			cx: 527,
 			cy: y - 4,
 			r: 5,
 			fill: cellFill(share, theme)
@@ -58426,6 +58429,11 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 			y,
 			class: "leg-name"
 		}, textNode(share.name)), el("text", {
+			x: LIST_REPOS_RIGHT,
+			y,
+			class: "t-tick",
+			"text-anchor": "end"
+		}, textNode(share.repos === 0 ? "—" : String(share.repos))), el("text", {
 			x: LIST_BYTES_RIGHT,
 			y,
 			class: "t-tick",
@@ -58437,6 +58445,26 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 			"text-anchor": "end"
 		}, textNode(pctLabel(share))));
 	});
+	const listHead = el("text", {
+		x: LIST_NAME_X,
+		y: LIST_HEAD_BASELINE,
+		class: "t-mono"
+	}, textNode("LANGUAGE")) + el("text", {
+		x: LIST_REPOS_RIGHT,
+		y: LIST_HEAD_BASELINE,
+		class: "t-mono",
+		"text-anchor": "end"
+	}, textNode("REPOS")) + el("text", {
+		x: LIST_BYTES_RIGHT,
+		y: LIST_HEAD_BASELINE,
+		class: "t-mono",
+		"text-anchor": "end"
+	}, textNode("BYTES")) + el("text", {
+		x: LIST_PCT_RIGHT,
+		y: LIST_HEAD_BASELINE,
+		class: "t-mono",
+		"text-anchor": "end"
+	}, textNode("SHARE"));
 	const contentBottom = CONTENT_TOP + treeHeight;
 	const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0) + data.languageTailBytes;
 	const languageCount = `${data.languages.length}${data.languageTailBytes > 0 ? "+" : ""}`;
@@ -58459,7 +58487,7 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 		description: `Language breakdown for ${data.login} by bytes${lead}.`,
 		extraCss,
 		fontFaceCss
-	}, ...cells, el("g", { class: "fade" }, ...list, footer));
+	}, ...cells, el("g", { class: "fade" }, listHead, ...list, footer));
 }
 //#endregion
 //#region src/compute/lifetime.ts
@@ -60257,11 +60285,13 @@ function aggregateLanguages(repos) {
 		const entry = totals.get(edge.node.name);
 		if (entry) totals.set(edge.node.name, {
 			color: entry.color ?? edge.node.color,
-			bytes: entry.bytes + edge.size
+			bytes: entry.bytes + edge.size,
+			repos: entry.repos + 1
 		});
 		else totals.set(edge.node.name, {
 			color: edge.node.color,
-			bytes: edge.size
+			bytes: edge.size,
+			repos: 1
 		});
 	}
 	const tailBytes = sources.reduce((total, repo) => {
@@ -60269,10 +60299,11 @@ function aggregateLanguages(repos) {
 		return total + Math.max(0, (repo.languages?.totalSize ?? named) - named);
 	}, 0);
 	return {
-		slices: [...totals.entries()].map(([name, { color, bytes }]) => ({
+		slices: [...totals.entries()].map(([name, entry]) => ({
 			name,
-			color,
-			bytes
+			color: entry.color,
+			bytes: entry.bytes,
+			repos: entry.repos
 		})).toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name)),
 		tailBytes
 	};
