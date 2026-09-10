@@ -57934,18 +57934,23 @@ function renderContributions(data, streaks, theme, fontFaceCss) {
 //#region src/compute/languages.ts
 /** Language share computation for the Languages card. */
 /**
-* Keep the top `limit` languages and fold the tail into "Other". Percentages
+* Keep the top `limit` languages and fold the rest into "Other". Percentages
 * use largest-remainder rounding so the printed values total 100.0.
+*
+* `unnamedBytes` is code the query counted but never named — languages past
+* the per-repository edge cap. It joins "Other" for the same reason the tail
+* does, and it belongs in the denominator either way: a percentage of the named
+* bytes alone would be a share of the wrong total.
 *
 * "Other" stays last however large it grows. It is a residual bucket, not a
 * language, so it does not compete for a rank — the convention every legend
 * and breakdown chart follows, and the one a reader arrives with.
 */
-function languageShares(slices, limit = 8) {
-	const total = slices.reduce((sum, slice) => sum + slice.bytes, 0);
+function languageShares(slices, limit = 8, unnamedBytes = 0) {
+	const total = slices.reduce((sum, slice) => sum + slice.bytes, 0) + unnamedBytes;
 	if (total === 0) return [];
 	const kept = slices.slice(0, limit);
-	const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0);
+	const otherBytes = slices.slice(limit).reduce((sum, slice) => sum + slice.bytes, 0) + unnamedBytes;
 	const entries = otherBytes > 0 ? [...kept, {
 		name: "Other",
 		color: null,
@@ -58135,7 +58140,7 @@ function cellLabel(share, rect, fill) {
 	].join("");
 }
 function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
-	const shares = languageShares(data.languages, languageLimit);
+	const shares = languageShares(data.languages, languageLimit, data.languageTailBytes);
 	if (shares.length === 0) return cardFrame({
 		theme,
 		height: 96,
@@ -58187,13 +58192,14 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 		}, textNode(pctLabel(share))));
 	});
 	const contentBottom = CONTENT_TOP + treeHeight;
-	const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0);
+	const totalBytes = data.languages.reduce((sum, slice) => sum + slice.bytes, 0) + data.languageTailBytes;
+	const languageCount = `${data.languages.length}${data.languageTailBytes > 0 ? "+" : ""}`;
 	const footerBaseline = contentBottom + 28;
 	const footer = el("text", {
 		x: 24,
 		y: footerBaseline,
 		class: "t-label"
-	}, el("tspan", { class: "t-stat" }, textNode(String(data.languages.length))), textNode(" languages across "), el("tspan", { class: "t-stat" }, textNode(formatInt(data.publicSourceRepos))), textNode(" source repositories · "), el("tspan", { class: "t-stat" }, textNode(formatBytes(totalBytes))));
+	}, el("tspan", { class: "t-stat" }, textNode(languageCount)), textNode(" languages across "), el("tspan", { class: "t-stat" }, textNode(formatInt(data.publicSourceRepos))), textNode(" source repositories · "), el("tspan", { class: "t-stat" }, textNode(formatBytes(totalBytes))));
 	const height = footerBaseline + 24;
 	const stagger = rects.map((rect) => `.c${rect.index}{animation-delay:${Math.min(rect.index * .05, .6).toFixed(2)}s}`).join("");
 	const extraCss = `.lang{font-size:13px;font-weight:600}.lang-pct{font-size:10.5px}.leg-name{font-size:13px;fill:${theme.fg}}` + stagger;
@@ -59200,6 +59206,12 @@ async function attemptRequest(token, query, variables, attempt) {
 /**
 * Everything except calendars, in one cheap query (1 point, ~1.1k nodes).
 *
+* `languages` asks for 30 per repository and reads `totalSize` alongside the
+* edges. The edge list is a truncation, so summing it alone understates the
+* total silently; `totalSize` minus the summed edges is the exact remainder,
+* which keeps the languages card's percentages honest however many languages a
+* repository turns out to hold.
+*
 * `pushedAt` is what bounds the commit sweep: it is an upper bound on every
 * commit date in the repository, so a repository last pushed before the sweep
 * window cannot hold a commit inside it.
@@ -59238,7 +59250,8 @@ query Profile($login: String!, $cursor: String) {
         isArchived
         pushedAt
         stargazerCount
-        languages(first: 10, orderBy: { field: SIZE, direction: DESC }) {
+        languages(first: 30, orderBy: { field: SIZE, direction: DESC }) {
+          totalSize
           edges { size node { name color } }
         }
       }
@@ -59339,27 +59352,41 @@ function flattenCalendar(calendar) {
 		level: LEVELS[day.contributionLevel]
 	})));
 }
+/**
+* Sum language bytes across source repositories, keeping the bytes the edge
+* cap left unnamed.
+*
+* `totalSize` counts every language in the repository; the edges only carry the
+* largest 30. Their difference is real code with no name attached, so it is
+* tracked separately rather than dropped — dropping it would make every
+* percentage a share of the wrong total.
+*/
 function aggregateLanguages(repos) {
+	const sources = repos.filter((repo) => !repo.isFork && !repo.isArchived);
 	const totals = /* @__PURE__ */ new Map();
-	for (const repo of repos) {
-		if (repo.isFork || repo.isArchived) continue;
-		for (const edge of repo.languages?.edges ?? []) {
-			const entry = totals.get(edge.node.name);
-			if (entry) totals.set(edge.node.name, {
-				color: entry.color ?? edge.node.color,
-				bytes: entry.bytes + edge.size
-			});
-			else totals.set(edge.node.name, {
-				color: edge.node.color,
-				bytes: edge.size
-			});
-		}
+	for (const repo of sources) for (const edge of repo.languages?.edges ?? []) {
+		const entry = totals.get(edge.node.name);
+		if (entry) totals.set(edge.node.name, {
+			color: entry.color ?? edge.node.color,
+			bytes: entry.bytes + edge.size
+		});
+		else totals.set(edge.node.name, {
+			color: edge.node.color,
+			bytes: edge.size
+		});
 	}
-	return [...totals.entries()].map(([name, { color, bytes }]) => ({
-		name,
-		color,
-		bytes
-	})).toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+	const tailBytes = sources.reduce((total, repo) => {
+		const named = (repo.languages?.edges ?? []).reduce((sum, edge) => sum + edge.size, 0);
+		return total + Math.max(0, (repo.languages?.totalSize ?? named) - named);
+	}, 0);
+	return {
+		slices: [...totals.entries()].map(([name, { color, bytes }]) => ({
+			name,
+			color,
+			bytes
+		})).toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name)),
+		tailBytes
+	};
 }
 /** Page through the profile query, one user snapshot per repository page. */
 async function fetchProfilePages(token, login, cursor) {
@@ -59465,6 +59492,7 @@ async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 	if (today === void 0) throw new Error("trailing calendar is empty");
 	const lifetimeDays = mergeDailySeries(dailySeries).filter((day) => day.date <= today);
 	const sourceRepos = repoNodes.filter((repo) => !repo.isFork && !repo.isArchived);
+	const languages = aggregateLanguages(repoNodes);
 	const since = (/* @__PURE__ */ new Date(Date.now() - 31536e6)).toISOString();
 	const sweepCandidates = sourceRepos.filter((repo) => repo.pushedAt !== null && repo.pushedAt >= since).toSorted((a, b) => (b.pushedAt ?? "").localeCompare(a.pushedAt ?? ""));
 	const swept = !options.sweepCommits ? [] : options.sweepLimit > 0 ? sweepCandidates.slice(0, options.sweepLimit) : sweepCandidates;
@@ -59478,7 +59506,8 @@ async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 		mergedPullRequests: user.mergedPullRequests.totalCount,
 		issues: user.issues.totalCount,
 		contributedTo: user.repositoriesContributedTo.totalCount,
-		languages: aggregateLanguages(repoNodes),
+		languages: languages.slices,
+		languageTailBytes: languages.tailBytes,
 		years: yearActivities,
 		includesPrivate: yearActivities.some((year) => year.restricted > 0),
 		lifetimeDays,

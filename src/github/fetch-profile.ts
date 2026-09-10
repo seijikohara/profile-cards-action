@@ -44,10 +44,19 @@ function flattenCalendar(calendar: CalendarData): DayContribution[] {
 
 type RepoNode = NonNullable<ProfileQueryData['user']>['repositories']['nodes'][number];
 
-function aggregateLanguages(repos: readonly RepoNode[]): LanguageSlice[] {
+/**
+ * Sum language bytes across source repositories, keeping the bytes the edge
+ * cap left unnamed.
+ *
+ * `totalSize` counts every language in the repository; the edges only carry the
+ * largest 30. Their difference is real code with no name attached, so it is
+ * tracked separately rather than dropped — dropping it would make every
+ * percentage a share of the wrong total.
+ */
+function aggregateLanguages(repos: readonly RepoNode[]): { slices: LanguageSlice[]; tailBytes: number } {
+  const sources = repos.filter((repo) => !repo.isFork && !repo.isArchived);
   const totals = new Map<string, { color: string | null; bytes: number }>();
-  for (const repo of repos) {
-    if (repo.isFork || repo.isArchived) continue;
+  for (const repo of sources) {
     for (const edge of repo.languages?.edges ?? []) {
       const entry = totals.get(edge.node.name);
       if (entry) {
@@ -57,9 +66,15 @@ function aggregateLanguages(repos: readonly RepoNode[]): LanguageSlice[] {
       }
     }
   }
-  return [...totals.entries()]
+  const tailBytes = sources.reduce((total, repo) => {
+    const edges = repo.languages?.edges ?? [];
+    const named = edges.reduce((sum, edge) => sum + edge.size, 0);
+    return total + Math.max(0, (repo.languages?.totalSize ?? named) - named);
+  }, 0);
+  const slices = [...totals.entries()]
     .map(([name, { color, bytes }]) => ({ name, color, bytes }))
     .toSorted((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+  return { slices, tailBytes };
 }
 
 /** Page through the profile query, one user snapshot per repository page. */
@@ -226,6 +241,7 @@ export async function fetchProfile(
   const lifetimeDays = mergeDailySeries(dailySeries).filter((day) => day.date <= today);
 
   const sourceRepos = repoNodes.filter((repo) => !repo.isFork && !repo.isArchived);
+  const languages = aggregateLanguages(repoNodes);
 
   // Sweep commits the user authored across owned source repositories over the
   // trailing 365 days — one paginated 1-point query per repository, fanned out
@@ -257,7 +273,8 @@ export async function fetchProfile(
     mergedPullRequests: user.mergedPullRequests.totalCount,
     issues: user.issues.totalCount,
     contributedTo: user.repositoriesContributedTo.totalCount,
-    languages: aggregateLanguages(repoNodes),
+    languages: languages.slices,
+    languageTailBytes: languages.tailBytes,
     years: yearActivities,
     includesPrivate: yearActivities.some((year) => year.restricted > 0),
     lifetimeDays,

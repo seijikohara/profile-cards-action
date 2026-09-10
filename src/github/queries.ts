@@ -3,6 +3,12 @@
 /**
  * Everything except calendars, in one cheap query (1 point, ~1.1k nodes).
  *
+ * `languages` asks for 30 per repository and reads `totalSize` alongside the
+ * edges. The edge list is a truncation, so summing it alone understates the
+ * total silently; `totalSize` minus the summed edges is the exact remainder,
+ * which keeps the languages card's percentages honest however many languages a
+ * repository turns out to hold.
+ *
  * `pushedAt` is what bounds the commit sweep: it is an upper bound on every
  * commit date in the repository, so a repository last pushed before the sweep
  * window cannot hold a commit inside it.
@@ -41,7 +47,8 @@ query Profile($login: String!, $cursor: String) {
         isArchived
         pushedAt
         stargazerCount
-        languages(first: 10, orderBy: { field: SIZE, direction: DESC }) {
+        languages(first: 30, orderBy: { field: SIZE, direction: DESC }) {
+          totalSize
           edges { size node { name color } }
         }
       }
@@ -68,6 +75,8 @@ export interface ProfileQueryData {
         readonly pushedAt: string | null;
         readonly stargazerCount: number;
         readonly languages: {
+          /** Bytes across every language, including any past the edge cap. */
+          readonly totalSize: number;
           readonly edges: readonly {
             readonly size: number;
             readonly node: { readonly name: string; readonly color: string | null };

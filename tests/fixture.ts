@@ -200,6 +200,7 @@ export function makeFixture(): ProfileData {
       { name: 'Python', color: '#3572A5', bytes: 66_688 },
       { name: 'C++', color: '#f34b7d', bytes: 56_931 },
     ],
+    languageTailBytes: 0,
     years: [
       { year: 2014, total: 43, commits: 0, pullRequests: 0, issues: 0, reviews: 0, restricted: 42 },
       { year: 2015, total: 706, commits: 43, pullRequests: 0, issues: 0, reviews: 0, restricted: 658 },
