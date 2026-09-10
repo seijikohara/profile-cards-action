@@ -9,6 +9,8 @@
 import { CARD_PADDING, CARD_RADIUS, CARD_WIDTH } from '../config.js';
 import { FONT_MONO, FONT_SANS, type Theme } from '../theme.js';
 import { el, textNode } from '../svg/dsl.js';
+import { deltaTriangle, sparkline } from '../svg/spark.js';
+import { measureMono } from '../svg/text.js';
 
 export interface FrameOptions {
   readonly theme: Theme;
@@ -85,6 +87,13 @@ ${extraCss ?? ''}`;
   );
 }
 
+/** Change against a comparable earlier window, shown beside the caption. */
+export interface TileDelta {
+  readonly rising: boolean;
+  /** Short caption, e.g. "38% YTD". */
+  readonly text: string;
+}
+
 export interface TileSpec {
   readonly label: string;
   readonly value: string;
@@ -92,22 +101,51 @@ export interface TileSpec {
   readonly unit?: string;
   /** Optional mono caption under the value (e.g. a date range). */
   readonly sub?: string | undefined;
+  /** Optional series drawn as a sparkline along the tile's foot. */
+  readonly spark?: readonly number[] | undefined;
+  /** Optional change chip, right-aligned on the caption baseline. */
+  readonly delta?: TileDelta | undefined;
 }
 
-/** A row of stat tiles on the inset background. Returns the SVG plus the row height. */
+const TILE_GAP = 12;
+const TILE_BASE_HEIGHT = 76;
+const SUB_ROW = 18;
+const SPARK_ROW = 30;
+const SPARK_HEIGHT = 20;
+
+/**
+ * A row of stat tiles on the inset background. Returns the SVG plus the row
+ * height.
+ *
+ * Every tile in a row is the same height, sparkline or not: only half the
+ * counters here have a series the API can supply, and letting the others
+ * shrink would turn a stat grid into a ragged one.
+ */
 export function tileRow(theme: Theme, tiles: readonly TileSpec[], y: number): { svg: string; height: number } {
-  const gap = 12;
   const hasSub = tiles.some((tile) => tile.sub !== undefined);
-  const height = hasSub ? 94 : 76;
+  const hasSpark = tiles.some((tile) => tile.spark !== undefined);
+  const height = TILE_BASE_HEIGHT + (hasSub ? SUB_ROW : 0) + (hasSpark ? SPARK_ROW : 0);
   const inner = CARD_WIDTH - CARD_PADDING * 2;
-  const width = (inner - gap * (tiles.length - 1)) / tiles.length;
+  const width = (inner - TILE_GAP * (tiles.length - 1)) / tiles.length;
   const parts = tiles.map((tile, index) => {
-    const x = CARD_PADDING + index * (width + gap);
+    const x = CARD_PADDING + index * (width + TILE_GAP);
+    const deltaRight = x + width - 16;
     return el(
       'g',
       {},
       el('rect', { x, y, width, height, rx: CARD_RADIUS, fill: theme.bgInset }),
       el('text', { x: x + 16, y: y + 26, class: 't-label' }, textNode(tile.label)),
+      tile.delta === undefined
+        ? ''
+        : // .t-mono adds .4px of letter-spacing per character, which measureMono
+          // does not model; the extra clearance keeps the triangle off the text.
+          deltaTriangle(
+            deltaRight - measureMono(tile.delta.text, 10) - tile.delta.text.length * 0.4 - 11,
+            y + 76,
+            tile.delta.rising,
+            theme.fg
+          ) +
+            el('text', { x: deltaRight, y: y + 80, class: 't-mono', 'text-anchor': 'end' }, textNode(tile.delta.text)),
       el(
         'text',
         { x: x + 16, y: y + 60, class: 't-value' },
@@ -116,7 +154,8 @@ export function tileRow(theme: Theme, tiles: readonly TileSpec[], y: number): { 
       ),
       tile.sub === undefined
         ? ''
-        : el('text', { x: x + 16, y: y + 80, class: 't-mono' }, textNode(tile.sub.toUpperCase()))
+        : el('text', { x: x + 16, y: y + 80, class: 't-mono' }, textNode(tile.sub.toUpperCase())),
+      tile.spark === undefined ? '' : sparkline(tile.spark, x + 16, y + height - 12, width - 32, SPARK_HEIGHT, theme)
     );
   });
   return { svg: parts.join(''), height };

@@ -57225,6 +57225,59 @@ function verticalBar(x, baseline, width, height, fill) {
 	});
 }
 //#endregion
+//#region src/svg/spark.ts
+/**
+* Baseline-anchored sparkline of `values`, left to right.
+*
+* Anchored at zero rather than at the series minimum: a tile has no axis, so a
+* floating baseline would turn a 3% wobble into a mountain range. The last
+* value carries a dot, because "where it is now" is the reason the shape is
+* there at all.
+*
+* Returns '' for a series with nothing to draw, so callers can concatenate.
+*/
+function sparkline(values, x, baseline, width, height, theme) {
+	const max = Math.max(0, ...values);
+	if (values.length < 2 || max === 0) return "";
+	const step = width / (values.length - 1);
+	const points = values.map((value, index) => ({
+		x: x + index * step,
+		y: baseline - value / max * height
+	}));
+	const path = points.map((point) => `${num(point.x)} ${num(point.y)}`).join("L");
+	const last = points.at(-1);
+	return el("path", {
+		d: `M${num(x)} ${num(baseline)}L${path}L${num(x + width)} ${num(baseline)}Z`,
+		fill: theme.contribRamp[2],
+		"fill-opacity": .28
+	}) + el("path", {
+		d: `M${path}`,
+		fill: "none",
+		stroke: theme.contribRamp[3],
+		"stroke-width": 1.5,
+		"stroke-linejoin": "round"
+	}) + (last === void 0 ? "" : el("circle", {
+		cx: last.x,
+		cy: last.y,
+		r: 2.2,
+		fill: theme.contribRamp[4]
+	}));
+}
+/**
+* Triangle marking the direction of a change, drawn as a path.
+*
+* The embedded font is subset to the glyphs the cards use, so a ▲ character
+* would render as tofu or silently vanish.
+*/
+function deltaTriangle(cx, cy, rising, fill) {
+	const half = 3.4;
+	const rise = 3.8;
+	return el("path", {
+		d: rising ? `M${num(cx - half)} ${num(cy + rise / 2)}L${num(cx + half)} ${num(cy + rise / 2)}L${num(cx)} ${num(cy - rise)}Z` : `M${num(cx - half)} ${num(cy - rise / 2)}L${num(cx + half)} ${num(cy - rise / 2)}L${num(cx)} ${num(cy + rise)}Z`,
+		fill
+	});
+}
+//#endregion
 //#region src/cards/frame.ts
 /**
 * Shared card chrome: canvas, border, title row, typography classes, motion.
@@ -57279,14 +57332,28 @@ ${extraCss ?? ""}`;
 		"text-anchor": "end"
 	}, textNode(note.toUpperCase())), ...children);
 }
-/** A row of stat tiles on the inset background. Returns the SVG plus the row height. */
+const TILE_GAP = 12;
+const TILE_BASE_HEIGHT = 76;
+const SUB_ROW = 18;
+const SPARK_ROW = 30;
+const SPARK_HEIGHT = 20;
+/**
+* A row of stat tiles on the inset background. Returns the SVG plus the row
+* height.
+*
+* Every tile in a row is the same height, sparkline or not: only half the
+* counters here have a series the API can supply, and letting the others
+* shrink would turn a stat grid into a ragged one.
+*/
 function tileRow(theme, tiles, y) {
-	const gap = 12;
-	const height = tiles.some((tile) => tile.sub !== void 0) ? 94 : 76;
-	const width = (798 - gap * (tiles.length - 1)) / tiles.length;
+	const hasSub = tiles.some((tile) => tile.sub !== void 0);
+	const hasSpark = tiles.some((tile) => tile.spark !== void 0);
+	const height = TILE_BASE_HEIGHT + (hasSub ? SUB_ROW : 0) + (hasSpark ? SPARK_ROW : 0);
+	const width = (798 - TILE_GAP * (tiles.length - 1)) / tiles.length;
 	return {
 		svg: tiles.map((tile, index) => {
-			const x = 24 + index * (width + gap);
+			const x = 24 + index * (width + TILE_GAP);
+			const deltaRight = x + width - 16;
 			return el("g", {}, el("rect", {
 				x,
 				y,
@@ -57298,7 +57365,12 @@ function tileRow(theme, tiles, y) {
 				x: x + 16,
 				y: y + 26,
 				class: "t-label"
-			}, textNode(tile.label)), el("text", {
+			}, textNode(tile.label)), tile.delta === void 0 ? "" : deltaTriangle(deltaRight - measureMono(tile.delta.text, 10) - tile.delta.text.length * .4 - 11, y + 76, tile.delta.rising, theme.fg) + el("text", {
+				x: deltaRight,
+				y: y + 80,
+				class: "t-mono",
+				"text-anchor": "end"
+			}, textNode(tile.delta.text)), el("text", {
 				x: x + 16,
 				y: y + 60,
 				class: "t-value"
@@ -57309,7 +57381,7 @@ function tileRow(theme, tiles, y) {
 				x: x + 16,
 				y: y + 80,
 				class: "t-mono"
-			}, textNode(tile.sub.toUpperCase())));
+			}, textNode(tile.sub.toUpperCase())), tile.spark === void 0 ? "" : sparkline(tile.spark, x + 16, y + height - 12, width - 32, SPARK_HEIGHT, theme));
 		}).join(""),
 		height
 	};
@@ -58739,6 +58811,27 @@ function renderOverview(data, theme, fontFaceCss) {
 	const yearPrefix = `${latestYear?.year ?? ""}-`;
 	const elapsedDays = latestYear === void 0 ? 0 : data.lifetimeDays.filter((day) => day.date.startsWith(yearPrefix)).length;
 	const dailyAverage = elapsedDays === 0 ? void 0 : `Avg ${(thisYearTotal / elapsedDays).toFixed(1)} / day`;
+	const trends = data.years.length >= 4;
+	const seriesOf = (pick) => trends ? data.years.map(pick) : void 0;
+	const today = data.lifetimeDays.at(-1)?.date;
+	const ytdThrough = today?.slice(5);
+	const ytdFor = (year) => ytdThrough === void 0 ? 0 : data.lifetimeDays.filter((day) => day.date.startsWith(`${year}-`) && day.date.slice(5) <= ytdThrough).reduce((sum, day) => sum + day.count, 0);
+	const thisYear = today === void 0 ? void 0 : Number(today.slice(0, 4));
+	const monthsThisYear = () => {
+		if (!trends || thisYear === void 0) return void 0;
+		const sums = /* @__PURE__ */ new Map();
+		for (const day of data.lifetimeDays.filter((entry) => entry.date.startsWith(`${thisYear}-`))) {
+			const month = day.date.slice(0, 7);
+			sums.set(month, (sums.get(month) ?? 0) + day.count);
+		}
+		return [...sums.keys()].toSorted().map((month) => sums.get(month) ?? 0);
+	};
+	const priorYtd = thisYear === void 0 ? 0 : ytdFor(thisYear - 1);
+	const currentYtd = thisYear === void 0 ? 0 : ytdFor(thisYear);
+	const ytdDelta = !trends || priorYtd === 0 ? void 0 : {
+		rising: currentYtd >= priorYtd,
+		text: `${Math.abs(Math.round((currentYtd - priorYtd) / priorYtd * 100))}% YTD`
+	};
 	const peakOf = (pick) => {
 		const best = data.years.reduce((winner, year) => pick(year) > winner.count ? {
 			year: year.year,
@@ -58753,12 +58846,15 @@ function renderOverview(data, theme, fontFaceCss) {
 		{
 			label: "Contributions (all time)",
 			value: formatInt(lifetime),
-			sub: firstYear === void 0 ? void 0 : `Since ${firstYear}`
+			sub: firstYear === void 0 ? void 0 : `Since ${firstYear}`,
+			spark: seriesOf((year) => year.total)
 		},
 		{
 			label: `Contributions (${latestYear?.year ?? "this year"})`,
 			value: formatInt(thisYearTotal),
-			sub: dailyAverage
+			sub: dailyAverage,
+			spark: monthsThisYear(),
+			delta: ytdDelta
 		},
 		{
 			label: "Stars earned",
@@ -58774,12 +58870,14 @@ function renderOverview(data, theme, fontFaceCss) {
 		{
 			label: "Pull requests merged",
 			value: formatInt(data.mergedPullRequests),
-			sub: peakOf((year) => year.pullRequests)
+			sub: peakOf((year) => year.pullRequests),
+			spark: seriesOf((year) => year.pullRequests)
 		},
 		{
 			label: "Issues opened",
 			value: formatInt(data.issues),
-			sub: peakOf((year) => year.issues)
+			sub: peakOf((year) => year.issues),
+			spark: seriesOf((year) => year.issues)
 		},
 		{
 			label: "Public repositories",
