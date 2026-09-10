@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { renderRhythm } from '../src/cards/rhythm.js';
 import { computeRhythm } from '../src/compute/rhythm.js';
-import type { DayContribution } from '../src/model.js';
+import type { DayContribution, ProfileData } from '../src/model.js';
+import { LIGHT } from '../src/theme.js';
+import { makeFixture } from './fixture.js';
+import { assertWellFormed } from './xml.js';
 
 function day(date: string, count: number): DayContribution {
   return { date, count, level: count === 0 ? 0 : 1 };
@@ -132,5 +136,34 @@ describe('computeRhythm', () => {
     expect(result.activeDayRate).toBe(0);
     expect(result.weekendShare).toBe(0);
     expect(result.busiestDay).toBeUndefined();
+  });
+});
+
+describe('renderRhythm trailing comparison', () => {
+  const data: ProfileData = makeFixture();
+
+  it('marks the trailing year against the record and names both marks', () => {
+    const svg = renderRhythm(data, LIGHT, '');
+    assertWellFormed(svg);
+    expect(svg).toContain('ALL YEARS VS TRAILING YEAR');
+    expect(svg).toContain('>all years<');
+    expect(svg).toContain('>trailing year<');
+  });
+
+  it('pairs the weekend share with its trailing-year counterpart', () => {
+    expect(renderRhythm(data, LIGHT, '')).toMatch(/\d+%.*→.*\d+%/s);
+  });
+
+  it('drops the comparison when the record is barely longer than the window', () => {
+    const short: ProfileData = { ...data, lifetimeDays: data.lifetimeDays.slice(-400) };
+    const svg = renderRhythm(short, LIGHT, '');
+    expect(svg).toContain('ALL CONTRIBUTION TYPES · ALL YEARS');
+    expect(svg).not.toContain('VS TRAILING YEAR');
+    expect(svg).not.toContain('>trailing year<');
+  });
+
+  it('names the busiest weekday and month for a screen reader', () => {
+    const svg = renderRhythm(data, LIGHT, '');
+    expect(svg).toMatch(/busiest on (Mon|Tue|Wed|Thu|Fri|Sat|Sun) and in [A-Z][a-z]+/);
   });
 });
