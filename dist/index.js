@@ -57498,7 +57498,9 @@ function renderCadence(data, theme, fontFaceCss) {
 		y: EYEBROW_BASELINE$1,
 		class: "t-mono"
 	}, textNode("BY HOUR"));
-	const footerParts = [el("tspan", { class: "t-stat" }, textNode(formatCompact(cadence.totalCommits))), textNode(" commits")];
+	const { swept, candidates } = data.commitSweep;
+	const capped = swept < candidates;
+	const footerParts = [el("tspan", { class: "t-stat" }, textNode(formatCompact(cadence.totalCommits))), textNode(capped ? " commits swept" : " commits")];
 	if (cadence.peak !== void 0) {
 		const peakLabel = `${WEEKDAY_LABELS$1[cadence.peak.weekday] ?? ""} ${String(cadence.peak.hour).padStart(2, "0")}:00`;
 		footerParts.push(textNode(" · peak "), el("tspan", { class: "t-stat" }, textNode(peakLabel)));
@@ -57525,7 +57527,7 @@ function renderCadence(data, theme, fontFaceCss) {
 		theme,
 		height: FOOTER_BASELINE$1 + 24,
 		title: "Commit cadence",
-		note: "trailing 12 months · author local time",
+		note: capped ? `trailing 12 months · author local time · ${swept} of ${candidates} repositories` : "trailing 12 months · author local time",
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
 		extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
 		fontFaceCss
@@ -59187,6 +59189,10 @@ async function attemptRequest(token, query, variables, attempt) {
 /**
 * Everything except calendars, in one cheap query (1 point, ~1.1k nodes).
 *
+* `pushedAt` is what bounds the commit sweep: it is an upper bound on every
+* commit date in the repository, so a repository last pushed before the sweep
+* window cannot hold a commit inside it.
+*
 * `privacy: PUBLIC` pins the repository-derived numbers (stars, languages,
 * repo count) to public data whatever token runs the generator. The flat
 * counters (pullRequests, issues, repositoriesContributedTo) are still
@@ -59219,6 +59225,7 @@ query Profile($login: String!, $cursor: String) {
         name
         isFork
         isArchived
+        pushedAt
         stargazerCount
         languages(first: 10, orderBy: { field: SIZE, direction: DESC }) {
           edges { size node { name color } }
@@ -59300,6 +59307,7 @@ query Commits($owner: String!, $name: String!, $authorId: ID!, $since: GitTimest
 }`;
 //#endregion
 //#region src/github/fetch-profile.ts
+/** Orchestrates the API calls and normalizes them into the domain model. */
 const LEVELS = {
 	NONE: 0,
 	FIRST_QUARTILE: 1,
@@ -59385,7 +59393,11 @@ function mergeDailySeries(seriesPerYear) {
 	}
 	return [...byDate.values()].toSorted((a, b) => a.date.localeCompare(b.date));
 }
-async function fetchProfile(token, login) {
+const DEFAULT_FETCH_OPTIONS = {
+	sweepCommits: true,
+	sweepLimit: 0
+};
+async function fetchProfile(token, login, options = DEFAULT_FETCH_OPTIONS) {
 	const profilePages = await fetchProfilePages(token, login, null);
 	const user = profilePages[0];
 	if (user === void 0) throw new Error(`user not found: ${login}`);
@@ -59436,7 +59448,9 @@ async function fetchProfile(token, login) {
 	const lifetimeDays = mergeDailySeries(dailySeries).filter((day) => day.date <= today);
 	const sourceRepos = repoNodes.filter((repo) => !repo.isFork && !repo.isArchived);
 	const since = (/* @__PURE__ */ new Date(Date.now() - 31536e6)).toISOString();
-	const commits = (await Promise.all(sourceRepos.map((repo) => fetchRepoCommits(token, login, repo.name, user.id, since)))).flat();
+	const sweepCandidates = sourceRepos.filter((repo) => repo.pushedAt !== null && repo.pushedAt >= since).toSorted((a, b) => (b.pushedAt ?? "").localeCompare(a.pushedAt ?? ""));
+	const swept = !options.sweepCommits ? [] : options.sweepLimit > 0 ? sweepCandidates.slice(0, options.sweepLimit) : sweepCandidates;
+	const commits = (await Promise.all(swept.map((repo) => fetchRepoCommits(token, login, repo.name, user.id, since)))).flat();
 	return {
 		login,
 		name: user.name,
@@ -59451,6 +59465,10 @@ async function fetchProfile(token, login) {
 		lifetimeDays,
 		trailing,
 		commits,
+		commitSweep: {
+			swept: swept.length,
+			candidates: sweepCandidates.length
+		},
 		topRepositories,
 		trailingCommits
 	};
@@ -59648,6 +59666,14 @@ function parseLanguageLimit(raw) {
 	if (!Number.isInteger(value) || value < 1) throw new Error(`Invalid language-limit "${trimmed}". Expected a positive integer.`);
 	return value;
 }
+/** Parse `commit-sweep-limit`: a non-negative integer, or the default when empty. */
+function parseCommitSweepLimit(raw) {
+	const trimmed = raw.trim();
+	if (trimmed === "") return 0;
+	const value = Number(trimmed);
+	if (!Number.isInteger(value) || value < 0) throw new Error(`Invalid commit-sweep-limit "${trimmed}". Expected a non-negative integer.`);
+	return value;
+}
 /** Resolve the login, falling back to the repository owner. */
 function resolveUsername(raw) {
 	const username = raw.trim() || process.env["GITHUB_REPOSITORY_OWNER"] || "";
@@ -59670,6 +59696,7 @@ function readInputs() {
 		font: getInput("font").trim() || DEFAULT_FONT,
 		monoFont: getInput("mono-font").trim() || DEFAULT_MONO_FONT,
 		languageLimit: parseLanguageLimit(getInput("language-limit")),
+		commitSweepLimit: parseCommitSweepLimit(getInput("commit-sweep-limit")),
 		badges: getMultilineInput("badges").map((name) => name.trim()).filter((name) => name.length > 0),
 		commit: readCommit(),
 		commitMessage: getInput("commit-message").trim() || DEFAULT_COMMIT_MESSAGE
@@ -59703,7 +59730,10 @@ async function run() {
 	const inputs = readInputs();
 	setSecret(inputs.token);
 	const data = {
-		...await fetchProfile(inputs.token, inputs.username),
+		...await fetchProfile(inputs.token, inputs.username, {
+			sweepCommits: inputs.cards.includes("cadence"),
+			sweepLimit: inputs.commitSweepLimit
+		}),
 		generatedAt: (/* @__PURE__ */ new Date()).toISOString()
 	};
 	const streaks = computeStreaks(data.lifetimeDays);
