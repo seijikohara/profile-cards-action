@@ -221,6 +221,7 @@ export function makeFixture(): ProfileData {
       total: trailing.reduce((sum, day) => sum + day.count, 0),
     },
     commits: commitSamples(),
+    commitSweep: { swept: 18, candidates: 18 },
     topRepositories: topRepositories(),
     trailingCommits: { total: 1432, repositories: 18 },
     generatedAt: '2026-07-22T03:17:00.000Z',

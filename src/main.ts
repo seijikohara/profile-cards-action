@@ -34,7 +34,12 @@ async function run(): Promise<void> {
   // Mask the token so no later log line can accidentally surface it.
   core.setSecret(inputs.token);
 
-  const fetched = await fetchProfile(inputs.token, inputs.username);
+  // The commit sweep is the only per-repository query in a run; it feeds the
+  // cadence card alone, so a card list without it skips the cost entirely.
+  const fetched = await fetchProfile(inputs.token, inputs.username, {
+    sweepCommits: inputs.cards.includes('cadence'),
+    sweepLimit: inputs.commitSweepLimit,
+  });
   const data: ProfileData = { ...fetched, generatedAt: new Date().toISOString() };
   const streaks = computeStreaks(data.lifetimeDays);
   const fontFaceCss = await resolveFonts(inputs.font, inputs.monoFont);

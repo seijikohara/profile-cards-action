@@ -1,7 +1,7 @@
 /** Read and validate the action's inputs into a typed configuration object. */
 
 import * as core from '@actions/core';
-import { DEFAULT_LANGUAGE_LIMIT } from './config.js';
+import { DEFAULT_COMMIT_SWEEP_LIMIT, DEFAULT_LANGUAGE_LIMIT } from './config.js';
 
 /** Theme identifier accepted by the `themes` input. */
 type ThemeId = 'light' | 'dark';
@@ -20,6 +20,8 @@ export interface ActionInputs {
   readonly monoFont: string;
   /** Languages the languages card lists before the rest fold into "Other" (>= 1). */
   readonly languageLimit: number;
+  /** Repositories the commit sweep visits, most recently pushed first; 0 = no cap. */
+  readonly commitSweepLimit: number;
   /** Badge brand names, trimmed and non-empty. */
   readonly badges: readonly string[];
   readonly commit: boolean;
@@ -102,6 +104,17 @@ function parseLanguageLimit(raw: string): number {
   return value;
 }
 
+/** Parse `commit-sweep-limit`: a non-negative integer, or the default when empty. */
+function parseCommitSweepLimit(raw: string): number {
+  const trimmed = raw.trim();
+  if (trimmed === '') return DEFAULT_COMMIT_SWEEP_LIMIT;
+  const value = Number(trimmed);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid commit-sweep-limit "${trimmed}". Expected a non-negative integer.`);
+  }
+  return value;
+}
+
 /** Resolve the login, falling back to the repository owner. */
 function resolveUsername(raw: string): string {
   const username = raw.trim() || process.env['GITHUB_REPOSITORY_OWNER'] || '';
@@ -130,6 +143,7 @@ export function readInputs(): ActionInputs {
   const font = core.getInput('font').trim() || DEFAULT_FONT;
   const monoFont = core.getInput('mono-font').trim() || DEFAULT_MONO_FONT;
   const languageLimit = parseLanguageLimit(core.getInput('language-limit'));
+  const commitSweepLimit = parseCommitSweepLimit(core.getInput('commit-sweep-limit'));
   const badges = core
     .getMultilineInput('badges')
     .map((name) => name.trim())
@@ -146,6 +160,7 @@ export function readInputs(): ActionInputs {
     font,
     monoFont,
     languageLimit,
+    commitSweepLimit,
     badges,
     commit,
     commitMessage,

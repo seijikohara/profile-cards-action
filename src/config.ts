@@ -11,3 +11,10 @@ export const CARD_RADIUS = 6;
  * language, so raising it costs card height, not layout.
  */
 export const DEFAULT_LANGUAGE_LIMIT = 8;
+
+/**
+ * Repositories the trailing-year commit sweep visits, most recently pushed
+ * first. Mirrors action.yml's `commit-sweep-limit` default; 0 means every
+ * repository that could hold a commit in the window.
+ */
+export const DEFAULT_COMMIT_SWEEP_LIMIT = 0;
