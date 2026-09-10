@@ -31,8 +31,13 @@ export interface ActionInputs {
   readonly commitMessage: string;
 }
 
-/** Cards the renderer knows how to draw. */
-const KNOWN_CARDS: readonly string[] = [
+/**
+ * Cards the renderer knows how to draw, in the order action.yml lists them.
+ *
+ * Exported so the example gallery renders exactly this set: a hand-maintained
+ * second list is a gallery that silently loses a card the day one is added.
+ */
+export const KNOWN_CARDS: readonly string[] = [
   'overview',
   'lifetime',
   'momentum',
