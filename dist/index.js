@@ -56891,6 +56891,13 @@ function formatDate(date, withYear) {
 	const day = Number(m[3]);
 	return withYear ? `${month} ${day}, ${m[1]}` : `${month} ${day}`;
 }
+/** "2026-08-12" -> "Aug 2026". */
+function formatMonthYear(date) {
+	const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
+	const month = m ? MONTHS$1[Number(m[2]) - 1] : void 0;
+	if (!m || month === void 0) throw new Error(`invalid calendar date: ${date}`);
+	return `${month} ${m[1]}`;
+}
 /** Inclusive range, collapsing a shared year: "May 31 – Jul 22, 2026". */
 function formatDateRange(start, end) {
 	if (start === end) return formatDate(end, true);
@@ -57453,8 +57460,8 @@ const HIST_MAX_HEIGHT = 30;
 const HIST_BASELINE = 102;
 const GRID_TOP = 122;
 const ROW_H$2 = 24;
-const TICK_BASELINE = GRID_TOP + ROW_H$2 * WEEKDAY_LABELS$1.length + 16;
-const FOOTER_BASELINE$1 = TICK_BASELINE + 29;
+const TICK_BASELINE$1 = GRID_TOP + ROW_H$2 * WEEKDAY_LABELS$1.length + 16;
+const FOOTER_BASELINE$2 = TICK_BASELINE$1 + 29;
 const GRID_LEFT = 76;
 const COL_W = 746 / 24;
 const HIST_BAR_W = Math.min(14, 25.083333333333332);
@@ -57546,7 +57553,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		const hour = half * 2;
 		return el("text", {
 			x: columnX(hour) + COL_W / 2,
-			y: TICK_BASELINE,
+			y: TICK_BASELINE$1,
 			class: "t-tick",
 			"text-anchor": "middle"
 		}, textNode(String(hour)));
@@ -57567,7 +57574,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 	if (cadence.totalCommits > 0) footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`${Math.round(cadence.nightShare * 100)}%`)), textNode(` at night (${NIGHT_FROM}-0${NIGHT_UNTIL})`));
 	const footer = el("text", {
 		x: 24,
-		y: FOOTER_BASELINE$1,
+		y: FOOTER_BASELINE$2,
 		class: "t-label"
 	}, ...footerParts);
 	const legendOptions = {
@@ -57581,11 +57588,11 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		...scale === void 0 ? {} : { scale }
 	};
 	const legendX = 822 - rampLegendWidth(legendOptions);
-	const legend = rampLegend(theme, legendX, FOOTER_BASELINE$1, legendOptions);
-	const peakKey = cadence.peak === void 0 ? "" : peakKeyChip(legendX - 18 - measureMono("peak", 9.5) - 14, FOOTER_BASELINE$1, theme);
+	const legend = rampLegend(theme, legendX, FOOTER_BASELINE$2, legendOptions);
+	const peakKey = cadence.peak === void 0 ? "" : peakKeyChip(legendX - 18 - measureMono("peak", 9.5) - 14, FOOTER_BASELINE$2, theme);
 	return cardFrame({
 		theme,
-		height: FOOTER_BASELINE$1 + (scale === void 0 ? 0 : 12) + 24,
+		height: FOOTER_BASELINE$2 + (scale === void 0 ? 0 : 12) + 24,
 		title: "Commit cadence",
 		note: capped ? `trailing 12 months · author local time · ${swept} of ${candidates} repositories` : "trailing 12 months · author local time",
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
@@ -58291,7 +58298,7 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 //#endregion
 //#region src/compute/lifetime.ts
 /** Lifetime weekly heatmap: a "wall of years" of per-week activity levels. */
-const DAY_MS$1 = 864e5;
+const DAY_MS$2 = 864e5;
 const ISO_DATE$1 = /^(\d{4})-(\d{2})-(\d{2})$/;
 /**
 * Map an ISO "YYYY-MM-DD" date to its (year, weekIndex) bucket.
@@ -58307,7 +58314,7 @@ function bucketOf(date) {
 	const year = Number(match[1]);
 	const month = Number(match[2]);
 	const dayOfMonth = Number(match[3]);
-	const ordinal = (Date.UTC(year, month - 1, dayOfMonth) - Date.UTC(year, 0, 1)) / DAY_MS$1 + 1;
+	const ordinal = (Date.UTC(year, month - 1, dayOfMonth) - Date.UTC(year, 0, 1)) / DAY_MS$2 + 1;
 	return {
 		year,
 		weekIndex: Math.floor((ordinal - 1) / 7)
@@ -58504,6 +58511,222 @@ function renderLifetime(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) 
 		extraCss: `.wk{opacity:0;animation:fade .5s ease forwards}`,
 		fontFaceCss
 	}, ...columns, el("g", { class: "fade" }, ...monthTicks, ...yearLabels, ...yearTotals, legend));
+}
+//#endregion
+//#region src/compute/momentum.ts
+/** Rolling twelve-month contribution totals over an account's whole history. */
+/** Days in the rolling window. A fixed 365 keeps every sample comparable. */
+const WINDOW_DAYS = 365;
+/** Days between samples. Weekly is dense enough to draw and cheap enough to keep. */
+const SAMPLE_STEP = 7;
+const DAY_MS$1 = 864e5;
+function dateStr(ms) {
+	return new Date(ms).toISOString().slice(0, 10);
+}
+/**
+* Roll a daily contribution series into weekly trailing-year totals.
+*
+* A cumulative total only ever rises, so it flatters every history equally: a
+* dead year still slopes upward. A trailing-365-day sum is the same data drawn
+* so that it can fall, which is the only way this deck can say output is
+* declining.
+*
+* The first window ends 365 days after the first contribution. Sampling before
+* that would divide by a partial window and manufacture a rise out of the
+* account simply existing for longer.
+*/
+function computeMomentum(days, years = []) {
+	const first = days[0]?.date;
+	const last = days.at(-1)?.date;
+	const lifetimeTotal = days.reduce((sum, day) => sum + day.count, 0);
+	if (first === void 0 || last === void 0) return {
+		points: [],
+		peak: void 0,
+		current: void 0,
+		since: void 0,
+		lifetimeTotal,
+		quietestYear: void 0
+	};
+	const byDate = new Map(days.map((day) => [day.date, day.count]));
+	const startMs = Date.parse(`${first}T00:00:00Z`);
+	const span = Math.round((Date.parse(`${last}T00:00:00Z`) - startMs) / DAY_MS$1) + 1;
+	const counts = range(span).map((offset) => byDate.get(dateStr(startMs + offset * DAY_MS$1)) ?? 0);
+	const prefix = [0];
+	for (const count of counts) prefix.push((prefix.at(-1) ?? 0) + count);
+	const windowEndingAt = (index) => (prefix[index + 1] ?? 0) - (prefix[Math.max(0, index + 1 - WINDOW_DAYS)] ?? 0);
+	const oldest = 364;
+	const points = span <= oldest ? [] : range(Math.floor((span - 1 - oldest) / SAMPLE_STEP) + 1).map((step) => {
+		const index = span - 1 - step * SAMPLE_STEP;
+		return {
+			date: dateStr(startMs + index * DAY_MS$1),
+			total: windowEndingAt(index)
+		};
+	}).toReversed();
+	const peak = points.reduce((best, point) => best === void 0 || point.total > best.total ? point : best, void 0);
+	const firstComplete = first.slice(5) === "01-01" ? Number(first.slice(0, 4)) : Number(first.slice(0, 4)) + 1;
+	const lastComplete = last.slice(5) === "12-31" ? Number(last.slice(0, 4)) : Number(last.slice(0, 4)) - 1;
+	const quietestYear = years.filter((year) => year.year >= firstComplete && year.year <= lastComplete).reduce((best, year) => best === void 0 || year.total < best.total ? {
+		year: year.year,
+		total: year.total
+	} : best, void 0);
+	const since = days.find((day) => day.count > 0)?.date ?? first;
+	return {
+		points,
+		peak,
+		current: points.at(-1),
+		since,
+		lifetimeTotal,
+		quietestYear
+	};
+}
+//#endregion
+//#region src/cards/momentum.ts
+/**
+* Momentum card: the trailing-twelve-month contribution total, sampled weekly
+* across the whole account history.
+*
+* The deck's other time series are cumulative or per-period; this is the only
+* one that can fall. That is the point — a rolling window is the same data as a
+* running total, drawn so a quiet year reads as a decline instead of a plateau.
+*
+* One green: the stroke is the ramp's top step and the area its third, so the
+* card sits in the same magnitude language as the calendars. The all-time peak
+* is marked with a foreground-ink ring, never a second hue.
+*/
+const PLOT_HEIGHT = 168;
+const PLOT_BOTTOM = 252;
+const TICK_BASELINE = 269;
+const FOOTER_BASELINE$1 = 297;
+const PLOT_X = 24;
+const PLOT_WIDTH = 732;
+/** Headroom above the peak so its ring and label are not clipped by the frame. */
+const Y_HEADROOM = 1.12;
+/** Year ticks closer than this collapse into their neighbour. */
+const MIN_TICK_GAP = 34;
+/** Height of the "not enough history yet" stub, matching the languages card. */
+const STUB_HEIGHT = 96;
+function renderMomentum(data, theme, fontFaceCss) {
+	const momentum = computeMomentum(data.lifetimeDays, data.years);
+	const { points, peak, current, since } = momentum;
+	if (points.length < 2 || peak === void 0 || current === void 0 || since === void 0) return cardFrame({
+		theme,
+		height: STUB_HEIGHT,
+		title: "Momentum",
+		note: "rolling 12 months",
+		description: `Momentum for ${data.login}: not enough history to draw a rolling year.`,
+		fontFaceCss
+	}, el("text", {
+		x: 24,
+		y: 72,
+		class: "t-label"
+	}, textNode("Needs more than a year of history")));
+	const maxTotal = Math.max(...points.map((point) => point.total));
+	const scaleY = maxTotal === 0 ? 0 : PLOT_HEIGHT / (maxTotal * Y_HEADROOM);
+	const y = (total) => PLOT_BOTTOM - total * scaleY;
+	const x = (index) => PLOT_X + index / (points.length - 1) * PLOT_WIDTH;
+	const vertices = points.map((point, index) => `${num(x(index))} ${num(y(point.total))}`);
+	const line = el("path", {
+		d: `M${vertices.join("L")}`,
+		fill: "none",
+		stroke: theme.contribRamp[4],
+		"stroke-width": 2,
+		"stroke-linejoin": "round",
+		"stroke-linecap": "round"
+	});
+	const area = el("path", {
+		d: `M${num(PLOT_X)} ${num(PLOT_BOTTOM)}L${vertices.join("L")}L${num(x(points.length - 1))} ${num(PLOT_BOTTOM)}Z`,
+		fill: theme.contribRamp[2],
+		"fill-opacity": .16
+	});
+	const baselineRule = el("line", {
+		x1: PLOT_X,
+		y1: 252.5,
+		x2: 822,
+		y2: 252.5,
+		stroke: theme.border,
+		"stroke-width": 1
+	});
+	const ticks = yearTicks(points).reduce((acc, tick) => {
+		const tx = x(tick.index);
+		if (tx - acc.lastX < MIN_TICK_GAP) return acc;
+		return {
+			lastX: tx,
+			marks: [...acc.marks, el("text", {
+				x: tx,
+				y: TICK_BASELINE,
+				class: "t-tick",
+				"text-anchor": "middle"
+			}, textNode(String(tick.year)))]
+		};
+	}, {
+		marks: [],
+		lastX: Number.NEGATIVE_INFINITY
+	}).marks;
+	const peakMark = peak.date === current.date ? "" : peakMarker(peak, points, theme, x, y);
+	const currentY = Math.min(248, Math.max(104, y(current.total) + 9));
+	const currentValue = el("circle", {
+		cx: x(points.length - 1),
+		cy: y(current.total),
+		r: 3.2,
+		fill: theme.contribRamp[4]
+	}) + el("text", {
+		x: 768,
+		y: currentY,
+		class: "t-value"
+	}, textNode(formatInt(current.total)));
+	const footerParts = [
+		el("tspan", { class: "t-stat" }, textNode(formatInt(momentum.lifetimeTotal))),
+		textNode(` contributions since ${formatDate(since, true)} · trailing year `),
+		el("tspan", { class: "t-stat" }, textNode(formatInt(current.total))),
+		textNode(" · peak "),
+		el("tspan", { class: "t-stat" }, textNode(formatMonthYear(peak.date)))
+	];
+	if (momentum.quietestYear !== void 0) footerParts.push(textNode(" · quietest year "), el("tspan", { class: "t-stat" }, textNode(String(momentum.quietestYear.year))));
+	const footer = el("text", {
+		x: 24,
+		y: FOOTER_BASELINE$1,
+		class: "t-label"
+	}, ...footerParts);
+	return cardFrame({
+		theme,
+		height: 321,
+		title: "Momentum",
+		note: "rolling 12 months · all contribution types",
+		description: `Momentum for ${data.login}: contributions in each trailing twelve months since ${formatDate(since, true)}, currently ${formatInt(current.total)}, peaking at ${formatInt(peak.total)}.`,
+		extraCss: ".sweep{clip-path:inset(0 100% 0 0);animation:sweep 1.1s cubic-bezier(.2,.7,.3,1) .1s forwards}@keyframes sweep{to{clip-path:inset(0 0 0 0)}}@media (prefers-reduced-motion: reduce){.sweep{clip-path:none!important}}",
+		fontFaceCss
+	}, el("g", { class: "fade" }, baselineRule, ...ticks), el("g", { class: "sweep" }, area, line), el("g", { class: "fade" }, peakMark, currentValue, footer));
+}
+/** Ringed peak plus its value, flipped inboard when it would leave the plot. */
+function peakMarker(peak, points, theme, x, y) {
+	const cx = x(points.indexOf(peak));
+	const cy = y(peak.total);
+	const label = `peak ${formatInt(peak.total)}`;
+	const flip = cx + measureMono(label, 9.5) + 14 > 756;
+	return el("circle", {
+		cx,
+		cy,
+		r: 4.5,
+		fill: "none",
+		stroke: theme.fg,
+		"stroke-width": 1.4
+	}) + el("text", {
+		x: cx + (flip ? -10 : 10),
+		y: cy - 8,
+		class: "t-tick",
+		"text-anchor": flip ? "end" : "start"
+	}, textNode(label));
+}
+/** Index of the first sample in each calendar year the series covers. */
+function yearTicks(points) {
+	return range(points.length).flatMap((index) => {
+		const year = points[index]?.date.slice(0, 4);
+		const previous = index === 0 ? void 0 : points[index - 1]?.date.slice(0, 4);
+		return year !== void 0 && year !== previous ? [{
+			index,
+			year: Number(year)
+		}] : [];
+	});
 }
 //#endregion
 //#region src/cards/overview.ts
@@ -58980,6 +59203,7 @@ function renderCard(card, data, streaks, theme, fontFaceCss, options = DEFAULT_C
 		case "overview": return renderOverview(data, theme, fontFaceCss);
 		case "lifetime": return renderLifetime(data, theme, fontFaceCss, options.legend);
 		case "contributions": return renderContributions(data, streaks, theme, fontFaceCss, options.legend);
+		case "momentum": return renderMomentum(data, theme, fontFaceCss);
 		case "composition": return renderComposition(data, theme, fontFaceCss);
 		case "rhythm": return renderRhythm(data, theme, fontFaceCss);
 		case "cadence": return renderCadence(data, theme, fontFaceCss, options.legend);
@@ -59741,6 +59965,7 @@ async function commitAndPush(options) {
 const KNOWN_CARDS = [
 	"overview",
 	"lifetime",
+	"momentum",
 	"contributions",
 	"composition",
 	"rhythm",

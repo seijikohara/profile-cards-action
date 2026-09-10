@@ -8,6 +8,7 @@ import { renderComposition } from './cards/composition.js';
 import { renderContributions } from './cards/contributions.js';
 import { renderLanguages } from './cards/languages.js';
 import { renderLifetime } from './cards/lifetime.js';
+import { renderMomentum } from './cards/momentum.js';
 import { renderOverview } from './cards/overview.js';
 import { renderRepositories } from './cards/repositories.js';
 import { renderRhythm } from './cards/rhythm.js';
@@ -41,6 +42,8 @@ export function renderCard(
       return renderLifetime(data, theme, fontFaceCss, options.legend);
     case 'contributions':
       return renderContributions(data, streaks, theme, fontFaceCss, options.legend);
+    case 'momentum':
+      return renderMomentum(data, theme, fontFaceCss);
     case 'composition':
       return renderComposition(data, theme, fontFaceCss);
     case 'rhythm':
