@@ -65,7 +65,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           username: seijikohara
           output-dir: examples
-          cards: overview,lifetime,contributions,composition,rhythm,cadence,repositories,languages
+          # No `cards`: the action's own default is the set the README documents,
+          # and a list repeated here goes stale the day a card is added.
           themes: light,dark
           # Three brands simple-icons carries plus one it does not, so the
           # gallery shows both pill shapes: with a glyph and text-only.
