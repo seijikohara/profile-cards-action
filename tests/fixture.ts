@@ -113,7 +113,7 @@ function pad2(value: number): string {
 function commitSamples(): readonly CommitSample[] {
   const seed = 20260817;
   const end = Date.parse('2026-07-22T00:00:00Z');
-  const DRAWS_PER_COMMIT = 6; // hour condition, hour value, suffix, minute, additions, deletions
+  const DRAWS_PER_COMMIT = 7; // hour condition, hour value, suffix, minute, additions, deletions, files
   const { samples } = range(365).reduce<{ readonly draw: number; readonly samples: readonly CommitSample[] }>(
     (acc, offset) => {
       const index = 364 - offset;
@@ -139,6 +139,8 @@ function commitSamples(): readonly CommitSample[] {
           date: `${dateStr(ms)}T${pad2(hour)}:${pad2(Math.floor(randAt(seed, base + 3) * 60))}:00${suffix}`,
           additions: Math.ceil(randAt(seed, base + 4) * 120),
           deletions: Math.floor(randAt(seed, base + 5) * 60),
+          // A small share of commits have no computed diff, as the API returns.
+          changedFiles: randAt(seed, base + 6) < 0.08 ? null : 1 + Math.floor(randAt(seed, base + 6) * 9),
         };
       });
       return { draw: dayDraws + count * DRAWS_PER_COMMIT, samples: [...acc.samples, ...commits] };

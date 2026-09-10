@@ -116,7 +116,16 @@ async function fetchRepoCommits(
   if (!history) return [];
   const samples = history.nodes.flatMap((node) => {
     const date = node.author?.date;
-    return date === null || date === undefined ? [] : [{ date, additions: node.additions, deletions: node.deletions }];
+    return date === null || date === undefined
+      ? []
+      : [
+          {
+            date,
+            additions: node.additions,
+            deletions: node.deletions,
+            changedFiles: node.changedFilesIfAvailable,
+          },
+        ];
   });
   const { pageInfo } = history;
   const rest = pageInfo.hasNextPage

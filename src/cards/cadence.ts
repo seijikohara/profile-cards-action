@@ -13,7 +13,7 @@
 
 import type { LegendStyle } from '../cards.js';
 import { CARD_PADDING, CARD_WIDTH, DEFAULT_LEGEND } from '../config.js';
-import { computeCadence } from '../compute/cadence.js';
+import { computeCadence, SIZE_BUCKETS } from '../compute/cadence.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
 import { range } from '../iter.js';
@@ -39,7 +39,16 @@ const GRID_TOP = HIST_BASELINE + 20;
 const ROW_H = 24;
 const GRID_BOTTOM = GRID_TOP + ROW_H * WEEKDAY_LABELS.length;
 const TICK_BASELINE = GRID_BOTTOM + 16;
-const FOOTER_BASELINE = TICK_BASELINE + 29;
+
+// Commit-size band: the churn the sweep already paid for, as a distribution
+// rather than the two footer scalars it used to collapse into.
+const SIZE_MAX_HEIGHT = 34;
+const SIZE_BASELINE = TICK_BASELINE + 18 + SIZE_MAX_HEIGHT;
+const SIZE_LABEL_BASELINE = SIZE_BASELINE + 13;
+const SIZE_BAR_W = 30;
+const SIZE_BAR_GAP = 34;
+
+const FOOTER_BASELINE = SIZE_LABEL_BASELINE + 28;
 
 // Horizontal geometry: a label gutter wide enough to clear the "BY HOUR"
 // eyebrow, then 24 equal hour columns.
@@ -155,6 +164,51 @@ export function renderCadence(
 
   const eyebrow = el('text', { x: CARD_PADDING, y: EYEBROW_BASELINE, class: 't-mono' }, textNode('BY HOUR'));
 
+  // Commit size: five log buckets of lines changed. Length carries the count
+  // and barFill carries it again, exactly as the hour histogram above does.
+  const sizeMax = Math.max(0, ...cadence.sizeBuckets);
+  const sizeBand = SIZE_BUCKETS.flatMap((bucket, index) => {
+    const count = cadence.sizeBuckets[index] ?? 0;
+    const x = GRID_LEFT + index * (SIZE_BAR_W + SIZE_BAR_GAP);
+    const height = count === 0 || sizeMax === 0 ? 0 : Math.max(2, (count / sizeMax) * SIZE_MAX_HEIGHT);
+    return [
+      height === 0 ? '' : verticalBar(x, SIZE_BASELINE, SIZE_BAR_W, height, barFill(theme, count, sizeMax)),
+      count === 0
+        ? ''
+        : el(
+            'text',
+            { x: x + SIZE_BAR_W / 2, y: SIZE_BASELINE - height - 5, class: 't-tick', 'text-anchor': 'middle' },
+            textNode(formatCompact(count))
+          ),
+      el(
+        'text',
+        { x: x + SIZE_BAR_W / 2, y: SIZE_LABEL_BASELINE, class: 't-tick', 'text-anchor': 'middle' },
+        textNode(bucket.label)
+      ),
+    ];
+  });
+  const sizeEyebrow = el('text', { x: CARD_PADDING, y: SIZE_BASELINE - 12, class: 't-mono' }, textNode('BY SIZE'));
+  const sizeBaselineRule = el('line', {
+    x1: GRID_LEFT,
+    y1: SIZE_BASELINE + 0.5,
+    x2: GRID_LEFT + SIZE_BUCKETS.length * SIZE_BAR_W + (SIZE_BUCKETS.length - 1) * SIZE_BAR_GAP,
+    y2: SIZE_BASELINE + 0.5,
+    stroke: theme.border,
+    'stroke-width': 1,
+  });
+  // Lines per file is the one churn figure that means something on its own,
+  // and it sits beside the distribution it explains rather than in the footer.
+  const perFileNote =
+    cadence.medianLinesPerFile === undefined
+      ? ''
+      : el(
+          'text',
+          { x: CARD_WIDTH - CARD_PADDING, y: SIZE_LABEL_BASELINE, class: 't-label', 'text-anchor': 'end' },
+          textNode('lines per commit · median '),
+          el('tspan', { class: 't-stat' }, textNode(String(Math.round(cadence.medianLinesPerFile)))),
+          textNode(' per file')
+        );
+
   // A capped sweep undercounts, so the card says so rather than presenting a
   // partial grid as the whole year. An uncapped sweep visited every repository
   // that could hold a commit in the window, so it needs no caveat.
@@ -169,13 +223,16 @@ export function renderCadence(
     const peakLabel = `${WEEKDAY_LABELS[cadence.peak.weekday] ?? ''} ${String(cadence.peak.hour).padStart(2, '0')}:00`;
     footerParts.push(textNode(' · peak '), el('tspan', { class: 't-stat' }, textNode(peakLabel)));
   }
-  footerParts.push(
-    textNode(' · '),
-    el('tspan', { class: 't-stat' }, textNode(`+${formatCompact(cadence.additions)}`)),
-    textNode(' '),
-    el('tspan', { class: 't-stat' }, textNode(`−${formatCompact(cadence.deletions)}`)),
-    textNode(' lines')
-  );
+  // A churn total is the one number here a reader cannot use: a single
+  // regenerated bundle outweighs a year of hand edits, and the distribution
+  // above already carries the shape. The median is the robust figure.
+  if (cadence.medianLines !== undefined) {
+    footerParts.push(
+      textNode(' · median '),
+      el('tspan', { class: 't-stat' }, textNode(formatCompact(Math.round(cadence.medianLines)))),
+      textNode(' lines per commit')
+    );
+  }
   if (cadence.totalCommits > 0) {
     footerParts.push(
       textNode(' · '),
@@ -212,7 +269,20 @@ export function renderCadence(
       extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
       fontFaceCss,
     },
-    el('g', { class: 'fade' }, ...nightBands, eyebrow, histBaseline, ...histogram, ...weekdayLabels, ...hourTicks),
+    el(
+      'g',
+      { class: 'fade' },
+      ...nightBands,
+      eyebrow,
+      histBaseline,
+      ...histogram,
+      ...weekdayLabels,
+      ...hourTicks,
+      sizeEyebrow,
+      sizeBaselineRule,
+      ...sizeBand,
+      perFileNote
+    ),
     ...columns,
     el('g', { class: 'fade' }, footer, peakKey, legend)
   );
