@@ -3,6 +3,7 @@
 import { DEFAULT_COMMIT_SWEEP_LIMIT } from '../config.js';
 import type {
   CommitSample,
+  PortfolioRepo,
   DayContribution,
   LanguageSlice,
   ProfileData,
@@ -243,6 +244,19 @@ export async function fetchProfile(
   const sourceRepos = repoNodes.filter((repo) => !repo.isFork && !repo.isArchived);
   const languages = aggregateLanguages(repoNodes);
 
+  const portfolio: PortfolioRepo[] = sourceRepos
+    .map((repo) => ({
+      nameWithOwner: repo.nameWithOwner,
+      createdAt: repo.createdAt,
+      pushedAt: repo.pushedAt,
+      commits: repo.defaultBranchRef?.target?.history?.totalCount ?? 0,
+      language: repo.primaryLanguage,
+      stars: repo.stargazerCount,
+      diskUsageKb: repo.diskUsage ?? 0,
+      license: repo.licenseInfo?.spdxId ?? null,
+    }))
+    .toSorted((a, b) => b.commits - a.commits || a.nameWithOwner.localeCompare(b.nameWithOwner));
+
   // Sweep commits the user authored across owned source repositories over the
   // trailing 365 days — one paginated 1-point query per repository, fanned out
   // like the year queries. This powers the cadence card, and it is the only
@@ -282,6 +296,7 @@ export async function fetchProfile(
     commits,
     commitSweep: { swept: swept.length, candidates: sweepCandidates.length },
     topRepositories,
+    repositories: portfolio,
     trailingCommits,
   };
 }

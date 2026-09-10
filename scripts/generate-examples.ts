@@ -65,6 +65,7 @@ const CARDS: readonly string[] = [
   'rhythm',
   'cadence',
   'repositories',
+  'portfolio',
   'languages',
 ];
 

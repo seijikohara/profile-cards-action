@@ -23,6 +23,7 @@ Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme
 | `rhythm`        | Contributions of every type by weekday and by month of the year.                                                                                                                                                                                                                            |
 | `cadence`       | Weekday × hour punch card of commits on owned default branches over the trailing year, in author-local time, with an hour-of-day histogram and volume stats.                                                                                                                                |
 | `repositories`  | Top public repositories by commits over the trailing year — including repositories the user does not own — as a ranked bar list with language and stars.                                                                                                                                    |
+| `portfolio`     | One lifeline per owned public source repository — created to last push on a shared time axis, with language, commit count, and license.                                                                                                                                                     |
 | `languages`     | A treemap of languages by bytes across public source repositories, beside a ranked list. `language-limit` sets how many are listed.                                                                                                                                                         |
 
 Cards are drawn at the 846px width of the profile README column, use GitHub's Primer color tokens so they blend into both themes, animate only on entry (CSS only, disabled under `prefers-reduced-motion`), and contain no scripts or external references.
@@ -91,6 +92,13 @@ Hours come from each commit's author-local timezone offset, so the card needs no
   <img alt="Repositories card: top repositories ranked by commits over the trailing year, with primary language and stars" src="examples/repositories.light.svg" width="100%" />
 </picture>
 
+**`portfolio`** — a lifeline per repository on one time axis
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/portfolio.dark.svg" />
+  <img alt="Portfolio card: one lifeline per owned public source repository, from creation to last push, with language, commit count, and license" src="examples/portfolio.light.svg" width="100%" />
+</picture>
+
 **`languages`** — language treemap by bytes, with a ranked list
 
 <picture>
@@ -144,7 +152,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           username: seijikohara
-          cards: overview,lifetime,momentum,contributions,composition,rhythm,cadence,repositories,languages
+          cards: overview,lifetime,momentum,contributions,composition,rhythm,cadence,repositories,portfolio,languages
           output-dir: assets
           themes: light,dark
           commit: true
@@ -170,21 +178,21 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
 
 ## Inputs
 
-| Input                | Description                                                                                                                                                                                  | Required | Default                                                                                      |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `github-token`       | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                                                                          | `true`   | —                                                                                            |
-| `username`           | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                                                                        | `false`  | `''`                                                                                         |
-| `cards`              | Cards to render (comma/space/newline separated).                                                                                                                                             | `false`  | `overview,lifetime,momentum,contributions,composition,rhythm,cadence,repositories,languages` |
-| `output-dir`         | Directory to write card SVGs into.                                                                                                                                                           | `false`  | `assets`                                                                                     |
-| `themes`             | Themes to render (comma separated): `light`, `dark`.                                                                                                                                         | `false`  | `light,dark`                                                                                 |
-| `font`               | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                                                                   | `false`  | `Roboto`                                                                                     |
-| `mono-font`          | Google Fonts monospace family.                                                                                                                                                               | `false`  | `Roboto Mono`                                                                                |
-| `language-limit`     | Languages the `languages` card lists before the rest fold into "Other". The card grows one row per language.                                                                                 | `false`  | `8`                                                                                          |
-| `legend`             | How cards label the green magnitude ramp: `ramp` keeps the calendar's Less…More key, `scale` prints the value band each step stands for. Affects `contributions`, `lifetime`, and `cadence`. | `false`  | `ramp`                                                                                       |
-| `commit-sweep-limit` | Repositories the `cadence` card's commit sweep visits, most recently pushed first. `0` visits every repository that could hold a commit in the trailing year.                                | `false`  | `0`                                                                                          |
-| `badges`             | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`.                                            | `false`  | `''`                                                                                         |
-| `commit`             | Commit changed files back to the repository.                                                                                                                                                 | `false`  | `true`                                                                                       |
-| `commit-message`     | Commit subject used when `commit` is true.                                                                                                                                                   | `false`  | `chore(profile): refresh generated cards [skip ci]`                                          |
+| Input                | Description                                                                                                                                                                                  | Required | Default                                                                                                |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `github-token`       | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                                                                          | `true`   | —                                                                                                      |
+| `username`           | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                                                                        | `false`  | `''`                                                                                                   |
+| `cards`              | Cards to render (comma/space/newline separated).                                                                                                                                             | `false`  | `overview,lifetime,momentum,contributions,composition,rhythm,cadence,repositories,portfolio,languages` |
+| `output-dir`         | Directory to write card SVGs into.                                                                                                                                                           | `false`  | `assets`                                                                                               |
+| `themes`             | Themes to render (comma separated): `light`, `dark`.                                                                                                                                         | `false`  | `light,dark`                                                                                           |
+| `font`               | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                                                                   | `false`  | `Roboto`                                                                                               |
+| `mono-font`          | Google Fonts monospace family.                                                                                                                                                               | `false`  | `Roboto Mono`                                                                                          |
+| `language-limit`     | Languages the `languages` card lists before the rest fold into "Other". The card grows one row per language.                                                                                 | `false`  | `8`                                                                                                    |
+| `legend`             | How cards label the green magnitude ramp: `ramp` keeps the calendar's Less…More key, `scale` prints the value band each step stands for. Affects `contributions`, `lifetime`, and `cadence`. | `false`  | `ramp`                                                                                                 |
+| `commit-sweep-limit` | Repositories the `cadence` card's commit sweep visits, most recently pushed first. `0` visits every repository that could hold a commit in the trailing year.                                | `false`  | `0`                                                                                                    |
+| `badges`             | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`.                                            | `false`  | `''`                                                                                                   |
+| `commit`             | Commit changed files back to the repository.                                                                                                                                                 | `false`  | `true`                                                                                                 |
+| `commit-message`     | Commit subject used when `commit` is true.                                                                                                                                                   | `false`  | `chore(profile): refresh generated cards [skip ci]`                                                    |
 
 ## Outputs
 

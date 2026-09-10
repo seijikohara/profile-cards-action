@@ -18,6 +18,7 @@ import { el, num, textNode } from '../svg/dsl.js';
 import { formatCompact, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
+import { repoLabelSpans } from './labels.js';
 import { barFill } from './legend.js';
 
 // Vertical rhythm of the card, in absolute user-space coordinates.
@@ -38,23 +39,6 @@ const MIN_BAR = 3; // keep a tiny non-zero value visible
 const MAX_NAME = 36;
 const TICK_SIZE = 9.5;
 const STAR_R = 4.6;
-
-/** Ellipsize long owner/name labels so they never run under the stars column. */
-function truncate(name: string): string {
-  return name.length > MAX_NAME ? `${name.slice(0, MAX_NAME - 1)}…` : name;
-}
-
-/**
- * Two-tone label: the owner prefix repeats down the list, so it wears the
- * muted ink while the repository name carries the row's identity in the
- * foreground color.
- */
-function labelSpans(nameWithOwner: string, fg: string): string[] {
-  const truncated = truncate(nameWithOwner);
-  const slash = truncated.indexOf('/');
-  if (slash < 0) return [el('tspan', { fill: fg }, textNode(truncated))];
-  return [textNode(truncated.slice(0, slash + 1)), el('tspan', { fill: fg }, textNode(truncated.slice(slash + 1)))];
-}
 
 /**
  * Five-pointed star as a path rather than the ★ glyph: the embedded font is
@@ -94,7 +78,11 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
     labels.push(
       el('text', { x: RANK_X, y: rowCenter + 3.3, class: 't-tick', 'text-anchor': 'end' }, textNode(String(index + 1))),
       el('circle', { cx: DOT_CX, cy: rowCenter, r: 4.5, fill: row.language?.color ?? theme.border }),
-      el('text', { x: LABEL_X, y: rowCenter + 4, class: 't-label' }, ...labelSpans(row.nameWithOwner, theme.fg)),
+      el(
+        'text',
+        { x: LABEL_X, y: rowCenter + 4, class: 't-label' },
+        ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME)
+      ),
       starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme)
     );
     bars.push(

@@ -3,6 +3,10 @@
 /**
  * Everything except calendars, in one cheap query (1 point, ~1.1k nodes).
  *
+ * The per-repository scalars beyond `languages` — creation, size, license,
+ * fork count, and the default branch's commit count — are what the portfolio
+ * card draws. Measured live, adding all of them leaves the query at cost 1.
+ *
  * `languages` asks for 30 per repository and reads `totalSize` alongside the
  * edges. The edge list is a truncation, so summing it alone understates the
  * total silently; `totalSize` minus the summed edges is the exact remainder,
@@ -43,10 +47,16 @@ query Profile($login: String!, $cursor: String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         name
+        nameWithOwner
         isFork
         isArchived
+        createdAt
         pushedAt
+        diskUsage
         stargazerCount
+        licenseInfo { spdxId }
+        primaryLanguage { name color }
+        defaultBranchRef { target { ... on Commit { history { totalCount } } } }
         languages(first: 30, orderBy: { field: SIZE, direction: DESC }) {
           totalSize
           edges { size node { name color } }
@@ -69,11 +79,22 @@ export interface ProfileQueryData {
       readonly pageInfo: { readonly hasNextPage: boolean; readonly endCursor: string | null };
       readonly nodes: readonly {
         readonly name: string;
+        readonly nameWithOwner: string;
         readonly isFork: boolean;
         readonly isArchived: boolean;
+        readonly createdAt: string;
         /** Last push to any branch; null for an empty repository. */
         readonly pushedAt: string | null;
+        /** Size on disk in KB; null on a repository GitHub has not measured. */
+        readonly diskUsage: number | null;
+        readonly forkCount: number;
         readonly stargazerCount: number;
+        readonly licenseInfo: { readonly spdxId: string | null } | null;
+        readonly primaryLanguage: { readonly name: string; readonly color: string | null } | null;
+        /** Null on an empty repository; otherwise every author's commits on the default branch. */
+        readonly defaultBranchRef: {
+          readonly target: { readonly history?: { readonly totalCount: number } } | null;
+        } | null;
         readonly languages: {
           /** Bytes across every language, including any past the edge cap. */
           readonly totalSize: number;

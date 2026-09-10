@@ -10,6 +10,7 @@ import { renderLanguages } from './cards/languages.js';
 import { renderLifetime } from './cards/lifetime.js';
 import { renderMomentum } from './cards/momentum.js';
 import { renderOverview } from './cards/overview.js';
+import { renderPortfolio } from './cards/portfolio.js';
 import { renderRepositories } from './cards/repositories.js';
 import { renderRhythm } from './cards/rhythm.js';
 
@@ -52,6 +53,8 @@ export function renderCard(
       return renderCadence(data, theme, fontFaceCss, options.legend);
     case 'repositories':
       return renderRepositories(data, theme, fontFaceCss);
+    case 'portfolio':
+      return renderPortfolio(data, theme, fontFaceCss);
     case 'languages':
       return renderLanguages(data, theme, fontFaceCss, options.languageLimit);
     default:
