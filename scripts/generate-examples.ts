@@ -59,6 +59,7 @@ const login = process.env['EXAMPLES_LOGIN'] ?? 'seijikohara';
 const CARDS: readonly string[] = [
   'overview',
   'lifetime',
+  'momentum',
   'contributions',
   'composition',
   'rhythm',

@@ -79,6 +79,14 @@ export function formatDate(date: string, withYear: boolean): string {
   return withYear ? `${month} ${day}, ${m[1]}` : `${month} ${day}`;
 }
 
+/** "2026-08-12" -> "Aug 2026". */
+export function formatMonthYear(date: string): string {
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+  if (!m || month === undefined) throw new Error(`invalid calendar date: ${date}`);
+  return `${month} ${m[1]}`;
+}
+
 /** Inclusive range, collapsing a shared year: "May 31 – Jul 22, 2026". */
 export function formatDateRange(start: string, end: string): string {
   if (start === end) return formatDate(end, true);

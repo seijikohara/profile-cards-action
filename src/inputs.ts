@@ -35,6 +35,7 @@ export interface ActionInputs {
 const KNOWN_CARDS: readonly string[] = [
   'overview',
   'lifetime',
+  'momentum',
   'contributions',
   'composition',
   'rhythm',
