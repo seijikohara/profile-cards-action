@@ -18,7 +18,7 @@ import { el, num, textNode } from '../svg/dsl.js';
 import { formatCompact, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
-import { repoLabelSpans } from './labels.js';
+import { repoLabelSpans, truncate } from './labels.js';
 import { barFill } from './legend.js';
 
 // Vertical rhythm of the card, in absolute user-space coordinates.
@@ -26,14 +26,17 @@ const BAND_TOP = 62;
 const ROW_H = 30;
 const BAR_H = 12;
 
-// Horizontal geometry: rank, language dot, name, stars, then bars from a shared axis.
+// Horizontal geometry: rank, language dot, name, stars, issues, then bars from
+// a shared axis.
 const RANK_X = CARD_PADDING + 12; // right edge of the rank column
 const DOT_CX = CARD_PADDING + 25;
 const LABEL_X = CARD_PADDING + 36;
-const STARS_RIGHT = CARD_PADDING + 330; // right edge of the star count
-const BAR_START_X = CARD_PADDING + 344;
+const STARS_RIGHT = CARD_PADDING + 316; // right edge of the star count
+const ISSUE_X = CARD_PADDING + 328;
+const ISSUE_SIZE = 10;
+const BAR_START_X = CARD_PADDING + 352;
 const VALUE_GAP = 8;
-const BAR_MAX_LEN = CARD_WIDTH - CARD_PADDING - BAR_START_X - 46; // leaves room for the end value
+const BAR_MAX_LEN = CARD_WIDTH - CARD_PADDING - BAR_START_X - 86; // leaves room for "412 / 1,208"
 
 const MIN_BAR = 3; // keep a tiny non-zero value visible
 const MAX_NAME = 36;
@@ -67,13 +70,23 @@ function starCount(stars: number, right: number, baseline: number, theme: Theme)
 
 export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss: string): string {
   const ranking = computeRepositories(data.topRepositories);
+  const issueMax = Math.max(0, ...ranking.rows.map((row) => row.issues));
+  // The bullet track is scaled to the deepest history on the card, so a bar's
+  // share of its own track reads directly as "how much of this repository's
+  // history is recent".
+  const trackMax = Math.max(ranking.max, ...ranking.rows.map((row) => row.lifetimeCommits));
 
   const labels: string[] = [];
   const values: string[] = [];
   const bars: string[] = [];
   ranking.rows.forEach((row, index) => {
     const rowCenter = BAND_TOP + index * ROW_H + ROW_H / 2;
-    const length = ranking.max === 0 ? 0 : Math.max(MIN_BAR, (row.commits / ranking.max) * BAR_MAX_LEN);
+    // Commits on branches other than the default are counted by the trailing
+    // query but not by the lifetime one, so a bar can outrun its own track.
+    // Clamp: a full track reads as "all of this history is recent", which is
+    // what such a repository is.
+    const trackLength = trackMax === 0 ? 0 : (Math.max(row.lifetimeCommits, row.commits) / trackMax) * BAR_MAX_LEN;
+    const length = trackMax === 0 ? 0 : Math.max(MIN_BAR, (row.commits / trackMax) * BAR_MAX_LEN);
 
     labels.push(
       el('text', { x: RANK_X, y: rowCenter + 3.3, class: 't-tick', 'text-anchor': 'end' }, textNode(String(index + 1))),
@@ -83,7 +96,27 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
         { x: LABEL_X, y: rowCenter + 4, class: 't-label' },
         ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME)
       ),
-      starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme)
+      starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme),
+      // Issues opened here in the same window: a second contribution type in
+      // one 10px cell, ramped like everything else that carries a quantity.
+      el('rect', {
+        x: ISSUE_X,
+        y: rowCenter - ISSUE_SIZE / 2,
+        width: ISSUE_SIZE,
+        height: ISSUE_SIZE,
+        rx: 2,
+        fill: row.issues === 0 ? theme.bgInset : barFill(theme, row.issues, issueMax),
+      }),
+      trackLength <= length
+        ? ''
+        : el('rect', {
+            x: BAR_START_X,
+            y: rowCenter - BAR_H / 2,
+            width: trackLength,
+            height: BAR_H,
+            rx: BAR_H / 2,
+            fill: theme.bgInset,
+          })
     );
     bars.push(
       el(
@@ -98,8 +131,12 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
     values.push(
       el(
         'text',
-        { x: BAR_START_X + length + VALUE_GAP, y: rowCenter + 3.3, class: 't-tick' },
-        textNode(String(row.commits))
+        { x: BAR_START_X + Math.max(length, trackLength) + VALUE_GAP, y: rowCenter + 3.3, class: 't-tick' },
+        textNode(
+          row.lifetimeCommits > row.commits
+            ? `${formatCompact(row.commits)} / ${formatCompact(row.lifetimeCommits)}`
+            : String(row.commits)
+        )
       )
     );
   });
@@ -132,6 +169,22 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
   }
   const footer = el('text', { x: CARD_PADDING, y: footerBaseline, class: 't-label' }, ...footerParts);
   const key = rowKey(footerBaseline, theme, ranking.rows.length > 0);
+
+  // The only place on the deck where work outside the user's own repositories
+  // surfaces by name. It degrades to nothing: the API nominates none in a quiet
+  // year, and it returned null for several of this account's earlier windows.
+  const popular = data.popularPullRequest;
+  const popularBaseline = footerBaseline + 17;
+  const popularLine =
+    popular === null
+      ? ''
+      : el(
+          'text',
+          { x: CARD_PADDING, y: popularBaseline, class: 't-mono' },
+          // The label is a caption and shouts like the others; the repository
+          // name and the title are quoted text and keep their own case.
+          textNode(`MOST DISCUSSED PR · ${popular.nameWithOwner} · ${truncate(popular.title, 62)}`)
+        );
   const axis = el('line', {
     x1: BAR_START_X - 0.5,
     y1: BAND_TOP,
@@ -141,35 +194,46 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
     'stroke-width': 1,
   });
 
-  const height = footerBaseline + CARD_PADDING;
+  const height = (popular === null ? footerBaseline : popularBaseline) + CARD_PADDING;
 
   return cardFrame(
     {
       theme,
       height,
       title: 'Top repositories',
-      note: 'trailing 12 months · by commits',
+      note: 'trailing 12 months · by commits · bars over lifetime',
       description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
       extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`,
       fontFaceCss,
     },
-    el('g', { class: 'fade' }, axis, ...labels, ...values, empty, footer, key),
+    el('g', { class: 'fade' }, axis, ...labels, ...values, empty, footer, key, popularLine),
     ...bars
   );
 }
 
-/** Names the two row glyphs, right-aligned on the footer baseline. */
+/** Names the three row glyphs, right-aligned on the footer baseline. */
 function rowKey(baseline: number, theme: Theme, visible: boolean): string {
   if (!visible) return '';
+  const right = CARD_WIDTH - CARD_PADDING;
+  const issuesWidth = ISSUE_SIZE + 5 + measureMono('issues opened', TICK_SIZE);
   const starsWidth = STAR_R * 2 + 5 + measureMono('stars', TICK_SIZE);
   const languageWidth = 9 + 5 + measureMono('primary language', TICK_SIZE);
-  const right = CARD_WIDTH - CARD_PADDING;
-  const starsX = right - starsWidth;
+  const issuesX = right - issuesWidth;
+  const starsX = issuesX - 16 - starsWidth;
   const languageX = starsX - 16 - languageWidth;
   return (
     el('circle', { cx: languageX + 4.5, cy: baseline - 3.4, r: 4.5, fill: theme.border }) +
     el('text', { x: languageX + 14, y: baseline, class: 't-tick' }, textNode('primary language')) +
     star(starsX + STAR_R, baseline - 3.4, STAR_R, theme.fgMuted) +
-    el('text', { x: right, y: baseline, class: 't-tick', 'text-anchor': 'end' }, textNode('stars'))
+    el('text', { x: starsX + STAR_R * 2 + 5, y: baseline, class: 't-tick' }, textNode('stars')) +
+    el('rect', {
+      x: issuesX,
+      y: baseline - 8,
+      width: ISSUE_SIZE,
+      height: ISSUE_SIZE,
+      rx: 2,
+      fill: theme.contribRamp[3],
+    }) +
+    el('text', { x: right, y: baseline, class: 't-tick', 'text-anchor': 'end' }, textNode('issues opened'))
   );
 }

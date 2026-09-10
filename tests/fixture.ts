@@ -156,25 +156,70 @@ const KOTLIN = { name: 'Kotlin', color: '#A97BFF' };
 
 /**
  * A ranking with a clear leader, mid-field ties, and a long name to exercise
- * truncation. The last two rows cover the card's two optional fields: a
- * repository with no detected language, and one with no stars.
+ * truncation. The last rows cover the card's optional fields: a repository with
+ * no detected language, one with no stars, several with no issues, and one
+ * whose lifetime commit count is unknown.
  */
 function topRepositories(): RepoCommits[] {
   return [
-    { nameWithOwner: 'seijikohara/vizel', commits: 379, language: TYPESCRIPT, stars: 12 },
-    { nameWithOwner: 'seijikohara/femto-car-launcher', commits: 371, language: RUST, stars: 4 },
-    { nameWithOwner: 'seijikohara/kogu', commits: 308, language: KOTLIN, stars: 31 },
-    { nameWithOwner: 'seijikohara/db-tester', commits: 194, language: KOTLIN, stars: 2 },
-    { nameWithOwner: 'seijikohara/seijikohara', commits: 168, language: TYPESCRIPT, stars: 1 },
-    { nameWithOwner: 'seijikohara/profile-cards-action', commits: 130, language: TYPESCRIPT, stars: 8 },
+    {
+      nameWithOwner: 'seijikohara/vizel',
+      commits: 379,
+      issues: 122,
+      lifetimeCommits: 540,
+      language: TYPESCRIPT,
+      stars: 12,
+    },
+    {
+      nameWithOwner: 'seijikohara/femto-car-launcher',
+      commits: 371,
+      issues: 2,
+      lifetimeCommits: 452,
+      language: RUST,
+      stars: 4,
+    },
+    { nameWithOwner: 'seijikohara/kogu', commits: 308, issues: 21, lifetimeCommits: 445, language: KOTLIN, stars: 31 },
+    {
+      nameWithOwner: 'seijikohara/db-tester',
+      commits: 194,
+      issues: 102,
+      lifetimeCommits: 336,
+      language: KOTLIN,
+      stars: 2,
+    },
+    {
+      nameWithOwner: 'seijikohara/seijikohara',
+      commits: 168,
+      issues: 0,
+      lifetimeCommits: 372,
+      language: TYPESCRIPT,
+      stars: 1,
+    },
+    {
+      nameWithOwner: 'seijikohara/profile-cards-action',
+      commits: 130,
+      issues: 0,
+      lifetimeCommits: 130,
+      language: TYPESCRIPT,
+      stars: 8,
+    },
     {
       nameWithOwner: 'open-telemetry/opentelemetry-js-contrib-examples',
       commits: 24,
+      issues: 1,
+      lifetimeCommits: 24,
       language: TYPESCRIPT,
       stars: 1204,
     },
-    { nameWithOwner: 'seijikohara/docker-compose-cache-action', commits: 24, language: TYPESCRIPT, stars: 3 },
-    { nameWithOwner: 'seijikohara/dotfiles', commits: 9, language: null, stars: 0 },
+    {
+      nameWithOwner: 'seijikohara/docker-compose-cache-action',
+      commits: 24,
+      issues: 7,
+      lifetimeCommits: 207,
+      language: TYPESCRIPT,
+      stars: 3,
+    },
+    { nameWithOwner: 'seijikohara/dotfiles', commits: 9, issues: 0, lifetimeCommits: 0, language: null, stars: 0 },
   ];
 }
 
@@ -244,6 +289,10 @@ export function makeFixture(): ProfileData {
     commits: commitSamples(),
     commitSweep: { swept: 18, candidates: 18 },
     topRepositories: topRepositories(),
+    popularPullRequest: {
+      title: 'Add mouse-based tab drag functionality for reordering and detachment',
+      nameWithOwner: 'kovidgoyal/kitty',
+    },
     repositories: portfolioRepos(),
     trailingCommits: { total: 1432, repositories: 18 },
     generatedAt: '2026-07-22T03:17:00.000Z',
