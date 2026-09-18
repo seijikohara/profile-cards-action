@@ -42,7 +42,7 @@
  *     least one weight on the hundreds grid, so a 400 on the hundreds LIST is a
  *     reliable invalid-family signal.
  *   - The CSS groups all subset blocks per weight; the wanted latin face is the
- *     block preceded by the `/* latin *​/` comment (distinct from `latin-ext`).
+ *     block preceded by the `/* latin *\/` comment (distinct from `latin-ext`).
  */
 
 import { ROBOTO_400, ROBOTO_600, ROBOTO_MONO_400 } from './fonts.generated.js';
