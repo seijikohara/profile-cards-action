@@ -70,7 +70,7 @@
     {
       description: 'Group the build toolchain',
       groupName: 'build toolchain',
-      matchPackageNames: ['typescript', 'tsdown', 'lefthook', 'taze'],
+      matchPackageNames: ['typescript', 'tsdown', 'lefthook'],
     },
     {
       description: 'Group TypeScript type definitions',
