@@ -1,7 +1,7 @@
 pre-commit:
   jobs:
     - name: format staged files
-      run: pnpm exec oxfmt {staged_files}
+      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
       glob: '*.{ts,js,mjs,cjs,json,md,yml,yaml}'
       exclude:
         - dist/**

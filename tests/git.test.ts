@@ -11,6 +11,11 @@ function output(overrides: Partial<exec.ExecOutput> = {}): exec.ExecOutput {
   return { exitCode: 0, stdout: '', stderr: '', ...overrides };
 }
 
+/** Calls of getExecOutput whose args include `needle`, counted at call time (the in-flight call included). */
+function callsWith(needle: string): number {
+  return getExecOutputMock.mock.calls.filter(([, args]) => args?.includes(needle)).length;
+}
+
 describe('changedPaths', () => {
   beforeEach(() => {
     execMock.mockResolvedValue(0);
@@ -91,10 +96,6 @@ describe('commitAndPush', () => {
       { silent: true }
     );
   });
-
-  /** Calls of getExecOutput whose args include `needle`, counted at call time (the in-flight call included). */
-  const callsWith = (needle: string): number =>
-    getExecOutputMock.mock.calls.filter(([, args]) => args?.includes(needle)).length;
 
   it('should reset onto the tip and re-commit, then succeed, when the first push is rejected', async () => {
     getExecOutputMock.mockImplementation(async (_cmd, args) => {
