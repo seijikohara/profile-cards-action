@@ -7,7 +7,9 @@ pre-commit:
         - dist/**
       stage_fixed: true
     - name: lint staged files
-      run: pnpm exec oxlint --fix {staged_files}
+      # oxlint exits 1 when .oxlintrc.json ignores every staged file (for
+      # example under coverage/), so let it skip that case like oxfmt above.
+      run: pnpm exec oxlint --no-error-on-unmatched-pattern --fix {staged_files}
       glob: '*.{ts,js,mjs,cjs}'
       exclude:
         - dist/**
