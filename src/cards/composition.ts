@@ -16,7 +16,7 @@ import type { ProfileData } from '../model.js';
 import { el, num, textNode } from '../svg/dsl.js';
 import { formatInt, measureSans } from '../svg/text.js';
 import type { Theme } from '../theme.js';
-import { cardFrame } from './frame.js';
+import { type Card, cardFrame } from './frame.js';
 import { privacyNote } from './legend.js';
 
 const MAX_BAR_HEIGHT = 110;
@@ -51,7 +51,7 @@ function barCap(x: number, top: number, width: number, height: number, radius: n
   return el('path', { d, fill });
 }
 
-export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: string): string {
+export function renderComposition(data: ProfileData, theme: Theme): Card {
   const { years, maxSum, privateShare, typeTotals } = computeComposition(data.years);
 
   const inner = CARD_WIDTH - CARD_PADDING * 2;
@@ -171,7 +171,6 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
       note: `by type · ${privacyNote(data.includesPrivate)}`,
       description: `Contribution composition by year for ${data.login}: commits, pull requests, issues, reviews, and private contributions.`,
       extraCss: `.bar{opacity:0;animation:grow ${motionDuration}s cubic-bezier(.2,.7,.3,1) forwards}`,
-      fontFaceCss,
     },
     el('g', { class: 'fade' }, baselineRule, ...ticks, ...totals, ...legend, privateCaption),
     ...bars

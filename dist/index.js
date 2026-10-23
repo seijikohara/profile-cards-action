@@ -57766,6 +57766,17 @@ const DEFAULT_PALETTE = "green";
 */
 const DEFAULT_LEGEND = "ramp";
 /**
+* Whether a run writes one SVG per card or stacks every card into one SVG per
+* theme. Mirrors action.yml's `layout` default; "split" is what every release
+* before the input existed wrote.
+*/
+const DEFAULT_LAYOUT = "split";
+/**
+* File stem of the combined SVG (`cards.<theme>.svg`). No card carries this
+* name, so the combined file can never overwrite a split card's file.
+*/
+const COMBINED_FILE_STEM = "cards";
+/**
 * @license lucide v1.61.0 - ISC
 *
 * This source code is licensed under the ISC license.
@@ -58346,10 +58357,37 @@ const CORNER_GLOW = .06;
 function noteCase(note) {
 	return note.split(" ").map((word) => word.startsWith("@") ? word : word.toUpperCase()).join(" ");
 }
+/** Head the card's content with its icon, eyebrow title, and note. */
 function cardFrame(options, ...children) {
-	const { theme, height, title, note, description, extraCss, fontFaceCss } = options;
-	const css = `
-${fontFaceCss ?? ""}
+	const { theme, height, title, note, description, extraCss } = options;
+	const body = [
+		icon(options.icon, 24, 31, TITLE_ICON_SIZE, theme.ink),
+		el("text", {
+			x: 47,
+			y: 42,
+			class: "t-title"
+		}, textNode(title.toUpperCase())),
+		note === void 0 ? "" : el("text", {
+			x: 822,
+			y: 42,
+			class: "t-mono",
+			"text-anchor": "end"
+		}, textNode(noteCase(note))),
+		...children
+	].join("");
+	return {
+		theme,
+		height,
+		title,
+		description,
+		extraCss: extraCss ?? "",
+		body
+	};
+}
+/** The document's <style>: fonts, type classes, and motion, then the cards' own rules. */
+function documentCss(theme, fontFaceCss, extraCss) {
+	return `
+${fontFaceCss}
 text{font-family:'CardSans',${FONT_SANS};font-weight:400}
 .t-title{font-family:'CardMono',${FONT_MONO};font-size:11px;font-weight:400;letter-spacing:1.6px;fill:${theme.ink}}
 .t-value{font-size:30px;font-weight:600;letter-spacing:-.4px;fill:${theme.fg}}
@@ -58365,67 +58403,111 @@ text{font-family:'CardSans',${FONT_SANS};font-weight:400}
 @keyframes grow{from{opacity:0;transform:scaleY(0)}to{opacity:1;transform:scaleY(1)}}
 @keyframes growX{from{opacity:0;transform:scaleX(0)}to{opacity:1;transform:scaleX(1)}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;opacity:1!important;transform:none!important}}
-${extraCss ?? ""}`;
-	return el("svg", {
-		xmlns: "http://www.w3.org/2000/svg",
-		viewBox: `0 0 846 ${height}`,
-		width: 846,
-		height,
-		role: "img",
-		"aria-label": description
-	}, el("title", {}, textNode(title)), el("desc", {}, textNode(description)), el("style", {}, css), el("defs", {}, theme.id === "dark" ? el("radialGradient", {
-		id: "glow",
-		gradientUnits: "userSpaceOnUse",
-		cx: 846,
-		cy: 0,
-		r: 460
-	}, el("stop", {
-		offset: 0,
-		"stop-color": theme.ink,
-		"stop-opacity": CORNER_GLOW
-	}), el("stop", {
-		offset: 1,
-		"stop-color": theme.ink,
-		"stop-opacity": 0
-	})) : "", el("linearGradient", {
-		id: "area",
-		x1: 0,
-		y1: 0,
-		x2: 0,
-		y2: 1
-	}, el("stop", {
-		offset: 0,
-		"stop-color": theme.contribRamp[3],
-		"stop-opacity": .32
-	}), el("stop", {
-		offset: 1,
-		"stop-color": theme.contribRamp[3],
-		"stop-opacity": .02
-	})), effectDefs(theme)), el("rect", {
-		x: .5,
-		y: .5,
-		width: 845,
-		height: height - 1,
-		rx: 12,
-		fill: theme.bg,
-		stroke: theme.border
-	}), theme.id === "dark" ? el("rect", {
-		x: .5,
-		y: .5,
-		width: 845,
-		height: height - 1,
-		rx: 12,
-		fill: "url(#glow)"
-	}) : "", icon(options.icon, 24, 31, TITLE_ICON_SIZE, theme.ink), el("text", {
-		x: 47,
-		y: 42,
-		class: "t-title"
-	}, textNode(title.toUpperCase())), note === void 0 ? "" : el("text", {
-		x: 822,
-		y: 42,
-		class: "t-mono",
-		"text-anchor": "end"
-	}, textNode(noteCase(note))), ...children);
+${extraCss}`;
+}
+/**
+* Open a document: title, description, styles, the paint servers and filters
+* every card may reference, and the canvas. Returns the root element's
+* attributes and its leading children.
+*/
+function documentHead(theme, height, title, description, css) {
+	return {
+		attrs: {
+			xmlns: "http://www.w3.org/2000/svg",
+			viewBox: `0 0 846 ${height}`,
+			width: 846,
+			height,
+			role: "img",
+			"aria-label": description
+		},
+		head: [
+			el("title", {}, textNode(title)),
+			el("desc", {}, textNode(description)),
+			el("style", {}, css),
+			el("defs", {}, theme.id === "dark" ? el("radialGradient", {
+				id: "glow",
+				gradientUnits: "userSpaceOnUse",
+				cx: 846,
+				cy: 0,
+				r: 460
+			}, el("stop", {
+				offset: 0,
+				"stop-color": theme.ink,
+				"stop-opacity": CORNER_GLOW
+			}), el("stop", {
+				offset: 1,
+				"stop-color": theme.ink,
+				"stop-opacity": 0
+			})) : "", el("linearGradient", {
+				id: "area",
+				x1: 0,
+				y1: 0,
+				x2: 0,
+				y2: 1
+			}, el("stop", {
+				offset: 0,
+				"stop-color": theme.contribRamp[3],
+				"stop-opacity": .32
+			}), el("stop", {
+				offset: 1,
+				"stop-color": theme.contribRamp[3],
+				"stop-opacity": .02
+			})), effectDefs(theme)),
+			el("rect", {
+				x: .5,
+				y: .5,
+				width: 845,
+				height: height - 1,
+				rx: 12,
+				fill: theme.bg,
+				stroke: theme.border
+			}),
+			theme.id === "dark" ? el("rect", {
+				x: .5,
+				y: .5,
+				width: 845,
+				height: height - 1,
+				rx: 12,
+				fill: "url(#glow)"
+			}) : ""
+		].join("")
+	};
+}
+/** Render one card as a standalone SVG document. */
+function cardSvg(card, fontFaceCss) {
+	const { attrs, head } = documentHead(card.theme, card.height, card.title, card.description, documentCss(card.theme, fontFaceCss, card.extraCss));
+	return el("svg", attrs, head, card.body);
+}
+/**
+* Stack cards, in order, into one SVG document: one canvas, one copy of the
+* fonts and definitions, and a hairline between neighbouring cards.
+*
+* Each card keeps its own coordinate system inside a nested <svg> viewport:
+* a `transform` would be undone by the reduced-motion reset, and the cards'
+* user-space filters and transform origins are measured from their own top.
+*/
+function combinedSvg(cards, fontFaceCss) {
+	const theme = cards[0]?.theme;
+	if (theme === void 0) throw new Error("A combined SVG needs at least one card.");
+	if (cards.some((card) => card.theme !== theme)) throw new Error("Combined cards must share one theme.");
+	const tops = cards.map((_, index) => cards.slice(0, index).reduce((sum, card) => sum + card.height, 0));
+	const height = cards.reduce((sum, card) => sum + card.height, 0);
+	const extraCss = [...new Set(cards.map((card) => card.extraCss))].join("");
+	const { attrs, head } = documentHead(theme, height, cards.map((card) => card.title).join(" · "), cards.map((card) => card.description).join(" "), documentCss(theme, fontFaceCss, extraCss));
+	return el("svg", attrs, head, ...cards.map((card, index) => {
+		const top = tops[index] ?? 0;
+		return (index === 0 ? "" : el("rect", {
+			x: 24,
+			y: top,
+			width: 798,
+			height: 1,
+			fill: theme.borderMuted
+		})) + el("svg", {
+			y: top,
+			width: 846,
+			height: card.height
+		}, card.body);
+	}));
 }
 const TILE_GAP = 12;
 const TILE_BASE_HEIGHT = 76;
@@ -58672,7 +58754,7 @@ const LEGEND_PITCH = 18;
 function columnX(hour) {
 	return GRID_LEFT + hour * COL_W;
 }
-function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
+function renderCadence(data, theme, legendStyle = DEFAULT_LEGEND) {
 	const cadence = computeCadence(data.commits);
 	const scale = legendStyle === "scale" ? {
 		thresholds: cadence.thresholds,
@@ -58833,8 +58915,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		title: "Commit cadence",
 		note: capped ? `trailing 12 months · author local time · ${swept} of ${candidates} repositories` : "trailing 12 months · author local time",
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
-		extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
-		fontFaceCss
+		extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`
 	}, el("g", { class: "fade" }, ...nightBands, eyebrow, histBaseline, ...histogram, ...weekdayLabels, ...hourTicks, sizeEyebrow, sizeBaselineRule, ...sizeBand, sizeUnit, perFileNote), ...columns, el("g", { class: "fade" }, footer, peakKey, legend));
 }
 /** Hue-free emphasis for the busiest cell: a thin ring in the foreground ink. */
@@ -58970,7 +59051,7 @@ function barCap(x, top, width, height, radius, fill) {
 		fill
 	});
 }
-function renderComposition(data, theme, fontFaceCss) {
+function renderComposition(data, theme) {
 	const { years, maxSum, privateShare, typeTotals } = computeComposition(data.years);
 	const band = 798 / Math.max(1, years.length);
 	const baseline = 182;
@@ -59067,8 +59148,7 @@ function renderComposition(data, theme, fontFaceCss) {
 		title: "Contribution composition",
 		note: `by type · ${privacyNote(data.includesPrivate)}`,
 		description: `Contribution composition by year for ${data.login}: commits, pull requests, issues, reviews, and private contributions.`,
-		extraCss: `.bar{opacity:0;animation:grow ${motionDuration}s cubic-bezier(.2,.7,.3,1) forwards}`,
-		fontFaceCss
+		extraCss: `.bar{opacity:0;animation:grow ${motionDuration}s cubic-bezier(.2,.7,.3,1) forwards}`
 	}, el("g", { class: "fade" }, baselineRule, ...ticks, ...totals, ...legend, privateCaption), ...bars);
 }
 //#endregion
@@ -59197,7 +59277,7 @@ function dayColumn(x, y, height, faces) {
 function toWeeks(days) {
 	return range(Math.ceil(days.length / 7)).map((week) => days.slice(week * 7, week * 7 + 7));
 }
-function renderContributions(data, streaks, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
+function renderContributions(data, streaks, theme, legendStyle = DEFAULT_LEGEND) {
 	const weeks = toWeeks(data.trailing.days);
 	const weekCount = weeks.length;
 	const maxCount = Math.max(1, ...data.trailing.days.map((day) => day.count));
@@ -59387,8 +59467,7 @@ function renderContributions(data, streaks, theme, fontFaceCss, legendStyle = DE
 		title: "Contributions",
 		note: `past 12 months · streaks over all years · ${privacyNote(data.trailing.includesPrivate)}`,
 		description: `Contribution activity for ${data.login}: ${formatInt(data.trailing.total)} contributions in the past 12 months, current streak ${formatInt(streaks.current)} days, longest streak ${formatInt(streaks.longest)} days.`,
-		extraCss: `.iso{opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}`,
-		fontFaceCss
+		extraCss: `.iso{opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}`
 	}, el("g", { class: "fade" }, tilesSvg), el("g", { class: "fade" }, groundShadow, slab), ...weekGroups, el("g", { class: "fade" }, ...monthTicks, ...weekdayTicks, callout), legend, caption);
 }
 //#endregion
@@ -59713,15 +59792,14 @@ function cellLabel(share, rect, fill) {
 		}, textNode(formatBytes(share.bytes)))] : []
 	].join("");
 }
-function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
+function renderLanguages(data, theme, languageLimit = 8) {
 	const shares = languageShares(data.languages, languageLimit, data.languageTailBytes);
 	if (shares.length === 0) return cardFrame({
 		theme,
 		icon: import_lucide.CodeXml,
 		height: 96,
 		title: "Languages",
-		description: `No language data for ${data.login}.`,
-		fontFaceCss
+		description: `No language data for ${data.login}.`
 	}, el("text", {
 		x: 24,
 		y: 72,
@@ -59807,8 +59885,7 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 		title: "Languages",
 		note: "public source repositories · by bytes",
 		description: `Language breakdown for ${data.login} by bytes${lead}.`,
-		extraCss,
-		fontFaceCss
+		extraCss
 	}, ...cells, el("g", { class: "fade" }, listHead, ...list, footer));
 }
 //#endregion
@@ -59953,7 +60030,7 @@ const CELL_RADIUS = 2;
 const LEGEND_ROW = 26;
 const COL_STEP_MS = 16;
 const SWEEP_MS = 900;
-function renderLifetime(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
+function renderLifetime(data, theme, legendStyle = DEFAULT_LEGEND) {
 	const life = computeLifetime(data.lifetimeDays);
 	const scale = legendStyle === "scale" ? {
 		thresholds: life.thresholds,
@@ -60030,8 +60107,7 @@ function renderLifetime(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) 
 		title: "Contribution history",
 		note,
 		description,
-		extraCss: `.wk{opacity:0;animation:fade .5s ease forwards}`,
-		fontFaceCss
+		extraCss: `.wk{opacity:0;animation:fade .5s ease forwards}`
 	}, ...columns, el("g", { class: "fade" }, ...monthTicks, ...yearLabels, ...yearTotals, legend));
 }
 //#endregion
@@ -60172,7 +60248,7 @@ const Y_HEADROOM = 1.12;
 const MIN_TICK_GAP = 34;
 /** Height of the "not enough history yet" stub, matching the languages card. */
 const STUB_HEIGHT$1 = 96;
-function renderMomentum(data, theme, fontFaceCss) {
+function renderMomentum(data, theme) {
 	const momentum = computeMomentum(data.lifetimeDays, data.years);
 	const { points, peak, current, since } = momentum;
 	if (points.length < 2 || peak === void 0 || current === void 0 || since === void 0) return cardFrame({
@@ -60181,8 +60257,7 @@ function renderMomentum(data, theme, fontFaceCss) {
 		height: STUB_HEIGHT$1,
 		title: "Momentum",
 		note: "rolling 12 months",
-		description: `Momentum for ${data.login}: not enough history to draw a rolling year.`,
-		fontFaceCss
+		description: `Momentum for ${data.login}: not enough history to draw a rolling year.`
 	}, el("text", {
 		x: 24,
 		y: 72,
@@ -60288,8 +60363,7 @@ function renderMomentum(data, theme, fontFaceCss) {
 		title: "Momentum",
 		note: "rolling 12 months · all contribution types",
 		description: `Momentum for ${data.login}: contributions in each trailing twelve months since ${formatDate(since, true)}, currently ${formatInt(current.total)}, peaking at ${formatInt(peak.total)}.`,
-		extraCss: ".sweep{clip-path:inset(0 100% 0 0);animation:sweep 1.1s cubic-bezier(.2,.7,.3,1) .1s forwards}@keyframes sweep{to{clip-path:inset(0 0 0 0)}}@media (prefers-reduced-motion: reduce){.sweep{clip-path:none!important}}",
-		fontFaceCss
+		extraCss: ".sweep{clip-path:inset(0 100% 0 0);animation:sweep 1.1s cubic-bezier(.2,.7,.3,1) .1s forwards}@keyframes sweep{to{clip-path:inset(0 0 0 0)}}@media (prefers-reduced-motion: reduce){.sweep{clip-path:none!important}}"
 	}, el("g", { class: "fade" }, ...guides, baselineRule, ...ticks), el("g", { class: "sweep" }, area, lineGlow, line), el("g", { class: "fade" }, peakMark, currentValue, footer));
 }
 /** A guide's label: a round value needs no trailing ".0" ("2k", "2.5k"). */
@@ -60330,7 +60404,7 @@ function yearTicks$1(points) {
 //#endregion
 //#region src/cards/overview.ts
 /** Overview card: eight stat tiles. */
-function renderOverview(data, theme, fontFaceCss) {
+function renderOverview(data, theme) {
 	const lifetime = data.years.reduce((sum, year) => sum + year.total, 0);
 	const latestYear = data.years.at(-1);
 	const thisYearTotal = latestYear?.total ?? 0;
@@ -60440,8 +60514,7 @@ function renderOverview(data, theme, fontFaceCss) {
 		height,
 		title: "Overview",
 		note: `@${data.login} · public activity`,
-		description: `GitHub overview for ${data.login}: ${formatInt(lifetime)} contributions all time, ${formatInt(data.starsEarned)} stars earned, ${formatInt(data.followers)} followers.`,
-		fontFaceCss
+		description: `GitHub overview for ${data.login}: ${formatInt(lifetime)} contributions all time, ${formatInt(data.starsEarned)} stars earned, ${formatInt(data.followers)} followers.`
 	}, el("g", { class: "fade" }, tilesA.svg, tilesB.svg));
 }
 //#endregion
@@ -60509,7 +60582,7 @@ function recencyLevel(pushedAt, nowMs) {
 	if (days < 365) return 2;
 	return 1;
 }
-function renderPortfolio(data, theme, fontFaceCss) {
+function renderPortfolio(data, theme) {
 	const rows = data.repositories.slice(0, MAX_ROWS$1);
 	const totals = data.repositories;
 	if (rows.length === 0) return cardFrame({
@@ -60518,8 +60591,7 @@ function renderPortfolio(data, theme, fontFaceCss) {
 		height: STUB_HEIGHT,
 		title: "Portfolio",
 		note: "public source repositories",
-		description: `No public source repositories for ${data.login}.`,
-		fontFaceCss
+		description: `No public source repositories for ${data.login}.`
 	}, el("text", {
 		x: 24,
 		y: 72,
@@ -60640,8 +60712,7 @@ function renderPortfolio(data, theme, fontFaceCss) {
 		title: "Portfolio",
 		note: "public source repositories · commits and pushes by all authors",
 		description: `Repository portfolio for ${data.login}: ${formatInt(totals.length)} public source repositories, ${formatInt(recent)} pushed in the last 90 days.`,
-		extraCss: `.life{opacity:0;animation:fade .45s ease forwards}`,
-		fontFaceCss
+		extraCss: `.life{opacity:0;animation:fade .45s ease forwards}`
 	}, el("g", { class: "fade" }, columnHeads, ...guides, axisRule, ...ticks, ...labels, footer, key), ...lifelines);
 }
 const RECENCY_STEPS = [
@@ -60777,7 +60848,7 @@ function issueCount(issues, right, baseline, theme) {
 		"text-anchor": "end"
 	}, textNode(label));
 }
-function renderRepositories(data, theme, fontFaceCss) {
+function renderRepositories(data, theme) {
 	const ranking = computeRepositories(data.topRepositories);
 	const trackMax = Math.max(ranking.max, ...ranking.rows.map((row) => row.lifetimeCommits));
 	const labels = [];
@@ -60852,8 +60923,7 @@ function renderRepositories(data, theme, fontFaceCss) {
 		title: "Top repositories",
 		note: "by commits · bar past 12 months · track all time",
 		description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
-		extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`,
-		fontFaceCss
+		extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`
 	}, el("g", { class: "fade" }, axis, ...labels, ...values, empty, footer, key, popularLine), ...bars);
 }
 /** Names the three row glyphs, right-aligned on the footer baseline. */
@@ -61063,7 +61133,7 @@ function sharesOf(values, total) {
 function coord(value) {
 	return String(Math.round(value * 100) / 100);
 }
-function renderRhythm(data, theme, fontFaceCss) {
+function renderRhythm(data, theme) {
 	const rhythm = computeRhythm(data.lifetimeDays);
 	const recent = computeRhythm(data.trailing.days);
 	const comparable = data.lifetimeDays.length >= MIN_HISTORY_DAYS;
@@ -61171,32 +61241,39 @@ function renderRhythm(data, theme, fontFaceCss) {
 		title: "Activity rhythm",
 		note: comparable ? "all contribution types · share of all years vs trailing year" : "all contribution types · all years",
 		description: `Activity rhythm for ${data.login}: contributions by weekday and by month of year, busiest on ${WEEKDAY_LABELS[rhythm.peakWeekday] ?? "Mon"} and in ${MONTH_NAMES[rhythm.peakMonth] ?? "January"}.`,
-		extraCss: ".hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}",
-		fontFaceCss
+		extraCss: ".hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}"
 	}, el("g", { class: "fade" }, eyebrows, key, ...weekdayTracks, ...monthTracks, ...weekdayLabels, ...monthLabels, footer), ...weekdayBars, ...monthBars, el("g", { class: "fade" }, ...weekdayMarkers, ...monthMarkers));
 }
 //#endregion
 //#region src/cards.ts
-/** @fileoverview Dispatch a card name to its renderer, threading the resolved font CSS. */
+/** @fileoverview Dispatch a card name to its renderer and place the result in an SVG document. */
 const DEFAULT_CARD_OPTIONS = {
 	languageLimit: 8,
 	legend: DEFAULT_LEGEND
 };
-/** Render one card by id. `fontFaceCss` is the resolved @font-face block injected into the frame. */
-function renderCard(card, data, streaks, theme, fontFaceCss, options = DEFAULT_CARD_OPTIONS) {
+/** Build one card by id, before it is placed in a document. */
+function buildCard(card, data, streaks, theme, options) {
 	switch (card) {
-		case "overview": return renderOverview(data, theme, fontFaceCss);
-		case "lifetime": return renderLifetime(data, theme, fontFaceCss, options.legend);
-		case "contributions": return renderContributions(data, streaks, theme, fontFaceCss, options.legend);
-		case "momentum": return renderMomentum(data, theme, fontFaceCss);
-		case "composition": return renderComposition(data, theme, fontFaceCss);
-		case "rhythm": return renderRhythm(data, theme, fontFaceCss);
-		case "cadence": return renderCadence(data, theme, fontFaceCss, options.legend);
-		case "repositories": return renderRepositories(data, theme, fontFaceCss);
-		case "portfolio": return renderPortfolio(data, theme, fontFaceCss);
-		case "languages": return renderLanguages(data, theme, fontFaceCss, options.languageLimit);
+		case "overview": return renderOverview(data, theme);
+		case "lifetime": return renderLifetime(data, theme, options.legend);
+		case "contributions": return renderContributions(data, streaks, theme, options.legend);
+		case "momentum": return renderMomentum(data, theme);
+		case "composition": return renderComposition(data, theme);
+		case "rhythm": return renderRhythm(data, theme);
+		case "cadence": return renderCadence(data, theme, options.legend);
+		case "repositories": return renderRepositories(data, theme);
+		case "portfolio": return renderPortfolio(data, theme);
+		case "languages": return renderLanguages(data, theme, options.languageLimit);
 		default: throw new Error(`Unknown card: ${card}`);
 	}
+}
+/** Render one card by id. `fontFaceCss` is the resolved @font-face block embedded in the document. */
+function renderCard(card, data, streaks, theme, fontFaceCss, options = DEFAULT_CARD_OPTIONS) {
+	return cardSvg(buildCard(card, data, streaks, theme, options), fontFaceCss);
+}
+/** Render several cards as one SVG, stacked top to bottom in the order given. */
+function renderCombined(cards, data, streaks, theme, fontFaceCss, options = DEFAULT_CARD_OPTIONS) {
+	return combinedSvg(cards.map((card) => buildCard(card, data, streaks, theme, options)), fontFaceCss);
 }
 //#endregion
 //#region src/compute/streaks.ts
@@ -62112,6 +62189,15 @@ function parseCommitSweepLimit(raw) {
 	if (!Number.isInteger(value) || value < 0) throw new Error(`Invalid commit-sweep-limit "${trimmed}". Expected a non-negative integer.`);
 	return value;
 }
+const LAYOUTS = ["split", "combined"];
+/** Parse `layout`: one of the known layouts, or the default when empty. */
+function parseLayout(raw) {
+	const value = raw.trim().toLowerCase();
+	if (value === "") return DEFAULT_LAYOUT;
+	const layout = LAYOUTS.find((id) => id === value);
+	if (layout === void 0) throw new Error(`Unknown layout "${value}". Valid: ${LAYOUTS.join(", ")}.`);
+	return layout;
+}
 const LEGEND_STYLES = ["ramp", "scale"];
 /** Parse `legend`: one of the known styles, or the default when empty. */
 function parseLegend(raw) {
@@ -62137,6 +62223,7 @@ function readInputs() {
 		token: getInput("github-token", { required: true }),
 		username: resolveUsername(getInput("username")),
 		cards: parseCards(getInput("cards")),
+		layout: parseLayout(getInput("layout")),
 		outputDir: getInput("output-dir").trim() || DEFAULT_OUTPUT_DIR,
 		themeIds: parseThemes(getInput("themes")),
 		palette: parsePalette(getInput("palette")),
@@ -62156,8 +62243,8 @@ function readInputs() {
 * @fileoverview Action entry point.
 *
 * Read inputs -> fetch the profile via GraphQL -> compute -> resolve fonts ->
-* render the selected cards (and any badges) -> write to the output directory ->
-* optionally commit and push -> set outputs.
+* render the selected cards, one file each or stacked into one (and any badges)
+* -> write to the output directory -> optionally commit and push -> set outputs.
 */
 /** Commit when asked, otherwise just detect pending changes — either way report whether anything changed. */
 async function resolveChanged(inputs) {
@@ -62183,11 +62270,13 @@ async function run() {
 	const streaks = computeStreaks(data.lifetimeDays);
 	const fontFaceCss = await resolveFonts(inputs.font, inputs.monoFont);
 	const themes = inputs.themeIds.map((id) => themeFor(id, inputs.palette));
-	const files = /* @__PURE__ */ new Map();
-	for (const theme of themes) for (const card of inputs.cards) files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss, {
+	const options = {
 		languageLimit: inputs.languageLimit,
 		legend: inputs.legend
-	}));
+	};
+	const files = /* @__PURE__ */ new Map();
+	for (const theme of themes) if (inputs.layout === "combined") files.set(`${COMBINED_FILE_STEM}.${theme.id}.svg`, renderCombined(inputs.cards, data, streaks, theme, fontFaceCss, options));
+	else for (const card of inputs.cards) files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss, options));
 	for (const [name, svg] of renderBadges(inputs.badges, themes)) files.set(join("badges", name), svg);
 	const written = [];
 	for (const [rel, svg] of files) {
@@ -62196,7 +62285,7 @@ async function run() {
 		await writeFile(path, `${svg}\n`, "utf8");
 		written.push(path);
 	}
-	info(`Generated ${written.length} files for @${data.login} in ${inputs.outputDir} (${inputs.cards.length} cards x ${themes.length} themes, ${inputs.badges.length} badges)`);
+	info(`Generated ${written.length} files for @${data.login} in ${inputs.outputDir} (${inputs.cards.length} cards ${inputs.layout} x ${themes.length} themes, ${inputs.badges.length} badges)`);
 	const changed = await resolveChanged(inputs);
 	setOutput("changed", String(changed));
 	setOutput("files", JSON.stringify(written));

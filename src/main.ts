@@ -2,16 +2,17 @@
  * @fileoverview Action entry point.
  *
  * Read inputs -> fetch the profile via GraphQL -> compute -> resolve fonts ->
- * render the selected cards (and any badges) -> write to the output directory ->
- * optionally commit and push -> set outputs.
+ * render the selected cards, one file each or stacked into one (and any badges)
+ * -> write to the output directory -> optionally commit and push -> set outputs.
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import * as core from '@actions/core';
 import { renderBadges } from './badges.js';
-import { renderCard } from './cards.js';
+import { renderCard, renderCombined } from './cards.js';
 import { computeStreaks } from './compute/streaks.js';
+import { COMBINED_FILE_STEM } from './config.js';
 import { resolveFonts } from './fonts.js';
 import { fetchProfile } from './github/fetch-profile.js';
 import { changedPaths, commitAndPush } from './git.js';
@@ -43,17 +44,20 @@ async function run(): Promise<void> {
   const fontFaceCss = await resolveFonts(inputs.font, inputs.monoFont);
   const themes = inputs.themeIds.map((id) => themeFor(id, inputs.palette));
 
+  const options = { languageLimit: inputs.languageLimit, legend: inputs.legend };
+
   // Relative path -> SVG. Cards first, then badges under `badges/`.
   const files = new Map<string, string>();
   for (const theme of themes) {
-    for (const card of inputs.cards) {
+    if (inputs.layout === 'combined') {
       files.set(
-        `${card}.${theme.id}.svg`,
-        renderCard(card, data, streaks, theme, fontFaceCss, {
-          languageLimit: inputs.languageLimit,
-          legend: inputs.legend,
-        })
+        `${COMBINED_FILE_STEM}.${theme.id}.svg`,
+        renderCombined(inputs.cards, data, streaks, theme, fontFaceCss, options)
       );
+    } else {
+      for (const card of inputs.cards) {
+        files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss, options));
+      }
     }
   }
   for (const [name, svg] of renderBadges(inputs.badges, themes)) {
@@ -69,7 +73,7 @@ async function run(): Promise<void> {
   }
   core.info(
     `Generated ${written.length} files for @${data.login} in ${inputs.outputDir} ` +
-      `(${inputs.cards.length} cards x ${themes.length} themes, ${inputs.badges.length} badges)`
+      `(${inputs.cards.length} cards ${inputs.layout} x ${themes.length} themes, ${inputs.badges.length} badges)`
   );
 
   const changed = await resolveChanged(inputs);

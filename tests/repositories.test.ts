@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cardSvg } from '../src/cards/frame.js';
 import { renderRepositories } from '../src/cards/repositories.js';
 import { computeRepositories } from '../src/compute/repositories.js';
 import type { ProfileData, RepoCommits } from '../src/model.js';
@@ -46,7 +47,7 @@ describe('renderRepositories depth', () => {
   const data: ProfileData = makeFixture();
 
   it('draws a track behind a bar whose repository has deeper history', () => {
-    const svg = renderRepositories(data, LIGHT, '');
+    const svg = cardSvg(renderRepositories(data, LIGHT), '');
     assertWellFormed(svg);
     // vizel: 379 of 540 lifetime commits.
     expect(svg).toContain('>379 / 540<');
@@ -59,7 +60,7 @@ describe('renderRepositories depth', () => {
         { nameWithOwner: 'a/one', commits: 50, issues: 0, lifetimeCommits: 50, language: null, stars: 0 },
       ],
     };
-    const svg = renderRepositories(single, LIGHT, '');
+    const svg = cardSvg(renderRepositories(single, LIGHT), '');
     expect(svg).toContain('>50<');
     expect(svg).not.toContain('50 / 50');
   });
@@ -73,17 +74,19 @@ describe('renderRepositories depth', () => {
         { nameWithOwner: 'a/branchy', commits: 90, issues: 0, lifetimeCommits: 10, language: null, stars: 0 },
       ],
     };
-    const svg = renderRepositories(branchy, LIGHT, '');
+    const svg = cardSvg(renderRepositories(branchy, LIGHT), '');
     assertWellFormed(svg);
     expect(svg).toContain('>90<');
   });
 
   it('names the issues column in the key', () => {
-    expect(renderRepositories(data, LIGHT, '')).toContain('>issues opened<');
+    expect(cardSvg(renderRepositories(data, LIGHT), '')).toContain('>issues opened<');
   });
 
   it('surfaces the most discussed pull request, and degrades without one', () => {
-    expect(renderRepositories(data, LIGHT, '')).toContain('MOST DISCUSSED PR · kovidgoyal/kitty · Add mouse');
-    expect(renderRepositories({ ...data, popularPullRequest: null }, LIGHT, '')).not.toContain('MOST DISCUSSED PR');
+    expect(cardSvg(renderRepositories(data, LIGHT), '')).toContain('MOST DISCUSSED PR · kovidgoyal/kitty · Add mouse');
+    expect(cardSvg(renderRepositories({ ...data, popularPullRequest: null }, LIGHT), '')).not.toContain(
+      'MOST DISCUSSED PR'
+    );
   });
 });

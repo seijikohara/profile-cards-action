@@ -25,7 +25,7 @@ import { el, textNode } from '../svg/dsl.js';
 import { horizontalBar, verticalBar } from '../svg/bars.js';
 import { formatCompact, formatDate, formatInt, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
-import { cardFrame } from './frame.js';
+import { type Card, cardFrame } from './frame.js';
 import { barFill } from './legend.js';
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
@@ -124,7 +124,7 @@ function coord(value: number): string {
   return String(Math.round(value * 100) / 100);
 }
 
-export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: string): string {
+export function renderRhythm(data: ProfileData, theme: Theme): Card {
   const rhythm = computeRhythm(data.lifetimeDays);
   const recent = computeRhythm(data.trailing.days);
   const comparable = data.lifetimeDays.length >= MIN_HISTORY_DAYS;
@@ -290,7 +290,6 @@ export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: strin
       extraCss:
         `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}` +
         `.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}`,
-      fontFaceCss,
     },
     el(
       'g',

@@ -27,8 +27,24 @@ export interface FrameOptions {
   readonly description: string;
   /** Extra <style> rules appended to the shared block. */
   readonly extraCss?: string;
-  /** Pre-built `@font-face` rules, injected verbatim into the card's <style>. */
-  readonly fontFaceCss?: string;
+}
+
+/**
+ * A card's content in card-local coordinates, not yet placed in a document.
+ *
+ * The same card becomes a standalone SVG (`cardSvg`) or one section of a
+ * combined sheet (`combinedSvg`), so the fonts, definitions, and canvas belong
+ * to the document rather than to the card.
+ */
+export interface Card {
+  readonly theme: Theme;
+  readonly height: number;
+  readonly title: string;
+  readonly description: string;
+  /** Card-specific <style> rules: motion classes and staggers. */
+  readonly extraCss: string;
+  /** The title row and the card's content. */
+  readonly body: string;
 }
 
 const TITLE_BASELINE = 43;
@@ -50,12 +66,39 @@ function noteCase(note: string): string {
     .join(' ');
 }
 
-export function cardFrame(options: FrameOptions, ...children: string[]): string {
-  const { theme, height, title, note, description, extraCss, fontFaceCss } = options;
+/** Head the card's content with its icon, eyebrow title, and note. */
+export function cardFrame(options: FrameOptions, ...children: string[]): Card {
+  const { theme, height, title, note, description, extraCss } = options;
+  const body = [
+    icon(options.icon, CARD_PADDING, TITLE_BASELINE - 12, TITLE_ICON_SIZE, theme.ink),
+    el(
+      'text',
+      { x: CARD_PADDING + TITLE_ICON_SIZE + 8, y: TITLE_BASELINE - 1, class: 't-title' },
+      textNode(title.toUpperCase())
+    ),
+    note === undefined
+      ? ''
+      : el(
+          'text',
+          {
+            x: CARD_WIDTH - CARD_PADDING,
+            y: TITLE_BASELINE - 1,
+            class: 't-mono',
+            'text-anchor': 'end',
+          },
+          textNode(noteCase(note))
+        ),
+    ...children,
+  ].join('');
+  return { theme, height, title, description, extraCss: extraCss ?? '', body };
+}
+
+/** The document's <style>: fonts, type classes, and motion, then the cards' own rules. */
+function documentCss(theme: Theme, fontFaceCss: string, extraCss: string): string {
   // Uppercase eyebrow type is wide; 11px mono with tracking reads as a label,
   // not a headline, and leaves the numbers as the loudest thing on the card.
-  const css = `
-${fontFaceCss ?? ''}
+  return `
+${fontFaceCss}
 text{font-family:'CardSans',${FONT_SANS};font-weight:400}
 .t-title{font-family:'CardMono',${FONT_MONO};font-size:11px;font-weight:400;letter-spacing:1.6px;fill:${theme.ink}}
 .t-value{font-size:30px;font-weight:600;letter-spacing:-.4px;fill:${theme.fg}}
@@ -71,18 +114,30 @@ text{font-family:'CardSans',${FONT_SANS};font-weight:400}
 @keyframes grow{from{opacity:0;transform:scaleY(0)}to{opacity:1;transform:scaleY(1)}}
 @keyframes growX{from{opacity:0;transform:scaleX(0)}to{opacity:1;transform:scaleX(1)}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;opacity:1!important;transform:none!important}}
-${extraCss ?? ''}`;
+${extraCss}`;
+}
 
-  return el(
-    'svg',
-    {
-      xmlns: 'http://www.w3.org/2000/svg',
-      viewBox: `0 0 ${CARD_WIDTH} ${height}`,
-      width: CARD_WIDTH,
-      height,
-      role: 'img',
-      'aria-label': description,
-    },
+/**
+ * Open a document: title, description, styles, the paint servers and filters
+ * every card may reference, and the canvas. Returns the root element's
+ * attributes and its leading children.
+ */
+function documentHead(
+  theme: Theme,
+  height: number,
+  title: string,
+  description: string,
+  css: string
+): { attrs: Record<string, string | number>; head: string } {
+  const attrs = {
+    xmlns: 'http://www.w3.org/2000/svg',
+    viewBox: `0 0 ${CARD_WIDTH} ${height}`,
+    width: CARD_WIDTH,
+    height,
+    role: 'img',
+    'aria-label': description,
+  };
+  const head = [
     el('title', {}, textNode(title)),
     el('desc', {}, textNode(description)),
     el('style', {}, css),
@@ -128,26 +183,62 @@ ${extraCss ?? ''}`;
           fill: 'url(#glow)',
         })
       : '',
-    icon(options.icon, CARD_PADDING, TITLE_BASELINE - 12, TITLE_ICON_SIZE, theme.ink),
-    el(
-      'text',
-      { x: CARD_PADDING + TITLE_ICON_SIZE + 8, y: TITLE_BASELINE - 1, class: 't-title' },
-      textNode(title.toUpperCase())
-    ),
-    note === undefined
-      ? ''
-      : el(
-          'text',
-          {
-            x: CARD_WIDTH - CARD_PADDING,
-            y: TITLE_BASELINE - 1,
-            class: 't-mono',
-            'text-anchor': 'end',
-          },
-          textNode(noteCase(note))
-        ),
-    ...children
+  ].join('');
+  return { attrs, head };
+}
+
+/** Render one card as a standalone SVG document. */
+export function cardSvg(card: Card, fontFaceCss: string): string {
+  const { attrs, head } = documentHead(
+    card.theme,
+    card.height,
+    card.title,
+    card.description,
+    documentCss(card.theme, fontFaceCss, card.extraCss)
   );
+  return el('svg', attrs, head, card.body);
+}
+
+/**
+ * Stack cards, in order, into one SVG document: one canvas, one copy of the
+ * fonts and definitions, and a hairline between neighbouring cards.
+ *
+ * Each card keeps its own coordinate system inside a nested <svg> viewport:
+ * a `transform` would be undone by the reduced-motion reset, and the cards'
+ * user-space filters and transform origins are measured from their own top.
+ */
+export function combinedSvg(cards: readonly Card[], fontFaceCss: string): string {
+  const theme = cards[0]?.theme;
+  if (theme === undefined) throw new Error('A combined SVG needs at least one card.');
+  if (cards.some((card) => card.theme !== theme)) throw new Error('Combined cards must share one theme.');
+  const tops = cards.map((_, index) => cards.slice(0, index).reduce((sum, card) => sum + card.height, 0));
+  const height = cards.reduce((sum, card) => sum + card.height, 0);
+  // Two cards can share a rule (the same bar animation); one copy is enough.
+  const extraCss = [...new Set(cards.map((card) => card.extraCss))].join('');
+  const { attrs, head } = documentHead(
+    theme,
+    height,
+    cards.map((card) => card.title).join(' · '),
+    cards.map((card) => card.description).join(' '),
+    documentCss(theme, fontFaceCss, extraCss)
+  );
+  const sections = cards.map((card, index) => {
+    const top = tops[index] ?? 0;
+    // The hairline sits on the boundary, inset to the content edges: it
+    // separates two cards without boxing either one in.
+    const divider =
+      index === 0
+        ? ''
+        : el('rect', {
+            x: CARD_PADDING,
+            y: top,
+            width: CARD_WIDTH - CARD_PADDING * 2,
+            height: 1,
+            fill: theme.borderMuted,
+          });
+    return divider + el('svg', { y: top, width: CARD_WIDTH, height: card.height }, card.body);
+  });
+  return el('svg', attrs, head, ...sections);
 }
 
 /** Change against a comparable earlier window, shown beside the value. */

@@ -21,7 +21,7 @@ import { GLOW } from '../svg/effects.js';
 import { hGuide, niceStep } from '../svg/guides.js';
 import { formatCompact, formatDate, formatInt, formatMonthYear, measureMono, measureSans } from '../svg/text.js';
 import type { Theme } from '../theme.js';
-import { cardFrame } from './frame.js';
+import { type Card, cardFrame } from './frame.js';
 
 // Vertical rhythm, in absolute user-space coordinates.
 const PLOT_TOP = 84;
@@ -41,7 +41,7 @@ const MIN_TICK_GAP = 34;
 /** Height of the "not enough history yet" stub, matching the languages card. */
 const STUB_HEIGHT = 96;
 
-export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: string): string {
+export function renderMomentum(data: ProfileData, theme: Theme): Card {
   const momentum = computeMomentum(data.lifetimeDays, data.years);
   const { points, peak, current, since } = momentum;
 
@@ -56,7 +56,6 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
         title: 'Momentum',
         note: 'rolling 12 months',
         description: `Momentum for ${data.login}: not enough history to draw a rolling year.`,
-        fontFaceCss,
       },
       el('text', { x: CARD_PADDING, y: 72, class: 't-label' }, textNode('Needs more than a year of history'))
     );
@@ -203,7 +202,6 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
         `Momentum for ${data.login}: contributions in each trailing twelve months since ` +
         `${formatDate(since, true)}, currently ${formatInt(current.total)}, peaking at ${formatInt(peak.total)}.`,
       extraCss,
-      fontFaceCss,
     },
     el('g', { class: 'fade' }, ...guides, baselineRule, ...ticks),
     el('g', { class: 'sweep' }, area, lineGlow, line),

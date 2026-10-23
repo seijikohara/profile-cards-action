@@ -16,9 +16,9 @@ import type { ProfileData } from '../model.js';
 import { el } from '../svg/dsl.js';
 import { formatInt } from '../svg/text.js';
 import type { Theme } from '../theme.js';
-import { cardFrame, tileRow, type TileSpec } from './frame.js';
+import { type Card, cardFrame, tileRow, type TileSpec } from './frame.js';
 
-export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: string): string {
+export function renderOverview(data: ProfileData, theme: Theme): Card {
   const lifetime = data.years.reduce((sum, year) => sum + year.total, 0);
   const latestYear = data.years.at(-1);
   const thisYearTotal = latestYear?.total ?? 0;
@@ -157,7 +157,6 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
       title: 'Overview',
       note: `@${data.login} · public activity`,
       description: `GitHub overview for ${data.login}: ${formatInt(lifetime)} contributions all time, ${formatInt(data.starsEarned)} stars earned, ${formatInt(data.followers)} followers.`,
-      fontFaceCss,
     },
     el('g', { class: 'fade' }, tilesA.svg, tilesB.svg)
   );

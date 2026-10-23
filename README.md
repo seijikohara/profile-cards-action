@@ -11,7 +11,7 @@ A GitHub Action that renders profile README cards as SVG from the GitHub GraphQL
 
 Profile READMEs usually rely on third-party image services that fetch your stats on every page view. This action renders the cards itself inside your own workflow and writes plain SVG files into your repository, so the images are self-hosted, reproducible, and theme-aware (light and dark).
 
-Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme>.svg`. Optional badge pills are rendered into `<output-dir>/badges/` as `<slug>.<theme>.svg`, using [simple-icons](https://simpleicons.org/) for brand glyphs when a match exists and falling back to text-only pills otherwise.
+Each requested card is rendered per theme into `<output-dir>/` as `<card>.<theme>.svg` — or, with `layout: combined`, every card is stacked into one `cards.<theme>.svg` per theme. Optional badge pills are rendered into `<output-dir>/badges/` as `<slug>.<theme>.svg`, using [simple-icons](https://simpleicons.org/) for brand glyphs when a match exists and falling back to text-only pills otherwise.
 
 | Card            | Shows                                                                                                                                                                                                                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -174,24 +174,52 @@ Embed the results in your README with a `<picture>` per card so each theme is se
 
 Badge SVGs carry no links — wrap each one in an `<a href="...">` in your README to make it clickable.
 
+### One image for every card
+
+Set `layout: combined` to write one `cards.<theme>.svg` per theme instead of one file per card. The cards stack in the order `cards` lists them, inside a single frame, with a hairline between neighbours. Fonts and shared definitions are embedded once rather than once per card, so all ten cards come to about 300 KB per theme against roughly 750 KB for the split files.
+
+```yaml
+- name: Render profile cards
+  uses: seijikohara/profile-cards-action@v1
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    # Optional: the stacking order. Omit it to keep the default order.
+    cards: overview,languages,contributions,momentum
+    layout: combined
+```
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/cards.dark.svg" />
+  <img
+    alt="Profile cards: overview, languages, contributions, and momentum"
+    src="./assets/cards.light.svg"
+    width="100%"
+  />
+</picture>
+```
+
+Keep the split layout when you want to place cards between other README sections or give each its own alt text. The action never deletes files, so after switching to `combined`, remove the per-card SVGs that earlier runs left in `output-dir`.
+
 ## Inputs
 
-| Input                | Description                                                                                                                                                                            | Required | Default                                                                                                |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `github-token`       | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                                                                    | `true`   | —                                                                                                      |
-| `username`           | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                                                                  | `false`  | `''`                                                                                                   |
-| `cards`              | Cards to render (comma/space/newline separated).                                                                                                                                       | `false`  | `overview,momentum,contributions,lifetime,composition,rhythm,cadence,repositories,portfolio,languages` |
-| `output-dir`         | Directory to write card SVGs into.                                                                                                                                                     | `false`  | `assets`                                                                                               |
-| `themes`             | Themes to render (comma separated): `light`, `dark`.                                                                                                                                   | `false`  | `light,dark`                                                                                           |
-| `palette`            | Hue for every activity mark and the card accent: `green` (GitHub's own contribution colors), `blue`, `purple`, or `orange`. See [Palettes](#palettes).                                 | `false`  | `green`                                                                                                |
-| `font`               | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                                                             | `false`  | `Roboto`                                                                                               |
-| `mono-font`          | Google Fonts monospace family.                                                                                                                                                         | `false`  | `Roboto Mono`                                                                                          |
-| `language-limit`     | Languages the `languages` card lists before the rest fold into "Other". The card grows one row per language.                                                                           | `false`  | `8`                                                                                                    |
-| `legend`             | How cards label the magnitude ramp: `ramp` keeps the calendar's Less…More key, `scale` prints the value band each step stands for. Affects `contributions`, `lifetime`, and `cadence`. | `false`  | `ramp`                                                                                                 |
-| `commit-sweep-limit` | Repositories the `cadence` card's commit sweep visits, most recently pushed first. `0` visits every repository that could hold a commit in the trailing year.                          | `false`  | `0`                                                                                                    |
-| `badges`             | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`.                                      | `false`  | `''`                                                                                                   |
-| `commit`             | Commit changed files back to the repository.                                                                                                                                           | `false`  | `true`                                                                                                 |
-| `commit-message`     | Commit subject used when `commit` is true.                                                                                                                                             | `false`  | `chore(profile): refresh generated cards [skip ci]`                                                    |
+| Input                | Description                                                                                                                                                                                             | Required | Default                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `github-token`       | Token for the GitHub GraphQL API and, when committing, for pushing generated files.                                                                                                                     | `true`   | —                                                                                                      |
+| `username`           | GitHub login to render. Defaults to the repository owner (`GITHUB_REPOSITORY_OWNER`).                                                                                                                   | `false`  | `''`                                                                                                   |
+| `cards`              | Cards to render (comma/space/newline separated). With `layout: combined`, this order is the order the cards stack in.                                                                                   | `false`  | `overview,momentum,contributions,lifetime,composition,rhythm,cadence,repositories,portfolio,languages` |
+| `layout`             | `split` writes one SVG per card and theme (`<card>.<theme>.svg`); `combined` stacks every card into one SVG per theme (`cards.<theme>.svg`). See [One image for every card](#one-image-for-every-card). | `false`  | `split`                                                                                                |
+| `output-dir`         | Directory to write card SVGs into.                                                                                                                                                                      | `false`  | `assets`                                                                                               |
+| `themes`             | Themes to render (comma separated): `light`, `dark`.                                                                                                                                                    | `false`  | `light,dark`                                                                                           |
+| `palette`            | Hue for every activity mark and the card accent: `green` (GitHub's own contribution colors), `blue`, `purple`, or `orange`. See [Palettes](#palettes).                                                  | `false`  | `green`                                                                                                |
+| `font`               | Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.                                                                                              | `false`  | `Roboto`                                                                                               |
+| `mono-font`          | Google Fonts monospace family.                                                                                                                                                                          | `false`  | `Roboto Mono`                                                                                          |
+| `language-limit`     | Languages the `languages` card lists before the rest fold into "Other". The card grows one row per language.                                                                                            | `false`  | `8`                                                                                                    |
+| `legend`             | How cards label the magnitude ramp: `ramp` keeps the calendar's Less…More key, `scale` prints the value band each step stands for. Affects `contributions`, `lifetime`, and `cadence`.                  | `false`  | `ramp`                                                                                                 |
+| `commit-sweep-limit` | Repositories the `cadence` card's commit sweep visits, most recently pushed first. `0` visits every repository that could hold a commit in the trailing year.                                           | `false`  | `0`                                                                                                    |
+| `badges`             | Newline-separated brand names to render as badge pills (icon via simple-icons when available, else text-only). Written to `<output-dir>/badges/`.                                                       | `false`  | `''`                                                                                                   |
+| `commit`             | Commit changed files back to the repository.                                                                                                                                                            | `false`  | `true`                                                                                                 |
+| `commit-message`     | Commit subject used when `commit` is true.                                                                                                                                                              | `false`  | `chore(profile): refresh generated cards [skip ci]`                                                    |
 
 ## Outputs
 
@@ -207,7 +235,7 @@ Badge SVGs carry no links — wrap each one in an `<a href="...">` in your READM
    The sweep is the only part of a run whose cost grows with the number of repositories owned, so it is bounded twice. A repository whose last push predates the window cannot hold a commit inside it and is skipped, which costs nothing in accuracy; `commit-sweep-limit` caps what remains, and the card then discloses how many repositories it actually read. Dropping `cadence` from `cards` skips the sweep entirely.
 
 2. **Resolve fonts** — Build the `@font-face` rules the cards reference (see [Fonts](#fonts)).
-3. **Render** — Draw each requested card to SVG for every requested theme, embedding the fonts as Base64 data URIs so the cards need no external resources.
+3. **Render** — Draw each requested card to SVG for every requested theme, embedding the fonts as Base64 data URIs so the cards need no external resources. With `layout: combined`, the cards of one theme are placed into a single document instead, which embeds the fonts once.
 4. **Write** — Emit the SVGs into `output-dir` (and any badge pills into `output-dir/badges/`).
 5. **Commit** — When `commit` is enabled, commit and push the changed files using `commit-message`, and report the `changed` / `files` outputs. If the branch advanced mid-run and the push is rejected, the freshly rendered output is re-committed onto the new tip and pushed again; if that tip already carries identical output, the run reports no change instead.
 
@@ -245,7 +273,7 @@ GitHub counts private ("restricted") contributions in a profile's calendar only 
 
 ## Fonts
 
-GitHub renders README images through `<img>`, where SVGs cannot load external fonts — so the chosen faces are embedded directly in each card as Base64 woff2 data URIs.
+GitHub renders README images through `<img>`, where SVGs cannot load external fonts — so the chosen faces are embedded directly in each SVG file as Base64 woff2 data URIs.
 
 - **Roboto and Roboto Mono (the defaults) are bundled** with the action, pre-subset to the glyphs the cards use. The default path performs no network request.
 - **Any other Google Fonts family is fetched at run time** and embedded as-is. A variable family is embedded once under a weight range; a static family contributes one face per card weight, using the nearest available weight when an exact one is missing.

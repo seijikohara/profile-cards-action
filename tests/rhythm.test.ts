@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cardSvg } from '../src/cards/frame.js';
 import { renderRhythm } from '../src/cards/rhythm.js';
 import { computeRhythm } from '../src/compute/rhythm.js';
 import type { DayContribution, ProfileData } from '../src/model.js';
@@ -143,7 +144,7 @@ describe('renderRhythm trailing comparison', () => {
   const data: ProfileData = makeFixture();
 
   it('marks the trailing year against the record and names both marks', () => {
-    const svg = renderRhythm(data, LIGHT, '');
+    const svg = cardSvg(renderRhythm(data, LIGHT), '');
     assertWellFormed(svg);
     expect(svg).toContain('SHARE OF ALL YEARS VS TRAILING YEAR');
     expect(svg).toContain('>all-years share<');
@@ -151,19 +152,19 @@ describe('renderRhythm trailing comparison', () => {
   });
 
   it('pairs the weekend share with its trailing-year counterpart', () => {
-    expect(renderRhythm(data, LIGHT, '')).toMatch(/\d+%.*→.*\d+%/s);
+    expect(cardSvg(renderRhythm(data, LIGHT), '')).toMatch(/\d+%.*→.*\d+%/s);
   });
 
   it('drops the comparison when the record is barely longer than the window', () => {
     const short: ProfileData = { ...data, lifetimeDays: data.lifetimeDays.slice(-400) };
-    const svg = renderRhythm(short, LIGHT, '');
+    const svg = cardSvg(renderRhythm(short, LIGHT), '');
     expect(svg).toContain('ALL CONTRIBUTION TYPES · ALL YEARS');
     expect(svg).not.toContain('VS TRAILING YEAR');
     expect(svg).not.toContain('>trailing-year share<');
   });
 
   it('names the busiest weekday and month for a screen reader', () => {
-    const svg = renderRhythm(data, LIGHT, '');
+    const svg = cardSvg(renderRhythm(data, LIGHT), '');
     expect(svg).toMatch(/busiest on (Mon|Tue|Wed|Thu|Fri|Sat|Sun) and in [A-Z][a-z]+/);
   });
 });

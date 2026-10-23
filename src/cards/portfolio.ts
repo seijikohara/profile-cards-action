@@ -19,7 +19,7 @@ import { el, textNode } from '../svg/dsl.js';
 import { formatBytes, formatCompact, formatInt, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { vGuide } from '../svg/guides.js';
-import { cardFrame } from './frame.js';
+import { type Card, cardFrame } from './frame.js';
 import { languageMark } from './language-mark.js';
 import { repoLabelSpans } from './labels.js';
 
@@ -62,7 +62,7 @@ function recencyLevel(pushedAt: string | null, nowMs: number): 1 | 2 | 3 | 4 {
   return 1;
 }
 
-export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: string): string {
+export function renderPortfolio(data: ProfileData, theme: Theme): Card {
   const rows = data.repositories.slice(0, MAX_ROWS);
   const totals = data.repositories;
 
@@ -75,7 +75,6 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
         title: 'Portfolio',
         note: 'public source repositories',
         description: `No public source repositories for ${data.login}.`,
-        fontFaceCss,
       },
       el('text', { x: CARD_PADDING, y: 72, class: 't-label' }, textNode('No public source repositories'))
     );
@@ -204,7 +203,6 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
         `Repository portfolio for ${data.login}: ${formatInt(totals.length)} public source repositories, ` +
         `${formatInt(recent)} pushed in the last 90 days.`,
       extraCss: `.life{opacity:0;animation:fade .45s ease forwards}`,
-      fontFaceCss,
     },
     el('g', { class: 'fade' }, columnHeads, ...guides, axisRule, ...ticks, ...labels, footer, key),
     ...lifelines

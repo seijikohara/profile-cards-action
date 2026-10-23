@@ -32,3 +32,16 @@ export const DEFAULT_LEGEND: 'ramp' | 'scale' = 'ramp';
  * repository that could hold a commit in the window.
  */
 export const DEFAULT_COMMIT_SWEEP_LIMIT = 0;
+
+/**
+ * Whether a run writes one SVG per card or stacks every card into one SVG per
+ * theme. Mirrors action.yml's `layout` default; "split" is what every release
+ * before the input existed wrote.
+ */
+export const DEFAULT_LAYOUT: 'split' | 'combined' = 'split';
+
+/**
+ * File stem of the combined SVG (`cards.<theme>.svg`). No card carries this
+ * name, so the combined file can never overwrite a split card's file.
+ */
+export const COMBINED_FILE_STEM = 'cards';

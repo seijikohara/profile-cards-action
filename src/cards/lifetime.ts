@@ -18,7 +18,7 @@ import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
 import { formatInt } from '../svg/text.js';
 import type { Theme } from '../theme.js';
-import { cardFrame } from './frame.js';
+import { type Card, cardFrame } from './frame.js';
 import { privacyNote, rampLegend, RAMP_SCALE_ROW } from './legend.js';
 
 /** Top-axis month labels, placed by week ≈ month * COLS / 12. */
@@ -45,12 +45,7 @@ const LEGEND_ROW = 26; // "Less" … swatches … "More"
 const COL_STEP_MS = 16;
 const SWEEP_MS = 900;
 
-export function renderLifetime(
-  data: ProfileData,
-  theme: Theme,
-  fontFaceCss: string,
-  legendStyle: LegendStyle = DEFAULT_LEGEND
-): string {
+export function renderLifetime(data: ProfileData, theme: Theme, legendStyle: LegendStyle = DEFAULT_LEGEND): Card {
   const life = computeLifetime(data.lifetimeDays);
   // The heatmap levels weekly sums, so its scale counts contributions per week.
   const scale = legendStyle === 'scale' ? { thresholds: life.thresholds, unit: 'per week' } : undefined;
@@ -175,7 +170,6 @@ export function renderLifetime(
       note,
       description,
       extraCss: `.wk{opacity:0;animation:fade .5s ease forwards}`,
-      fontFaceCss,
     },
     ...columns,
     el('g', { class: 'fade' }, ...monthTicks, ...yearLabels, ...yearTotals, legend)

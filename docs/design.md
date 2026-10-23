@@ -605,3 +605,36 @@ place. Every number the cards showed is still shown.
   history card, a "repositories created" segment for composition (needs API
   verification), an earlier-high annotation on momentum, and a lighter
   Private grey (a contrast trade-off for the owner to decide).
+
+## Addendum (2026-10-23): combined layout (v1.17.0)
+
+A new `layout` input chooses between one SVG per card (`split`, the default
+and the only behaviour before this input) and one SVG per theme holding every
+card (`combined`, written as `cards.<theme>.svg`).
+
+- **Cards are content; documents own the chrome.** Card renderers now return
+  a `Card` (height, title, description, card-specific CSS, and the body in
+  card-local coordinates) instead of a finished SVG string. `cardSvg` wraps
+  one card in the document chrome (fonts, type classes, definitions, canvas)
+  and produces byte-identical output to v1.16.0; `combinedSvg` wraps many.
+  Fonts are resolved once per run and never reach the renderers.
+- **One frame, hairline sections.** The combined sheet is one card-shaped
+  canvas: one border, one dark-theme corner glow, and a 1px `borderMuted`
+  rule inset to the content edges between neighbours. Separate frames with
+  gaps were the alternative; inside a single image they read as a pasted
+  stack rather than one profile.
+- **Nested viewports, not transforms.** Each card sits in a nested
+  `<svg y=… width=846 height=…>`. The reduced-motion reset forces
+  `transform:none`, so a translated group would collapse to the top; the
+  nested viewport also keeps each card's user-space filter regions and pixel
+  `transform-origin` values measured from its own top edge.
+- **Everything shared is emitted once.** One `<style>` (card rules
+  deduplicated by text) and one `<defs>`: a repeated `id` resolves to its
+  first copy, so the contract tests require every id to be unique rather than
+  merely identical. All ten cards come to about 300 KB per theme, against
+  about 750 KB split — the embedded fonts were most of every file.
+- **Order is the `cards` order.** `parseCards` already kept request order, so
+  the stacking order needs no second input that could drift from the first.
+- **No cleanup.** The action still writes only what it renders; switching an
+  existing consumer to `combined` leaves its per-card files for the owner to
+  delete.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cardSvg } from '../src/cards/frame.js';
 import { renderLanguages } from '../src/cards/languages.js';
 import { languageShares } from '../src/compute/languages.js';
 import type { LanguageSlice, ProfileData } from '../src/model.js';
@@ -121,7 +122,7 @@ describe('language reach', () => {
 
   it('renders the count as a dash where there is none', () => {
     const data: ProfileData = { ...makeFixture(), languages: slices, languageTailBytes: 0 };
-    const svg = renderLanguages(data, LIGHT, '', 2);
+    const svg = cardSvg(renderLanguages(data, LIGHT, 2), '');
     assertWellFormed(svg);
     expect(svg).toContain('>REPOS<');
     expect(svg).toContain('>—<');
