@@ -11,6 +11,7 @@
  * quantifies are shaded under the histogram.
  */
 
+import { Clock } from 'lucide';
 import type { LegendStyle } from '../cards.js';
 import { CARD_PADDING, CARD_WIDTH, DEFAULT_LEGEND } from '../config.js';
 import { computeCadence, SIZE_BUCKETS } from '../compute/cadence.js';
@@ -260,6 +261,7 @@ export function renderCadence(
   return cardFrame(
     {
       theme,
+      icon: Clock,
       height,
       title: 'Commit cadence',
       note: capped

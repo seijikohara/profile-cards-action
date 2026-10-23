@@ -1,5 +1,16 @@
 /** Overview card: eight stat tiles. */
 
+import {
+  CircleDot,
+  FolderGit2,
+  GitMerge,
+  GitPullRequestArrow,
+  LayoutDashboard,
+  CalendarCheck,
+  Sigma,
+  Star,
+  Users,
+} from 'lucide';
 import { CARD_PADDING } from '../config.js';
 import type { ProfileData } from '../model.js';
 import { el } from '../svg/dsl.js';
@@ -71,12 +82,14 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
   const rowA: TileSpec[] = [
     {
       label: 'Contributions (all time)',
+      icon: Sigma,
       value: formatInt(lifetime),
       sub: firstYear === undefined ? undefined : `Since ${firstYear}`,
       spark: seriesOf((year) => year.total),
     },
     {
       label: `Contributions (${latestYear?.year ?? 'this year'})`,
+      icon: CalendarCheck,
       value: formatInt(thisYearTotal),
       sub: dailyAverage,
       spark: monthsThisYear(),
@@ -85,32 +98,40 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
     // Scope note, not a second statistic: the number counts every owned public
     // repository including archived ones, which is the first thing a reader
     // wonders about a star total.
-    { label: 'Stars earned', value: formatInt(data.starsEarned), sub: 'Forks excluded' },
-    { label: 'Followers', value: formatInt(data.followers) },
+    { label: 'Stars earned', icon: Star, value: formatInt(data.starsEarned), sub: 'Forks excluded' },
+    { label: 'Followers', icon: Users, value: formatInt(data.followers) },
   ];
   const rowB: TileSpec[] = [
     // Yearly peaks pair with the opened/typed per-year series — the closest
     // honest caption the API offers for these lifetime counters.
     {
       label: 'Pull requests merged',
+      icon: GitMerge,
       value: formatInt(data.mergedPullRequests),
       sub: peakOf((year) => year.pullRequests),
       spark: seriesOf((year) => year.pullRequests),
     },
     {
       label: 'Issues opened',
+      icon: CircleDot,
       value: formatInt(data.issues),
       sub: peakOf((year) => year.issues),
       spark: seriesOf((year) => year.issues),
     },
     {
       label: 'Public repositories',
+      icon: FolderGit2,
       value: formatInt(data.publicSourceRepos),
       sub: `${formatInt(data.languages.length)} languages`,
     },
     // The API's repositoriesContributedTo is a rolling recent window, not a
     // career total — the label must say so, and the caption names the filter.
-    { label: 'Contributed to (recent)', value: formatInt(data.contributedTo), sub: 'Excludes own repositories' },
+    {
+      label: 'Contributed to (recent)',
+      icon: GitPullRequestArrow,
+      value: formatInt(data.contributedTo),
+      sub: 'Excludes own repositories',
+    },
   ];
 
   const top = 60;
@@ -122,6 +143,7 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
   return cardFrame(
     {
       theme,
+      icon: LayoutDashboard,
       height,
       title: 'Overview',
       note: `@${data.login} · public activity`,

@@ -11,13 +11,16 @@
  * pushes at all.
  */
 
+import { ChartGantt } from 'lucide';
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { range } from '../iter.js';
 import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
 import { formatBytes, formatCompact, formatInt, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
+import { vGuide } from '../svg/guides.js';
 import { cardFrame } from './frame.js';
+import { languageMark } from './language-mark.js';
 import { repoLabelSpans } from './labels.js';
 
 /** Rows the card draws. Beyond this the lifelines stop resolving as separate. */
@@ -30,6 +33,7 @@ const ROW_H = 24;
 
 // Horizontal columns.
 const DOT_CX = CARD_PADDING + 5;
+const MARK_SIZE = 13;
 const NAME_X = CARD_PADDING + 18;
 const MAX_NAME = 34;
 const TRACK_X = CARD_PADDING + 244;
@@ -66,6 +70,7 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
     return cardFrame(
       {
         theme,
+        icon: ChartGantt,
         height: STUB_HEIGHT,
         title: 'Portfolio',
         note: 'public source repositories',
@@ -116,7 +121,7 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
   const labels = rows.flatMap((repo, index) => {
     const baseline = BAND_TOP + index * ROW_H + ROW_H / 2 + 4;
     return [
-      el('circle', { cx: DOT_CX, cy: baseline - 4, r: 4.5, fill: repo.language?.color ?? theme.border }),
+      languageMark(repo.language?.name, repo.language?.color ?? theme.border, DOT_CX, baseline - 4, MARK_SIZE),
       el(
         'text',
         { x: NAME_X, y: baseline, class: 't-label' },
@@ -144,6 +149,9 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
       textNode(String(tick.year))
     )
   );
+  // One guide per year tick, so a lifeline's ends can be read against the axis
+  // from any row, not only from the bottom one.
+  const guides = yearTicks(startMs, nowMs).map((tick) => vGuide(x(tick.ms), BAND_TOP, bandBottom, theme));
   const axisRule = el('line', {
     x1: TRACK_X,
     y1: bandBottom + 0.5,
@@ -185,6 +193,7 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
   return cardFrame(
     {
       theme,
+      icon: ChartGantt,
       height: footerBaseline + CARD_PADDING,
       title: 'Portfolio',
       note: 'public source repositories · by commits',
@@ -194,7 +203,7 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
       extraCss: `.life{opacity:0;animation:fade .45s ease forwards}`,
       fontFaceCss,
     },
-    el('g', { class: 'fade' }, columnHeads, axisRule, ...ticks, ...labels, footer, key),
+    el('g', { class: 'fade' }, columnHeads, ...guides, axisRule, ...ticks, ...labels, footer, key),
     ...lifelines
   );
 }

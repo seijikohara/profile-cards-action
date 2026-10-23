@@ -45,6 +45,7 @@ jobs:
             cards: ''
             themes: ''
             font: ''
+            palette: ''
             badges: ''
             expected: >-
               overview.light.svg
@@ -60,6 +61,9 @@ jobs:
             cards: 'overview,languages'
             themes: 'light,dark'
             font: 'Inter'
+            # Rides on an existing leg: a leg of its own would spend another
+            # full profile fetch from the shared GraphQL budget.
+            palette: 'purple'
             badges: ''
             expected: >-
               overview.light.svg
@@ -73,6 +77,7 @@ jobs:
             cards: 'overview'
             themes: 'light,dark'
             font: 'Roboto'
+            palette: ''
             badges: "GitHub\nnpm\nLinkedIn"
             expected: >-
               overview.light.svg
@@ -99,6 +104,7 @@ jobs:
           cards: ${{ matrix.cards }}
           themes: ${{ matrix.themes }}
           font: ${{ matrix.font }}
+          palette: ${{ matrix.palette }}
           badges: ${{ matrix.badges }}
           # Never push during tests; the action only reports whether files
           # changed and writes them to OUT_DIR.

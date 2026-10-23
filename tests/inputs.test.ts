@@ -24,6 +24,7 @@ const VALID_INPUTS: Record<string, string> = {
   cards: 'overview,lifetime,contributions,composition,rhythm,languages',
   'output-dir': 'assets',
   themes: 'light,dark',
+  palette: 'green',
   font: 'Roboto',
   'mono-font': 'Roboto Mono',
   'language-limit': '8',
@@ -57,6 +58,7 @@ describe('readInputs', () => {
       cards: ['overview', 'lifetime', 'contributions', 'composition', 'rhythm', 'languages'],
       outputDir: 'assets',
       themeIds: ['light', 'dark'],
+      palette: 'green',
       font: 'Roboto',
       monoFont: 'Roboto Mono',
       languageLimit: 8,
@@ -84,6 +86,7 @@ describe('readInputs', () => {
       'languages',
     ]);
     expect(inputs.themeIds).toEqual(['light', 'dark']);
+    expect(inputs.palette).toBe('green');
     expect(inputs.outputDir).toBe('assets');
     expect(inputs.font).toBe('Roboto');
     expect(inputs.monoFont).toBe('Roboto Mono');
@@ -155,6 +158,16 @@ describe('readInputs', () => {
   it('should read commit-sweep-limit 0 as uncapped', () => {
     setInputs({ ...VALID_INPUTS, 'commit-sweep-limit': '0' });
     expect(readInputs().commitSweepLimit).toBe(0);
+  });
+
+  it('should parse a palette, case-insensitively', () => {
+    setInputs({ ...VALID_INPUTS, palette: ' Purple ' });
+    expect(readInputs().palette).toBe('purple');
+  });
+
+  it('should reject an unknown palette', () => {
+    setInputs({ ...VALID_INPUTS, palette: 'teal' });
+    expect(() => readInputs()).toThrow(/palette/);
   });
 
   it('should parse the scale legend style, case-insensitively', () => {

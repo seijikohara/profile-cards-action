@@ -24,6 +24,13 @@ inputs:
     description: 'Themes to render (comma separated): light, dark.'
     required: false
     default: 'light,dark'
+  palette:
+    description: >-
+      Hue for every activity mark and the card accent: "green" (GitHub's own
+      contribution colors), "blue", "purple", or "orange". Each palette keeps
+      green's lightness steps, so contrast is the same in all four.
+    required: false
+    default: 'green'
   font:
     description: 'Google Fonts sans-serif family. Roboto and Roboto Mono are bundled; other families are fetched at runtime.'
     required: false
@@ -38,7 +45,7 @@ inputs:
     default: '8'
   legend:
     description: >-
-      How cards label the green magnitude ramp: "ramp" keeps the calendar's
+      How cards label the magnitude ramp: "ramp" keeps the calendar's
       Less…More key, "scale" prints the value band each step stands for
       (0, 1-7, 8-19, …). Affects contributions, lifetime, and cadence.
     required: false

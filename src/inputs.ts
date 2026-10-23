@@ -2,7 +2,8 @@
 
 import * as core from '@actions/core';
 import type { LegendStyle } from './cards.js';
-import { DEFAULT_COMMIT_SWEEP_LIMIT, DEFAULT_LANGUAGE_LIMIT, DEFAULT_LEGEND } from './config.js';
+import { DEFAULT_COMMIT_SWEEP_LIMIT, DEFAULT_LANGUAGE_LIMIT, DEFAULT_LEGEND, DEFAULT_PALETTE } from './config.js';
+import { PALETTE_IDS, type PaletteId } from './theme.js';
 
 /** Theme identifier accepted by the `themes` input. */
 type ThemeId = 'light' | 'dark';
@@ -17,6 +18,8 @@ export interface ActionInputs {
   readonly outputDir: string;
   /** Themes to render, deduped and validated. */
   readonly themeIds: readonly ('light' | 'dark')[];
+  /** Hue family applied to every theme. */
+  readonly palette: PaletteId;
   readonly font: string;
   readonly monoFont: string;
   /** Languages the languages card lists before the rest fold into "Other" (>= 1). */
@@ -106,6 +109,17 @@ function parseThemes(raw: string): ThemeId[] {
   return themes;
 }
 
+/** Parse `palette`: one of the known palettes, or the default when empty. */
+function parsePalette(raw: string): PaletteId {
+  const value = raw.trim().toLowerCase();
+  if (value === '') return DEFAULT_PALETTE;
+  const palette = PALETTE_IDS.find((id) => id === value);
+  if (palette === undefined) {
+    throw new Error(`Unknown palette "${value}". Valid: ${PALETTE_IDS.join(', ')}.`);
+  }
+  return palette;
+}
+
 /** Parse `language-limit`: a positive integer, or the default when empty. */
 function parseLanguageLimit(raw: string): number {
   const trimmed = raw.trim();
@@ -165,6 +179,7 @@ export function readInputs(): ActionInputs {
   const cards = parseCards(core.getInput('cards'));
   const outputDir = core.getInput('output-dir').trim() || DEFAULT_OUTPUT_DIR;
   const themeIds = parseThemes(core.getInput('themes'));
+  const palette = parsePalette(core.getInput('palette'));
   const font = core.getInput('font').trim() || DEFAULT_FONT;
   const monoFont = core.getInput('mono-font').trim() || DEFAULT_MONO_FONT;
   const languageLimit = parseLanguageLimit(core.getInput('language-limit'));
@@ -183,6 +198,7 @@ export function readInputs(): ActionInputs {
     cards,
     outputDir,
     themeIds,
+    palette,
     font,
     monoFont,
     languageLimit,
