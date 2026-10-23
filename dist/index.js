@@ -17453,12 +17453,20 @@ function measureMono(text, size) {
 function formatInt(v) {
 	return (v < 0 ? "-" : "") + String(Math.trunc(Math.abs(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
-/** Compact magnitude: 999 -> "999", 45231 -> "45.2k", 1871000 -> "1.9m". */
+/**
+* Compact magnitude: 999 -> "999", 2000 -> "2.0k", 11581 -> "11.6k",
+* 123456 -> "123k", 1871000 -> "1.9m".
+*
+* One decimal below 100 of a unit, always printed: a column mixing "2k" with
+* "1.9k" reads as two precisions, and rounding 11,581 to "12k" overstates it
+* by 4%.
+*/
 function formatCompact(value) {
 	if (value < 1e3) return String(value);
 	const scaled = value >= 1e6 ? value / 1e6 : value / 1e3;
 	const unit = value >= 1e6 ? "m" : "k";
-	return `${scaled >= 10 ? Math.round(scaled) : Math.round(scaled * 10) / 10}${unit}`;
+	const tenths = Math.round(scaled * 10) / 10;
+	return `${tenths >= 100 ? Math.round(scaled) : tenths.toFixed(1)}${unit}`;
 }
 /**
 * Bytes in decimal units: 912 -> "912 B", 708082 -> "708 KB", 7036949 -> "7.0 MB".
@@ -17511,7 +17519,25 @@ function formatUtcTimestamp(iso) {
 	return `${m[1]} ${m[2]} UTC`;
 }
 //#endregion
+//#region src/iter.ts
+/** Immutable integer sequences for index-free iteration. */
+/** [start, start + 1, …, start + length - 1]; empty when length <= 0. */
+function range(length, start = 0) {
+	return Array.from({ length: Math.max(0, length) }, (_, index) => start + index);
+}
+//#endregion
 //#region src/theme.ts
+/**
+* Design tokens for both GitHub themes.
+*
+* Color values are GitHub Primer functional tokens (@primer/primitives 11.9.0)
+* so cards blend into the page chrome, plus the contribution-graph green ramps.
+* Verified against the published CSS on 2026-07-22; several values differ from
+* older widely-copied palettes (border, accent, muted backgrounds).
+*
+* A theme is one color mode in one palette: the surfaces come from the mode,
+* the magnitude ramp and the chrome accent from the palette.
+*/
 /** Palettes the `palette` input accepts; `green` is GitHub's own and the default. */
 const PALETTE_IDS = [
 	"green",
@@ -17523,7 +17549,6 @@ const PALETTES = {
 	green: {
 		light: {
 			ink: "#1a7f37",
-			inkAlt: "#097a78",
 			contribRamp: [
 				"#ebedf0",
 				"#9be9a8",
@@ -17534,7 +17559,6 @@ const PALETTES = {
 		},
 		dark: {
 			ink: "#3fb950",
-			inkAlt: "#08b4ae",
 			contribRamp: [
 				"#161b22",
 				"#0e4429",
@@ -17547,7 +17571,6 @@ const PALETTES = {
 	blue: {
 		light: {
 			ink: "#0969da",
-			inkAlt: "#764fd1",
 			contribRamp: [
 				"#ebedf0",
 				"#b7d6ff",
@@ -17558,7 +17581,6 @@ const PALETTES = {
 		},
 		dark: {
 			ink: "#4493f8",
-			inkAlt: "#957cf1",
 			contribRamp: [
 				"#161b22",
 				"#22385f",
@@ -17571,7 +17593,6 @@ const PALETTES = {
 	purple: {
 		light: {
 			ink: "#8250df",
-			inkAlt: "#b933a4",
 			contribRamp: [
 				"#ebedf0",
 				"#dbc8fe",
@@ -17582,7 +17603,6 @@ const PALETTES = {
 		},
 		dark: {
 			ink: "#ab7df8",
-			inkAlt: "#df68bf",
 			contribRamp: [
 				"#161b22",
 				"#422e57",
@@ -17595,7 +17615,6 @@ const PALETTES = {
 	orange: {
 		light: {
 			ink: "#bc4c00",
-			inkAlt: "#bf4155",
 			contribRamp: [
 				"#ebedf0",
 				"#fec5a5",
@@ -17606,7 +17625,6 @@ const PALETTES = {
 		},
 		dark: {
 			ink: "#db6d28",
-			inkAlt: "#e0626a",
 			contribRamp: [
 				"#161b22",
 				"#552d0d",
@@ -17624,6 +17642,7 @@ const SURFACES = {
 		bgInset: "#f6f8fa",
 		border: "#d1d9e0",
 		borderMuted: "#e4e8ec",
+		track: "#eaeef2",
 		fg: "#1f2328",
 		fgMuted: "#59636e",
 		accent: "#0969da",
@@ -17640,6 +17659,7 @@ const SURFACES = {
 		bgInset: "#151b23",
 		border: "#3d444d",
 		borderMuted: "#262c34",
+		track: "#21262d",
 		fg: "#f0f6fc",
 		fgMuted: "#9198a1",
 		accent: "#4493f8",
@@ -17682,12 +17702,6 @@ function channelHex(n) {
 function toHex(r, g, b) {
 	return `#${channelHex(r)}${channelHex(g)}${channelHex(b)}`;
 }
-/** Mix a color toward black (amount 0..1). Used for isometric side-face shading. */
-function shade(hex, amount) {
-	const [r, g, b] = hexToRgb(hex);
-	const k = 1 - amount;
-	return toHex(r * k, g * k, b * k);
-}
 /** Convert one 0..255 sRGB channel to linear light (WCAG). */
 function srgbToLinear(channel) {
 	const s = channel / 255;
@@ -17704,6 +17718,62 @@ function contrast(a, b) {
 	const lb = luminance(b);
 	const [hi, lo] = la > lb ? [la, lb] : [lb, la];
 	return (hi + .05) / (lo + .05);
+}
+/** sRGB channel (0..255) to linear light. */
+function toLinear(channel) {
+	const s = channel / 255;
+	return s <= .04045 ? s / 12.92 : ((s + .055) / 1.055) ** 2.4;
+}
+/** Linear light (0..1) to an sRGB channel (0..255). */
+function fromLinear(value) {
+	const v = Math.min(1, Math.max(0, value));
+	return (v <= .0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - .055) * 255;
+}
+/** OKLab coordinates of a color (Björn Ottosson's reference matrices). */
+function toOklab(hex) {
+	const [sr, sg, sb] = hexToRgb(hex);
+	const [r, g, b] = [
+		toLinear(sr),
+		toLinear(sg),
+		toLinear(sb)
+	];
+	const l = Math.cbrt(.4122214708 * r + .5363325363 * g + .0514459929 * b);
+	const m = Math.cbrt(.2119034982 * r + .6806995451 * g + .1073969566 * b);
+	const s = Math.cbrt(.0883024619 * r + .2817188376 * g + .6299787005 * b);
+	return [
+		.2104542553 * l + .793617785 * m - .0040720468 * s,
+		1.9779984951 * l - 2.428592205 * m + .4505937099 * s,
+		.0259040371 * l + .7827717662 * m - .808675766 * s
+	];
+}
+/** Linear sRGB of an OKLab color, possibly out of gamut. */
+function fromOklab(lightness, a, b) {
+	const l = (lightness + .3963377774 * a + .2158037573 * b) ** 3;
+	const m = (lightness - .1055613458 * a - .0638541728 * b) ** 3;
+	const s = (lightness - .0894841775 * a - 1.291485548 * b) ** 3;
+	return [
+		4.0767416621 * l - 3.3077115913 * m + .2309699292 * s,
+		-1.2684380046 * l + 2.6097574011 * m - .3413193965 * s,
+		-.0041960863 * l - .7034186147 * m + 1.707614701 * s
+	];
+}
+/** OKLCH lightness of a color, 0 (black) .. 1 (white). */
+function oklchLightness(hex) {
+	return toOklab(hex)[0];
+}
+/**
+* Shift a color's OKLCH lightness by `delta`, keeping its hue.
+*
+* Mixing toward white or the canvas desaturates a dark ramp step into grey;
+* moving along lightness keeps the hue and as much chroma as sRGB allows, so
+* a gradient between the two ends still reads as one color.
+*/
+function shiftLightness(hex, delta) {
+	const [lightness, a, b] = toOklab(hex);
+	const target = Math.min(.98, Math.max(.02, lightness + delta));
+	const scale = range(51).map((step) => 1 - step * .02).find((k) => fromOklab(target, a * k, b * k).every((v) => v >= -1e-4 && v <= 1.0001));
+	const [lr, lg, lb] = fromOklab(target, a * (scale ?? 0), b * (scale ?? 0));
+	return toHex(fromLinear(lr), fromLinear(lg), fromLinear(lb));
 }
 //#endregion
 //#region src/cards/badge.ts
@@ -57702,7 +57772,7 @@ const DEFAULT_LEGEND = "ramp";
 * See the LICENSE file in the root directory of this source tree.
 */
 //#endregion
-//#region src/iter.ts
+//#region src/compute/cadence.ts
 var import_lucide = (/* @__PURE__ */ __commonJSMin(((exports) => {
 	const CalendarCheck = [
 		["path", { d: "M8 2v3" }],
@@ -57907,13 +57977,6 @@ var import_lucide = (/* @__PURE__ */ __commonJSMin(((exports) => {
 	exports.Trophy = Trophy;
 	exports.Users = Users;
 })))();
-/** Immutable integer sequences for index-free iteration. */
-/** [start, start + 1, …, start + length - 1]; empty when length <= 0. */
-function range(length, start = 0) {
-	return Array.from({ length: Math.max(0, length) }, (_, index) => start + index);
-}
-//#endregion
-//#region src/compute/cadence.ts
 /** Weekday × hour commit cadence over the trailing-year commit sweep. */
 /**
 * Log-spaced buckets of lines changed per commit.
@@ -58054,9 +58117,15 @@ function computeCadence(commits) {
 //#endregion
 //#region src/svg/bars.ts
 /** Rounded-data-end bar paths shared by the bar-panel cards. */
+/**
+* Largest corner radius on a data end. A wide bar rounded by half its width
+* turns into a dome; capping the radius keeps every bar in the deck reading as
+* a bar with a softened end.
+*/
+const MAX_END_RADIUS = 6;
 /** Horizontal bar with a rounded data-end (right) and a square start (left). */
 function horizontalBar(x, y, width, height, fill) {
-	const r = Math.min(height / 2, width);
+	const r = Math.min(height / 2, width, MAX_END_RADIUS);
 	const right = x + width;
 	const bottom = y + height;
 	return el("path", {
@@ -58066,12 +58135,109 @@ function horizontalBar(x, y, width, height, fill) {
 }
 /** Vertical bar with a rounded data-end (top) and a square baseline. */
 function verticalBar(x, baseline, width, height, fill) {
-	const r = Math.min(width / 2, height);
+	const r = Math.min(width / 2, height, MAX_END_RADIUS);
 	const top = baseline - height;
 	return el("path", {
 		d: `M${num(x)} ${num(baseline)}V${num(top + r)}Q${num(x)} ${num(top)} ${num(x + r)} ${num(top)}H${num(x + width - r)}Q${num(x + width)} ${num(top)} ${num(x + width)} ${num(top + r)}V${num(baseline)}Z`,
 		fill
 	});
+}
+/**
+* Paint for a bar of `length` px filled with ramp step `color`: the same hue,
+* its base faded toward the canvas. Short bars and colors outside the ramp
+* stay solid.
+*/
+function barPaint(theme, color, axis, length) {
+	const level = theme.contribRamp.indexOf(color);
+	return level < 0 || length < 48 ? color : `url(#bar-${axis}-${level})`;
+}
+/** Filter that lifts an inset panel off the card (light theme only). */
+const LIFT = "url(#lift)";
+/** Filter that softens a duplicate stroke into a glow (dark theme only). */
+const GLOW = "url(#glow-blur)";
+/** Filter that softens a ground silhouette into a contact shadow. */
+const GROUND = "url(#ground-blur)";
+const BLUR_REGION = {
+	filterUnits: "userSpaceOnUse",
+	x: 0,
+	y: 0,
+	width: 846,
+	height: 1600
+};
+const BAR_FADE = {
+	light: .07,
+	dark: -.08
+};
+const TRACK_CLEARANCE = .1;
+/** The bar's base color: faded toward the canvas, but held clear of the track. */
+function fadedBase(color, theme) {
+	const lightness = oklchLightness(color);
+	const track = oklchLightness(theme.track);
+	return shiftLightness(color, (theme.id === "light" ? Math.min(lightness + BAR_FADE.light, Math.max(lightness, track - TRACK_CLEARANCE)) : Math.max(lightness + BAR_FADE.dark, Math.min(lightness, track + TRACK_CLEARANCE))) - lightness);
+}
+function stop(offset, color, opacity) {
+	return el("stop", {
+		offset,
+		"stop-color": color,
+		"stop-opacity": opacity
+	});
+}
+/** One drop-shadow layer: blurred, offset alpha flooded with `color`. */
+function shadowLayer(blur, dy, color, opacity, result) {
+	return el("feGaussianBlur", {
+		in: "SourceAlpha",
+		stdDeviation: blur,
+		result: `${result}-blur`
+	}) + el("feOffset", {
+		in: `${result}-blur`,
+		dy,
+		result: `${result}-offset`
+	}) + el("feFlood", {
+		"flood-color": color,
+		"flood-opacity": opacity,
+		result: `${result}-flood`
+	}) + el("feComposite", {
+		in: `${result}-flood`,
+		in2: `${result}-offset`,
+		operator: "in",
+		result
+	});
+}
+/** Definitions every card can reference; emitted once inside the frame's <defs>. */
+function effectDefs(theme) {
+	return [
+		...theme.contribRamp.flatMap((color, level) => {
+			const base = fadedBase(color, theme);
+			return [el("linearGradient", {
+				id: `bar-x-${level}`,
+				x1: 0,
+				y1: 0,
+				x2: 1,
+				y2: 0
+			}, stop(0, base, 1), stop(1, color, 1)), el("linearGradient", {
+				id: `bar-y-${level}`,
+				x1: 0,
+				y1: 1,
+				x2: 0,
+				y2: 0
+			}, stop(0, base, 1), stop(1, color, 1))];
+		}),
+		el("filter", {
+			id: "lift",
+			x: "-10%",
+			y: "-15%",
+			width: "120%",
+			height: "150%"
+		}, shadowLayer(1, 1, "#1f2328", .07, "contact"), shadowLayer(6, 4, "#1f2328", .05, "ambient"), el("feMerge", {}, el("feMergeNode", { in: "ambient" }), el("feMergeNode", { in: "contact" }), el("feMergeNode", { in: "SourceGraphic" }))),
+		el("filter", {
+			id: "glow-blur",
+			...BLUR_REGION
+		}, el("feGaussianBlur", { stdDeviation: 2.5 })),
+		el("filter", {
+			id: "ground-blur",
+			...BLUR_REGION
+		}, el("feGaussianBlur", { stdDeviation: 7 }))
+	].join("");
 }
 //#endregion
 //#region src/svg/icons.ts
@@ -58112,7 +58278,7 @@ function icon(node, x, y, size, color) {
 *
 * Returns '' for a series with nothing to draw, so callers can concatenate.
 */
-function sparkline(values, x, baseline, width, height, theme) {
+function sparkline(values, x, baseline, width, height, theme, partialLast = false) {
 	const max = Math.max(0, ...values);
 	if (values.length < 2 || max === 0) return "";
 	const step = width / (values.length - 1);
@@ -58122,16 +58288,33 @@ function sparkline(values, x, baseline, width, height, theme) {
 	}));
 	const path = points.map((point) => `${num(point.x)} ${num(point.y)}`).join("L");
 	const last = points.at(-1);
-	return el("path", {
-		d: `M${num(x)} ${num(baseline)}L${path}L${num(x + width)} ${num(baseline)}Z`,
-		fill: "url(#area)"
-	}) + el("path", {
-		d: `M${path}`,
+	const settled = partialLast ? points.slice(0, -1) : points;
+	const settledPath = settled.map((point) => `${num(point.x)} ${num(point.y)}`).join("L");
+	const before = settled.at(-1);
+	const stroke = {
 		fill: "none",
 		stroke: theme.contribRamp[3],
 		"stroke-width": 1.5,
 		"stroke-linejoin": "round"
-	}) + (last === void 0 ? "" : el("circle", {
+	};
+	return el("path", {
+		d: `M${num(x)} ${num(baseline)}L${path}L${num(x + width)} ${num(baseline)}Z`,
+		fill: "url(#area)"
+	}) + el("path", {
+		d: `M${settledPath}`,
+		...stroke
+	}) + (!partialLast || before === void 0 || last === void 0 ? "" : el("path", {
+		d: `M${num(before.x)} ${num(before.y)}L${num(last.x)} ${num(last.y)}`,
+		...stroke,
+		"stroke-dasharray": "2 2"
+	})) + (last === void 0 ? "" : partialLast ? el("circle", {
+		cx: last.x,
+		cy: last.y,
+		r: 2.2,
+		fill: theme.bgInset,
+		stroke: theme.contribRamp[4],
+		"stroke-width": 1.2
+	}) : el("circle", {
 		cx: last.x,
 		cy: last.y,
 		r: 2.2,
@@ -58155,8 +58338,14 @@ function deltaTriangle(cx, cy, rising, fill) {
 //#endregion
 //#region src/cards/frame.ts
 const TITLE_ICON_SIZE = 15;
-/** Paint server for headline numbers: the palette's ink drifting to its neighbouring hue. */
-const INK_GRADIENT = "url(#ink)";
+const CORNER_GLOW = .06;
+/**
+* Uppercase a note for the mono caption, except `@login` handles: a login is
+* an identifier, and GitHub shows it in its own case everywhere else.
+*/
+function noteCase(note) {
+	return note.split(" ").map((word) => word.startsWith("@") ? word : word.toUpperCase()).join(" ");
+}
 function cardFrame(options, ...children) {
 	const { theme, height, title, note, description, extraCss, fontFaceCss } = options;
 	const css = `
@@ -58164,12 +58353,12 @@ ${fontFaceCss ?? ""}
 text{font-family:'CardSans',${FONT_SANS};font-weight:400}
 .t-title{font-family:'CardMono',${FONT_MONO};font-size:11px;font-weight:400;letter-spacing:1.6px;fill:${theme.ink}}
 .t-value{font-size:30px;font-weight:600;letter-spacing:-.4px;fill:${theme.fg}}
-.t-hero{fill:${INK_GRADIENT}}
 .t-unit{font-size:14px;font-weight:400;fill:${theme.fgMuted}}
 .t-label{font-size:12px;font-weight:400;fill:${theme.fgMuted}}
 .t-stat{font-weight:600;fill:${theme.fg}}
 .t-mono{font-family:'CardMono',${FONT_MONO};font-weight:400;font-size:10px;fill:${theme.fgMuted};letter-spacing:.4px}
 .t-tick{font-family:'CardMono',${FONT_MONO};font-weight:400;font-size:9.5px;fill:${theme.fgMuted}}
+.t-num{font-family:'CardMono',${FONT_MONO};font-weight:400;font-size:10.5px;fill:${theme.fg}}
 .fade{opacity:0;animation:fade .5s ease .1s forwards}
 @keyframes fade{to{opacity:1}}
 @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
@@ -58184,7 +58373,7 @@ ${extraCss ?? ""}`;
 		height,
 		role: "img",
 		"aria-label": description
-	}, el("title", {}, textNode(title)), el("desc", {}, textNode(description)), el("style", {}, css), el("defs", {}, el("radialGradient", {
+	}, el("title", {}, textNode(title)), el("desc", {}, textNode(description)), el("style", {}, css), el("defs", {}, theme.id === "dark" ? el("radialGradient", {
 		id: "glow",
 		gradientUnits: "userSpaceOnUse",
 		cx: 846,
@@ -58193,24 +58382,12 @@ ${extraCss ?? ""}`;
 	}, el("stop", {
 		offset: 0,
 		"stop-color": theme.ink,
-		"stop-opacity": theme.id === "light" ? .07 : .1
+		"stop-opacity": CORNER_GLOW
 	}), el("stop", {
 		offset: 1,
 		"stop-color": theme.ink,
 		"stop-opacity": 0
-	})), el("linearGradient", {
-		id: "ink",
-		x1: 0,
-		y1: 0,
-		x2: 1,
-		y2: 0
-	}, el("stop", {
-		offset: 0,
-		"stop-color": theme.ink
-	}), el("stop", {
-		offset: 1,
-		"stop-color": theme.inkAlt
-	})), el("linearGradient", {
+	})) : "", el("linearGradient", {
 		id: "area",
 		x1: 0,
 		y1: 0,
@@ -58224,7 +58401,7 @@ ${extraCss ?? ""}`;
 		offset: 1,
 		"stop-color": theme.contribRamp[3],
 		"stop-opacity": .02
-	}))), el("rect", {
+	})), effectDefs(theme)), el("rect", {
 		x: .5,
 		y: .5,
 		width: 845,
@@ -58232,14 +58409,14 @@ ${extraCss ?? ""}`;
 		rx: 12,
 		fill: theme.bg,
 		stroke: theme.border
-	}), el("rect", {
+	}), theme.id === "dark" ? el("rect", {
 		x: .5,
 		y: .5,
 		width: 845,
 		height: height - 1,
 		rx: 12,
 		fill: "url(#glow)"
-	}), icon(options.icon, 24, 31, TITLE_ICON_SIZE, theme.ink), el("text", {
+	}) : "", icon(options.icon, 24, 31, TITLE_ICON_SIZE, theme.ink), el("text", {
 		x: 47,
 		y: 42,
 		class: "t-title"
@@ -58248,7 +58425,7 @@ ${extraCss ?? ""}`;
 		y: 42,
 		class: "t-mono",
 		"text-anchor": "end"
-	}, textNode(note.toUpperCase())), ...children);
+	}, textNode(noteCase(note))), ...children);
 }
 const TILE_GAP = 12;
 const TILE_BASE_HEIGHT = 76;
@@ -58273,6 +58450,9 @@ function tileRow(theme, tiles, y) {
 		svg: tiles.map((tile, index) => {
 			const x = 24 + index * (width + TILE_GAP);
 			const deltaRight = x + width - 16;
+			const deltaWidth = tile.delta === void 0 ? 0 : measureMono(tile.delta.text, 10) + tile.delta.text.length * .4 + 11;
+			const valueRight = x + 16 + measureSans(tile.value, 30, "semibold");
+			const deltaBaseline = deltaRight - deltaWidth >= valueRight + 6 ? y + 59 : y + 80;
 			return el("g", {}, el("rect", {
 				x: x + .5,
 				y: y + .5,
@@ -58280,14 +58460,15 @@ function tileRow(theme, tiles, y) {
 				height: height - 1,
 				rx: 10,
 				fill: theme.bgInset,
-				stroke: theme.borderMuted
+				stroke: theme.id === "dark" ? theme.borderMuted : void 0,
+				filter: theme.id === "light" ? LIFT : void 0
 			}), icon(tile.icon, x + 16, y + 15, TILE_ICON_SIZE, theme.ink), el("text", {
 				x: x + 16 + TILE_ICON_SIZE + 7,
 				y: y + 26,
 				class: "t-label"
-			}, textNode(tile.label)), tile.delta === void 0 ? "" : deltaTriangle(deltaRight - measureMono(tile.delta.text, 10) - tile.delta.text.length * .4 - 11, y + 76, tile.delta.rising, theme.fg) + el("text", {
+			}, textNode(tile.label)), tile.delta === void 0 ? "" : deltaTriangle(deltaRight - deltaWidth, deltaBaseline - 4, tile.delta.rising, theme.fg) + el("text", {
 				x: deltaRight,
-				y: y + 80,
+				y: deltaBaseline,
 				class: "t-mono",
 				"text-anchor": "end"
 			}, textNode(tile.delta.text)), el("text", {
@@ -58301,7 +58482,7 @@ function tileRow(theme, tiles, y) {
 				x: x + 16,
 				y: y + 80,
 				class: "t-mono"
-			}, textNode(tile.sub.toUpperCase())), tile.spark === void 0 ? "" : sparkline(tile.spark, x + 16, y + height - 12, width - 32, SPARK_HEIGHT, theme));
+			}, textNode(tile.sub.toUpperCase())), tile.spark === void 0 ? "" : sparkline(tile.spark, x + 16, y + height - 12, width - 32, SPARK_HEIGHT, theme, tile.sparkPartial ?? false));
 		}).join(""),
 		height
 	};
@@ -58532,7 +58713,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 	const histogram = cadence.hourTotals.map((total, hour) => {
 		const height = total === 0 || hourMax === 0 ? 0 : Math.max(2, total / hourMax * HIST_MAX_HEIGHT);
 		if (height === 0) return "";
-		return verticalBar(columnX(hour) + 17.083333333333332 / 2, HIST_BASELINE, HIST_BAR_W, height, barFill(theme, total, hourMax));
+		return verticalBar(columnX(hour) + 17.083333333333332 / 2, HIST_BASELINE, HIST_BAR_W, height, barPaint(theme, barFill(theme, total, hourMax), "y", height));
 	});
 	const columns = range(24).map((hour) => {
 		const cx = columnX(hour) + COL_W / 2;
@@ -58544,7 +58725,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 				cx,
 				cy,
 				r: DOT_RADIUS[level],
-				fill: theme.contribRamp[level]
+				fill: level === 0 ? theme.track : theme.contribRamp[level]
 			}) + (isPeak ? peakRing(cx, cy, level, theme) : "");
 		});
 		return el("g", {
@@ -58578,11 +58759,11 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		const x = GRID_LEFT + index * 64;
 		const height = count === 0 || sizeMax === 0 ? 0 : Math.max(2, count / sizeMax * SIZE_MAX_HEIGHT);
 		return [
-			height === 0 ? "" : verticalBar(x, SIZE_BASELINE, SIZE_BAR_W, height, barFill(theme, count, sizeMax)),
+			height === 0 ? "" : verticalBar(x, SIZE_BASELINE, SIZE_BAR_W, height, barPaint(theme, barFill(theme, count, sizeMax), "y", height)),
 			count === 0 ? "" : el("text", {
 				x: x + SIZE_BAR_W / 2,
 				y: SIZE_BASELINE - height - 5,
-				class: "t-tick",
+				class: "t-num",
 				"text-anchor": "middle"
 			}, textNode(formatCompact(count))),
 			el("text", {
@@ -58606,20 +58787,25 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		stroke: theme.border,
 		"stroke-width": 1
 	});
+	const sizeUnit = el("text", {
+		x: GRID_LEFT + SIZE_BUCKETS.length * SIZE_BAR_W + (SIZE_BUCKETS.length - 1) * SIZE_BAR_GAP + 16,
+		y: SIZE_LABEL_BASELINE,
+		class: "t-tick"
+	}, textNode("lines changed per commit"));
 	const perFileNote = cadence.medianLinesPerFile === void 0 ? "" : el("text", {
 		x: 822,
 		y: SIZE_LABEL_BASELINE,
 		class: "t-label",
 		"text-anchor": "end"
-	}, textNode("lines per commit · median "), el("tspan", { class: "t-stat" }, textNode(String(Math.round(cadence.medianLinesPerFile)))), textNode(" per file"));
+	}, textNode("median "), el("tspan", { class: "t-stat" }, textNode(String(Math.round(cadence.medianLinesPerFile)))), textNode(" lines per file"));
 	const { swept, candidates } = data.commitSweep;
 	const capped = swept < candidates;
-	const footerParts = [el("tspan", { class: "t-stat" }, textNode(formatCompact(cadence.totalCommits))), textNode(capped ? " commits swept" : " commits")];
+	const footerParts = [el("tspan", { class: "t-stat" }, textNode(formatInt(cadence.totalCommits))), textNode(capped ? " commits swept" : " commits")];
 	if (cadence.peak !== void 0) {
 		const peakLabel = `${WEEKDAY_LABELS$1[cadence.peak.weekday] ?? ""} ${String(cadence.peak.hour).padStart(2, "0")}:00`;
 		footerParts.push(textNode(" · peak "), el("tspan", { class: "t-stat" }, textNode(peakLabel)));
 	}
-	if (cadence.medianLines !== void 0) footerParts.push(textNode(" · median "), el("tspan", { class: "t-stat" }, textNode(formatCompact(Math.round(cadence.medianLines)))), textNode(" lines per commit"));
+	if (cadence.medianLines !== void 0) footerParts.push(textNode(" · median "), el("tspan", { class: "t-stat" }, textNode(formatInt(Math.round(cadence.medianLines)))), textNode(" lines per commit"));
 	if (cadence.totalCommits > 0) footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(`${Math.round(cadence.nightShare * 100)}%`)), textNode(` at night (${NIGHT_FROM}-0${NIGHT_UNTIL})`));
 	const footer = el("text", {
 		x: 24,
@@ -58649,7 +58835,7 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
 		extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
 		fontFaceCss
-	}, el("g", { class: "fade" }, ...nightBands, eyebrow, histBaseline, ...histogram, ...weekdayLabels, ...hourTicks, sizeEyebrow, sizeBaselineRule, ...sizeBand, perFileNote), ...columns, el("g", { class: "fade" }, footer, peakKey, legend));
+	}, el("g", { class: "fade" }, ...nightBands, eyebrow, histBaseline, ...histogram, ...weekdayLabels, ...hourTicks, sizeEyebrow, sizeBaselineRule, ...sizeBand, sizeUnit, perFileNote), ...columns, el("g", { class: "fade" }, footer, peakKey, legend));
 }
 /** Hue-free emphasis for the busiest cell: a thin ring in the foreground ink. */
 function peakRing(cx, cy, level, theme) {
@@ -58839,11 +59025,11 @@ function renderComposition(data, theme, fontFaceCss) {
 		return [el("text", {
 			x: 24 + i * band + band / 2,
 			y: baseline - (maxSum === 0 ? 0 : year.sum / maxSum * MAX_BAR_HEIGHT) - 6,
-			class: "t-tick",
+			class: "t-num",
 			"text-anchor": "middle"
-		}, textNode(formatCompact(year.sum)))];
+		}, textNode(formatInt(year.sum)))];
 	});
-	const captions = SERIES.map((series) => `${series.label} · ${formatCompact(typeTotals[series.index])}`);
+	const captions = SERIES.map((series) => `${series.label} · ${formatInt(typeTotals[series.index])}`);
 	const legendXs = SERIES.map((_, i) => captions.slice(0, i).reduce((x, caption) => x + 16 + measureSans(caption, 12) + 20, 24));
 	const legend = SERIES.flatMap((series, i) => {
 		const x = legendXs[i] ?? 24;
@@ -58928,72 +59114,84 @@ function calendarThresholds(days) {
 */
 const HW = 12;
 const HH = 4;
-const MAX_COLUMN = 40;
-const MIN_COLUMN = 3;
+const MAX_COLUMN = 54;
+const MIN_COLUMN = 4;
+const GROUND_DROP = 7;
+const SLAB = 8;
+const CALLOUT_ROOM = 22;
+const CALLOUT_LEADER = 12;
 function polygon(points, fill) {
 	return el("polygon", {
 		points: points.map((point) => `${num(point.x)},${num(point.y)}`).join(" "),
 		fill
 	});
 }
-/** One day column: flat diamond for zero, three shaded faces otherwise. */
-function dayColumn(x, y, height, topFill, leftFill, rightFill) {
+/**
+* One day column on the cell whose back corner is (x, y): a flat diamond for
+* zero, three shaded faces otherwise. The footprint is inset by CELL_GAP so
+* neighbouring days stand as separate blocks with a sliver of floor between
+* them, the way the flat calendar separates its squares.
+*/
+function dayColumn(x, y, height, faces) {
+	const hw = 10.8;
+	const hh = HH * hw / HW;
+	const cy = y + HH;
 	const top = [
 		{
 			x,
-			y: y - height
+			y: cy - hh - height
 		},
 		{
-			x: x + HW,
-			y: y + HH - height
+			x: x + hw,
+			y: cy - height
 		},
 		{
 			x,
-			y: y + 8 - height
+			y: cy + hh - height
 		},
 		{
-			x: x - HW,
-			y: y + HH - height
+			x: x - hw,
+			y: cy - height
 		}
 	];
-	if (height === 0) return polygon(top, topFill);
+	if (height === 0) return polygon(top, faces.top);
 	const left = polygon([
 		{
-			x: x - HW,
-			y: y + HH - height
+			x: x - hw,
+			y: cy - height
 		},
 		{
 			x,
-			y: y + 8 - height
+			y: cy + hh - height
 		},
 		{
 			x,
-			y: y + 8
+			y: cy + hh
 		},
 		{
-			x: x - HW,
-			y: y + HH
+			x: x - hw,
+			y: cy
 		}
-	], leftFill);
+	], faces.left);
 	const right = polygon([
 		{
 			x,
-			y: y + 8 - height
+			y: cy + hh - height
 		},
 		{
-			x: x + HW,
-			y: y + HH - height
+			x: x + hw,
+			y: cy - height
 		},
 		{
-			x: x + HW,
-			y: y + HH
+			x: x + hw,
+			y: cy
 		},
 		{
 			x,
-			y: y + 8
+			y: cy + hh
 		}
-	], rightFill);
-	return polygon(top, topFill) + left + right;
+	], faces.right);
+	return polygon(top, faces.top) + left + right;
 }
 /** Weeks-of-days matrix from the flat day series (calendar order, 7 rows). */
 function toWeeks(days) {
@@ -59003,10 +59201,17 @@ function renderContributions(data, streaks, theme, fontFaceCss, legendStyle = DE
 	const weeks = toWeeks(data.trailing.days);
 	const weekCount = weeks.length;
 	const maxCount = Math.max(1, ...data.trailing.days.map((day) => day.count));
+	const shading = theme.id === "dark" ? {
+		left: -.04,
+		right: -.1
+	} : {
+		left: -.08,
+		right: -.18
+	};
 	const faces = theme.contribRamp.map((color) => ({
 		top: color,
-		left: shade(color, .18),
-		right: shade(color, .38)
+		left: shiftLightness(color, shading.left),
+		right: shiftLightness(color, shading.right)
 	}));
 	const trailingDayCount = data.trailing.days.length;
 	const peakDay = Math.max(0, ...data.trailing.days.map((day) => day.count));
@@ -59037,25 +59242,125 @@ function renderContributions(data, streaks, theme, fontFaceCss, legendStyle = DE
 	const inner = 798;
 	const minPx = -84;
 	const originX = 24 + (inner - ((weekCount - 1) * HW + HW - minPx)) / 2 - minPx;
-	const originY = tileTop + tileHeight + 18 + MAX_COLUMN;
-	const groundBottom = originY + (weekCount - 1 + 6) * HH + 8;
+	const peak = weeks.flatMap((week, w) => week.map((day, d) => ({
+		day,
+		w,
+		d
+	}))).reduce((best, entry) => best === void 0 || entry.day.count > best.day.count ? entry : best, void 0);
+	const calloutRoom = peak === void 0 ? 0 : Math.max(0, CALLOUT_ROOM - (peak.w + peak.d) * HH);
+	const originY = tileTop + tileHeight + 18 + calloutRoom + MAX_COLUMN;
+	const groundBottom = originY + (weekCount - 1 + 6) * HH + 8 + SLAB;
 	const monthTicks = weeks.flatMap((week, w) => {
 		const firstOfMonth = week.find((day) => day.date.endsWith("-01"));
 		if (!firstOfMonth) return [];
 		const label = formatDate(firstOfMonth.date, false).split(" ")[0] ?? "";
 		return [el("text", {
-			x: originX + (w - 6) * HW - HW - 6,
-			y: originY + (w + 6) * HH + 8 + 4,
+			x: originX + (w - 6) * HW - HW - 8,
+			y: originY + (w + 6) * HH + 8 + 4 + SLAB,
 			class: "t-tick",
 			"text-anchor": "end"
 		}, textNode(label))];
 	});
+	const lastWeek = Math.max(0, weekCount - 1);
+	const back = {
+		x: originX,
+		y: originY
+	};
+	const right = {
+		x: originX + lastWeek * HW + HW,
+		y: originY + lastWeek * HH + HH
+	};
+	const front = {
+		x: originX + (lastWeek - 6) * HW,
+		y: originY + (lastWeek + 6) * HH + 8
+	};
+	const left = {
+		x: originX - 84,
+		y: originY + 24 + HH
+	};
+	const down = (point) => ({
+		x: point.x,
+		y: point.y + SLAB
+	});
+	const dark = theme.id === "dark";
+	const slabTop = dark ? shiftLightness(theme.bg, .035) : theme.bg;
+	const groundShadow = el("polygon", {
+		points: [
+			back,
+			right,
+			front,
+			left
+		].map((point) => `${num(point.x)},${num(point.y + SLAB + GROUND_DROP)}`).join(" "),
+		fill: dark ? theme.ink : "#1f2328",
+		"fill-opacity": dark ? .16 : .22,
+		filter: GROUND
+	});
+	const slab = polygon([
+		back,
+		right,
+		front,
+		left
+	], slabTop) + polygon([
+		left,
+		front,
+		down(front),
+		down(left)
+	], shiftLightness(slabTop, dark ? .06 : -.05)) + polygon([
+		front,
+		right,
+		down(right),
+		down(front)
+	], shiftLightness(slabTop, dark ? .03 : -.1));
+	const weekdayTicks = [
+		{
+			d: 1,
+			label: "Mon"
+		},
+		{
+			d: 3,
+			label: "Wed"
+		},
+		{
+			d: 5,
+			label: "Fri"
+		}
+	].map(({ d, label }) => el("text", {
+		x: originX + (lastWeek - d) * HW + HW + 6,
+		y: originY + (lastWeek + d) * HH + HH + 3 + SLAB / 2,
+		class: "t-tick"
+	}, textNode(label)));
+	const callout = (() => {
+		if (peak === void 0 || peak.day.count === 0) return "";
+		const x = originX + (peak.w - peak.d) * HW;
+		const topY = originY + (peak.w + peak.d) * HH + HH - HH * 10.8 / HW - MAX_COLUMN;
+		const label = `${formatInt(peak.day.count)} · ${formatDate(peak.day.date, false).toUpperCase()}`;
+		const half = (label.length + 5) * 3.2;
+		const labelX = Math.min(822 - half, Math.max(24 + half, x));
+		return el("line", {
+			x1: x,
+			y1: topY - 2,
+			x2: x,
+			y2: topY - CALLOUT_LEADER,
+			stroke: theme.fgMuted,
+			"stroke-width": 1
+		}) + el("circle", {
+			cx: x,
+			cy: topY - 1,
+			r: 1.8,
+			fill: theme.fg
+		}) + el("text", {
+			x: labelX,
+			y: topY - CALLOUT_LEADER - 4,
+			class: "t-mono",
+			"text-anchor": "middle"
+		}, textNode("PEAK "), el("tspan", { fill: theme.fg }, textNode(label)));
+	})();
 	const weekGroups = weeks.map((week, w) => {
 		const columns = week.map((day, d) => {
 			const face = faces[day.level] ?? faces[0];
 			if (face === void 0) throw new Error("empty contribution ramp");
-			const height = day.count === 0 ? 0 : MIN_COLUMN + Math.sqrt(day.count / maxCount) * 37;
-			return dayColumn(originX + (w - d) * HW, originY + (w + d) * HH, height, face.top, face.left, face.right);
+			const height = day.count === 0 ? 0 : MIN_COLUMN + Math.sqrt(day.count / maxCount) * 50;
+			return dayColumn(originX + (w - d) * HW, originY + (w + d) * HH, height, face);
 		});
 		return el("g", {
 			class: "iso",
@@ -59084,7 +59389,7 @@ function renderContributions(data, streaks, theme, fontFaceCss, legendStyle = DE
 		description: `Contribution activity for ${data.login}: ${formatInt(data.trailing.total)} contributions in the past 12 months, current streak ${formatInt(streaks.current)} days, longest streak ${formatInt(streaks.longest)} days.`,
 		extraCss: `.iso{opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}`,
 		fontFaceCss
-	}, el("g", { class: "fade" }, tilesSvg), ...weekGroups, el("g", { class: "fade" }, ...monthTicks), legend, caption);
+	}, el("g", { class: "fade" }, tilesSvg), el("g", { class: "fade" }, groundShadow, slab), ...weekGroups, el("g", { class: "fade" }, ...monthTicks, ...weekdayTicks, callout), legend, caption);
 }
 //#endregion
 //#region src/compute/languages.ts
@@ -59447,17 +59752,17 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 		}, textNode(share.name)), el("text", {
 			x: LIST_REPOS_RIGHT,
 			y,
-			class: "t-tick",
+			class: "t-num",
 			"text-anchor": "end"
 		}, textNode(share.repos === 0 ? "—" : String(share.repos))), el("text", {
 			x: LIST_BYTES_RIGHT,
 			y,
-			class: "t-tick",
+			class: "t-num",
 			"text-anchor": "end"
 		}, textNode(formatBytes(share.bytes))), el("text", {
 			x: LIST_PCT_RIGHT,
 			y,
-			class: "t-tick",
+			class: "t-num",
 			"text-anchor": "end"
 		}, textNode(pctLabel(share))));
 	});
@@ -59602,11 +59907,14 @@ function computeLifetime(days) {
 		total: items.reduce((sum, item) => sum + item.count, 0)
 	}));
 	const thresholds = computeThresholds(yearEntries.flatMap((entry) => [...entry.weekSums.values()]).filter((sum) => sum > 0).toSorted((a, b) => a - b));
+	const firstActive = days.filter((day) => day.count > 0).map((day) => day.date).toSorted()[0];
+	const start = firstActive === void 0 ? void 0 : bucketOf(firstActive);
 	return {
 		years: yearEntries.map(({ year, weekSums, total }) => ({
 			year,
 			weeks: range(Math.max(0, ...weekSums.keys()) + 1).map((index) => levelOf(weekSums.get(index) ?? 0, thresholds)),
-			total
+			total,
+			firstWeek: start !== void 0 && start.year === year ? start.weekIndex : 0
 		})),
 		thresholds
 	};
@@ -59667,7 +59975,7 @@ function renderLifetime(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) 
 	const columns = range(maxCols).map((c) => {
 		const cells = life.years.flatMap((year, r) => {
 			const level = year.weeks[c];
-			return level === void 0 ? [] : [el("rect", {
+			return level === void 0 || c < year.firstWeek ? [] : [el("rect", {
 				x: gridLeft + c * colPitch,
 				y: gridTop + r * ROW_PITCH,
 				width: cellW,
@@ -59696,7 +60004,7 @@ function renderLifetime(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) 
 	const yearTotals = life.years.map((year, r) => el("text", {
 		x: 822,
 		y: gridTop + r * ROW_PITCH + CELL_H / 2 + 3.3,
-		class: "t-tick",
+		class: "t-num",
 		"text-anchor": "end"
 	}, textNode(formatInt(year.total))));
 	const legend = rampLegend(theme, 24, gridBottom + 17, {
@@ -59777,13 +60085,13 @@ function computeMomentum(days, years = []) {
 		};
 	}).toReversed();
 	const peak = points.reduce((best, point) => best === void 0 || point.total > best.total ? point : best, void 0);
-	const firstComplete = first.slice(5) === "01-01" ? Number(first.slice(0, 4)) : Number(first.slice(0, 4)) + 1;
+	const since = days.find((day) => day.count > 0)?.date ?? first;
+	const firstComplete = since.slice(5) === "01-01" ? Number(since.slice(0, 4)) : Number(since.slice(0, 4)) + 1;
 	const lastComplete = last.slice(5) === "12-31" ? Number(last.slice(0, 4)) : Number(last.slice(0, 4)) - 1;
 	const quietestYear = years.filter((year) => year.year >= firstComplete && year.year <= lastComplete).reduce((best, year) => best === void 0 || year.total < best.total ? {
 		year: year.year,
 		total: year.total
 	} : best, void 0);
-	const since = days.find((day) => day.count > 0)?.date ?? first;
 	return {
 		points,
 		peak,
@@ -59895,6 +60203,16 @@ function renderMomentum(data, theme, fontFaceCss) {
 		"stroke-linejoin": "round",
 		"stroke-linecap": "round"
 	});
+	const lineGlow = theme.id === "dark" ? el("path", {
+		d: `M${vertices.join("L")}`,
+		fill: "none",
+		stroke: theme.contribRamp[4],
+		"stroke-width": 4,
+		"stroke-opacity": .28,
+		"stroke-linejoin": "round",
+		"stroke-linecap": "round",
+		filter: GLOW
+	}) : "";
 	const area = el("path", {
 		d: `M${num(PLOT_X)} ${num(PLOT_BOTTOM)}L${vertices.join("L")}L${num(x(points.length - 1))} ${num(PLOT_BOTTOM)}Z`,
 		fill: "url(#area)"
@@ -59904,7 +60222,7 @@ function renderMomentum(data, theme, fontFaceCss) {
 		x: PLOT_X,
 		y: y(value) - 5,
 		class: "t-tick"
-	}, textNode(formatCompact(value))));
+	}, textNode(guideLabel(value))));
 	const baselineRule = el("line", {
 		x1: PLOT_X,
 		y1: 252.5,
@@ -59931,7 +60249,15 @@ function renderMomentum(data, theme, fontFaceCss) {
 	}).marks;
 	const peakMark = peak.date === current.date ? "" : peakMarker(peak, points, theme, x, y, plotRight);
 	const currentY = Math.min(248, Math.max(104, y(current.total) + 9));
+	const dark = theme.id === "dark";
 	const currentValue = el("circle", {
+		cx: x(points.length - 1),
+		cy: y(current.total),
+		r: dark ? 6 : 7,
+		fill: theme.contribRamp[4],
+		"fill-opacity": dark ? .4 : .16,
+		filter: dark ? GLOW : void 0
+	}) + el("circle", {
 		cx: x(points.length - 1),
 		cy: y(current.total),
 		r: 3.2,
@@ -59939,7 +60265,7 @@ function renderMomentum(data, theme, fontFaceCss) {
 	}) + el("text", {
 		x: 822,
 		y: currentY,
-		class: "t-value t-hero",
+		class: "t-value",
 		"text-anchor": "end"
 	}, textNode(currentLabel));
 	const footerParts = [
@@ -59964,7 +60290,11 @@ function renderMomentum(data, theme, fontFaceCss) {
 		description: `Momentum for ${data.login}: contributions in each trailing twelve months since ${formatDate(since, true)}, currently ${formatInt(current.total)}, peaking at ${formatInt(peak.total)}.`,
 		extraCss: ".sweep{clip-path:inset(0 100% 0 0);animation:sweep 1.1s cubic-bezier(.2,.7,.3,1) .1s forwards}@keyframes sweep{to{clip-path:inset(0 0 0 0)}}@media (prefers-reduced-motion: reduce){.sweep{clip-path:none!important}}",
 		fontFaceCss
-	}, el("g", { class: "fade" }, ...guides, baselineRule, ...ticks), el("g", { class: "sweep" }, area, line), el("g", { class: "fade" }, peakMark, currentValue, footer));
+	}, el("g", { class: "fade" }, ...guides, baselineRule, ...ticks), el("g", { class: "sweep" }, area, lineGlow, line), el("g", { class: "fade" }, peakMark, currentValue, footer));
+}
+/** A guide's label: a round value needs no trailing ".0" ("2k", "2.5k"). */
+function guideLabel(value) {
+	return formatCompact(value).replace(".0", "");
 }
 /** Ringed peak plus its value, flipped inboard when it would leave the plot. */
 function peakMarker(peak, points, theme, x, y, plotRight) {
@@ -60027,9 +60357,9 @@ function renderOverview(data, theme, fontFaceCss) {
 	const currentYtd = thisYear === void 0 ? 0 : ytdFor(thisYear);
 	const ytdDelta = !trends || priorYtd === 0 ? void 0 : {
 		rising: currentYtd >= priorYtd,
-		text: `${Math.abs(Math.round((currentYtd - priorYtd) / priorYtd * 100))}% YTD`
+		text: `${currentYtd >= priorYtd ? "+" : "-"}${Math.abs(Math.round((currentYtd - priorYtd) / priorYtd * 100))}% YTD`
 	};
-	const peakOf = (pick) => {
+	const peakOf = (pick, what = "Peak") => {
 		const best = data.years.reduce((winner, year) => pick(year) > winner.count ? {
 			year: year.year,
 			count: pick(year)
@@ -60037,7 +60367,7 @@ function renderOverview(data, theme, fontFaceCss) {
 			year: 0,
 			count: 0
 		});
-		return best.count === 0 ? void 0 : `Peak ${best.year} · ${formatInt(best.count)}`;
+		return best.count === 0 ? void 0 : `${what} ${best.year} · ${formatInt(best.count)}`;
 	};
 	const rowA = [
 		{
@@ -60045,7 +60375,8 @@ function renderOverview(data, theme, fontFaceCss) {
 			icon: import_lucide.Sigma,
 			value: formatInt(lifetime),
 			sub: firstYear === void 0 ? void 0 : `Since ${firstYear}`,
-			spark: seriesOf((year) => year.total)
+			spark: seriesOf((year) => year.total),
+			sparkPartial: true
 		},
 		{
 			label: `Contributions (${latestYear?.year ?? "this year"})`,
@@ -60053,8 +60384,27 @@ function renderOverview(data, theme, fontFaceCss) {
 			value: formatInt(thisYearTotal),
 			sub: dailyAverage,
 			spark: monthsThisYear(),
+			sparkPartial: true,
 			delta: ytdDelta
 		},
+		{
+			label: "Pull requests merged",
+			icon: import_lucide.GitMerge,
+			value: formatInt(data.mergedPullRequests),
+			sub: peakOf((year) => year.pullRequests, "Peak opened"),
+			spark: seriesOf((year) => year.pullRequests),
+			sparkPartial: true
+		},
+		{
+			label: "Issues opened",
+			icon: import_lucide.CircleDot,
+			value: formatInt(data.issues),
+			sub: peakOf((year) => year.issues),
+			spark: seriesOf((year) => year.issues),
+			sparkPartial: true
+		}
+	];
+	const rowB = [
 		{
 			label: "Stars earned",
 			icon: import_lucide.Star,
@@ -60065,22 +60415,6 @@ function renderOverview(data, theme, fontFaceCss) {
 			label: "Followers",
 			icon: import_lucide.Users,
 			value: formatInt(data.followers)
-		}
-	];
-	const rowB = [
-		{
-			label: "Pull requests merged",
-			icon: import_lucide.GitMerge,
-			value: formatInt(data.mergedPullRequests),
-			sub: peakOf((year) => year.pullRequests),
-			spark: seriesOf((year) => year.pullRequests)
-		},
-		{
-			label: "Issues opened",
-			icon: import_lucide.CircleDot,
-			value: formatInt(data.issues),
-			sub: peakOf((year) => year.issues),
-			spark: seriesOf((year) => year.issues)
 		},
 		{
 			label: "Public repositories",
@@ -60120,12 +60454,13 @@ function truncate(label, maxChars) {
 /**
 * Two-tone owner/name label.
 *
-* The owner prefix repeats down a list of one person's repositories, so it
-* wears the muted ink while the repository name carries the row's identity in
-* the foreground color.
+* The profile's own login is dropped: it would repeat down every row of one
+* person's list and cost the name its tail. A foreign owner stays, in the
+* muted ink, while the repository name carries the row's identity in the
+* foreground color.
 */
-function repoLabelSpans(nameWithOwner, fg, maxChars) {
-	const label = truncate(nameWithOwner, maxChars);
+function repoLabelSpans(nameWithOwner, fg, maxChars, login) {
+	const label = truncate(nameWithOwner.toLowerCase().startsWith(`${login.toLowerCase()}/`) ? nameWithOwner.slice(login.length + 1) : nameWithOwner, maxChars);
 	const slash = label.indexOf("/");
 	if (slash < 0) return [el("tspan", { fill: fg }, textNode(label))];
 	return [textNode(label.slice(0, slash + 1)), el("tspan", { fill: fg }, textNode(label.slice(slash + 1)))];
@@ -60226,11 +60561,11 @@ function renderPortfolio(data, theme, fontFaceCss) {
 				x: NAME_X,
 				y: baseline,
 				class: "t-label"
-			}, ...repoLabelSpans(repo.nameWithOwner, theme.fg, MAX_NAME$1)),
+			}, ...repoLabelSpans(repo.nameWithOwner, theme.fg, MAX_NAME$1, data.login)),
 			el("text", {
 				x: COMMITS_RIGHT,
 				y: baseline - .7,
-				class: "t-tick",
+				class: "t-num",
 				"text-anchor": "end"
 			}, textNode(formatCompact(repo.commits))),
 			el("text", {
@@ -60303,33 +60638,49 @@ function renderPortfolio(data, theme, fontFaceCss) {
 		icon: import_lucide.ChartGantt,
 		height: footerBaseline + 24,
 		title: "Portfolio",
-		note: "public source repositories · by commits",
+		note: "public source repositories · commits and pushes by all authors",
 		description: `Repository portfolio for ${data.login}: ${formatInt(totals.length)} public source repositories, ${formatInt(recent)} pushed in the last 90 days.`,
 		extraCss: `.life{opacity:0;animation:fade .45s ease forwards}`,
 		fontFaceCss
 	}, el("g", { class: "fade" }, columnHeads, ...guides, axisRule, ...ticks, ...labels, footer, key), ...lifelines);
 }
+const RECENCY_STEPS = [
+	"1y+",
+	"<1y",
+	"<90d",
+	"<30d"
+];
 /** Ramp key naming what the lifeline colors mean, right-aligned on `baseline`. */
 function recencyKey(theme, baseline) {
-	const caption = "pushed recently, any author";
+	const lead = "last push";
 	const swatch = 9;
-	const pitch = 12;
-	const captionWidth = measureMono(caption, 9.5);
+	const gap = 4;
+	const spacing = 12;
+	const steps = RECENCY_STEPS.map((caption, step) => ({
+		caption,
+		fill: theme.contribRamp[step + 1],
+		width: 13 + measureMono(caption, 9.5)
+	}));
 	const right = 822;
-	const firstX = right - captionWidth - 8 - 48;
-	return range(4).map((step) => el("rect", {
-		x: firstX + step * pitch,
+	const stepsWidth = steps.reduce((sum, step) => sum + step.width, 0) + spacing * (steps.length - 1);
+	const leadX = right - stepsWidth - spacing - measureMono(lead, 9.5);
+	const starts = steps.map((_, index) => right - stepsWidth + steps.slice(0, index).reduce((sum, before) => sum + before.width + spacing, 0));
+	return el("text", {
+		x: leadX,
+		y: baseline,
+		class: "t-tick"
+	}, textNode(lead)) + steps.map((step, index) => el("rect", {
+		x: starts[index] ?? 0,
 		y: baseline - swatch + 1,
 		width: swatch,
 		height: swatch,
 		rx: 2,
-		fill: theme.contribRamp[step + 1]
-	})).join("") + el("text", {
-		x: right,
+		fill: step.fill
+	}) + el("text", {
+		x: (starts[index] ?? 0) + swatch + gap,
 		y: baseline,
-		class: "t-tick",
-		"text-anchor": "end"
-	}, textNode(caption));
+		class: "t-tick"
+	}, textNode(step.caption))).join("");
 }
 /** One tick per January the axis spans, plus the axis start. */
 function yearTicks(startMs, endMs) {
@@ -60373,15 +60724,16 @@ const RANK_X = 36;
 const DOT_CX = 49;
 const MARK_SIZE = 13;
 const LABEL_X = 60;
-const STARS_RIGHT = 340;
-const ISSUE_X = 352;
-const ISSUE_SIZE = 10;
+const STARS_RIGHT = 314;
+const ISSUES_RIGHT = 360;
+const ISSUE_ICON = 10;
 const BAR_START_X$1 = 376;
-const VALUE_GAP$1 = 8;
+const VALUE_GAP = 8;
 const BAR_MAX_LEN = 360;
 const MIN_BAR$1 = 3;
 const MAX_NAME = 36;
 const TICK_SIZE = 9.5;
+const NUM_SIZE = 10.5;
 const STAR_R = 4.6;
 /**
 * Five-pointed star as a path rather than the ★ glyph: the embedded font is
@@ -60402,16 +60754,31 @@ function star(cx, cy, radius, fill) {
 function starCount(stars, right, baseline, theme) {
 	if (stars <= 0) return "";
 	const label = formatCompact(stars);
-	return star(right - measureMono(label, TICK_SIZE) - 4 - STAR_R, baseline - 3.4, STAR_R, theme.fgMuted) + el("text", {
+	return star(right - measureMono(label, NUM_SIZE) - 4 - STAR_R, baseline - 3.4, STAR_R, theme.fgMuted) + el("text", {
 		x: right,
 		y: baseline,
-		class: "t-tick",
+		class: "t-num",
+		"text-anchor": "end"
+	}, textNode(label));
+}
+/**
+* Issues opened in the window, as a glyph and a count right-aligned at
+* `right`; empty when there were none, the same way stars are. A count says
+* how many; a shaded square could only say "some" or "more".
+*/
+function issueCount(issues, right, baseline, theme) {
+	if (issues <= 0) return "";
+	const label = formatCompact(issues);
+	const labelWidth = measureMono(label, NUM_SIZE);
+	return icon(import_lucide.CircleDot, right - labelWidth - 4 - ISSUE_ICON, baseline - 3.4 - ISSUE_ICON / 2, ISSUE_ICON, theme.fgMuted) + el("text", {
+		x: right,
+		y: baseline,
+		class: "t-num",
 		"text-anchor": "end"
 	}, textNode(label));
 }
 function renderRepositories(data, theme, fontFaceCss) {
 	const ranking = computeRepositories(data.topRepositories);
-	const issueMax = Math.max(0, ...ranking.rows.map((row) => row.issues));
 	const trackMax = Math.max(ranking.max, ...ranking.rows.map((row) => row.lifetimeCommits));
 	const labels = [];
 	const values = [];
@@ -60429,29 +60796,15 @@ function renderRepositories(data, theme, fontFaceCss) {
 			x: LABEL_X,
 			y: rowCenter + 4,
 			class: "t-label"
-		}, ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME)), starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme), el("rect", {
-			x: ISSUE_X,
-			y: rowCenter - ISSUE_SIZE / 2,
-			width: ISSUE_SIZE,
-			height: ISSUE_SIZE,
-			rx: 2,
-			fill: row.issues === 0 ? theme.bgInset : barFill(theme, row.issues, issueMax)
-		}), trackLength <= length ? "" : el("rect", {
-			x: BAR_START_X$1,
-			y: rowCenter - BAR_H / 2,
-			width: trackLength,
-			height: BAR_H,
-			rx: BAR_H / 2,
-			fill: theme.bgInset
-		}));
+		}, ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME, data.login)), starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme), issueCount(row.issues, ISSUES_RIGHT, rowCenter + 3.3, theme), trackLength <= length ? "" : horizontalBar(BAR_START_X$1, rowCenter - BAR_H / 2, trackLength, BAR_H, theme.track));
 		bars.push(el("g", {
 			class: "hbar",
 			style: `animation-delay:${index * 55}ms;transform-origin:${BAR_START_X$1}px ${rowCenter}px`
-		}, horizontalBar(BAR_START_X$1, rowCenter - BAR_H / 2, length, BAR_H, barFill(theme, row.commits, ranking.max))));
+		}, horizontalBar(BAR_START_X$1, rowCenter - BAR_H / 2, length, BAR_H, barPaint(theme, barFill(theme, row.commits, ranking.max), "x", length))));
 		values.push(el("text", {
-			x: BAR_START_X$1 + Math.max(length, trackLength) + VALUE_GAP$1,
+			x: BAR_START_X$1 + Math.max(length, trackLength) + VALUE_GAP,
 			y: rowCenter + 3.3,
-			class: "t-tick"
+			class: "t-num"
 		}, textNode(row.lifetimeCommits > row.commits ? `${formatCompact(row.commits)} / ${formatCompact(row.lifetimeCommits)}` : String(row.commits))));
 	});
 	const empty = ranking.rows.length === 0 ? el("text", {
@@ -60464,7 +60817,7 @@ function renderRepositories(data, theme, fontFaceCss) {
 	const footerBaseline = bandBottom + 27;
 	const scope = data.trailingCommits;
 	const footerParts = [
-		el("tspan", { class: "t-stat" }, textNode(formatCompact(scope.total))),
+		el("tspan", { class: "t-stat" }, textNode(formatInt(scope.total))),
 		textNode(" commits across "),
 		el("tspan", { class: "t-stat" }, textNode(String(scope.repositories))),
 		textNode(" repositories")
@@ -60497,7 +60850,7 @@ function renderRepositories(data, theme, fontFaceCss) {
 		icon: import_lucide.FolderGit2,
 		height,
 		title: "Top repositories",
-		note: "trailing 12 months · by commits · bars over lifetime",
+		note: "by commits · bar past 12 months · track all time",
 		description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
 		extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`,
 		fontFaceCss
@@ -60526,14 +60879,7 @@ function rowKey(baseline, theme, visible) {
 		x: starsX + STAR_R * 2 + 5,
 		y: baseline,
 		class: "t-tick"
-	}, textNode("stars")) + el("rect", {
-		x: issuesX,
-		y: baseline - 8,
-		width: ISSUE_SIZE,
-		height: ISSUE_SIZE,
-		rx: 2,
-		fill: theme.contribRamp[3]
-	}) + el("text", {
+	}, textNode("stars")) + icon(import_lucide.CircleDot, issuesX, baseline - 3.4 - ISSUE_ICON / 2, ISSUE_ICON, theme.fgMuted) + el("text", {
 		x: right,
 		y: baseline,
 		class: "t-tick",
@@ -60573,6 +60919,8 @@ function computeRhythm(days) {
 		month[monthIndex] = (month[monthIndex] ?? 0) + day.count;
 	}
 	const activeDays = days.filter((day) => day.count > 0).length;
+	const firstActive = days.findIndex((day) => day.count > 0);
+	const spanDays = firstActive < 0 ? days.length : days.length - firstActive;
 	const busiestDay = days.reduce((best, day) => day.count > (best?.count ?? 0) ? {
 		date: day.date,
 		count: day.count
@@ -60585,7 +60933,7 @@ function computeRhythm(days) {
 		month,
 		peakWeekday: indexOfMax(weekday),
 		peakMonth: indexOfMax(month),
-		activeDayRate: days.length === 0 ? 0 : activeDays / days.length,
+		activeDayRate: spanDays === 0 ? 0 : activeDays / spanDays,
 		busiestDay,
 		weekendShare: total === 0 ? 0 : weekendSum / total
 	};
@@ -60603,11 +60951,11 @@ function computeRhythm(days) {
 * from the contribution ramp, so length and ink agree and the busiest bar is
 * the darkest without needing a second hue.
 *
-* Each bar also carries a reference tick at the trailing year's position in its
-* own panel, so the card answers "and has that changed?" without a second set
-* of bars. Both series are normalised against their own maximum: the comparison
-* is between shapes, not volumes, which is the only comparison an eleven-year
-* profile and a one-year window can honestly support.
+* Each bar also carries a dot at the trailing year's position, so the card
+* answers "and has that changed?" without a second set of bars. Both series
+* are shares of their own total on one shared axis: the comparison is between
+* shapes, not volumes, which is the only comparison an eleven-year profile and
+* a one-year window can honestly support.
 */
 const WEEKDAY_LABELS = [
 	"Mon",
@@ -60643,18 +60991,16 @@ const RIGHT_X = 391;
 const RIGHT_W = 431;
 const BAR_START_X = 60;
 const WEEKDAY_BAR_H = 10;
-const VALUE_GAP = 6;
 const WEEKDAY_MAX_LEN = 259;
 const ROW_H = 104 / WEEKDAY_LABELS.length;
 const MONTH_BAND = RIGHT_W / MONTH_LETTERS.length;
-const MONTH_BAR_W = 18;
-const MONTH_VALUE_GAP = 6;
+const MONTH_BAR_W = 14;
+const MONTH_VALUE_BASELINE = 82;
+const RING_R = 2.75;
 const MIN_BAR = 3;
-const TICK_OVERHANG = 3;
-const TICK_WIDTH = 2;
 /**
 * The comparison needs two windows that are actually different. Below this many
-* days of history the trailing year IS most of the record, and the tick would
+* days of history the trailing year IS most of the record, and the ring would
 * sit on the end of every bar telling the reader nothing.
 */
 const MIN_HISTORY_DAYS = 550;
@@ -60678,39 +61024,40 @@ function pct(share) {
 }
 /**
 * Key naming the two marks, right-aligned on `baseline`. The bars are the
-* record; the tick is where the trailing year sits in its own panel.
+* record; the ring is where the trailing year sits in its own panel.
 */
 function trailingKey(theme, baseline) {
 	const right = 822;
-	const tickCaption = "trailing year";
-	const barCaption = "all years";
-	const tickTextX = right;
-	const tickMarkX = tickTextX - measureMono(tickCaption, 9.5) - 12;
-	const barTextX = tickMarkX - 22;
-	return el("rect", {
-		x: barTextX - measureMono(barCaption, 9.5) - 16,
-		y: baseline - 8,
-		width: 12,
-		height: 8,
-		rx: 2,
-		fill: theme.contribRamp[3]
-	}) + el("text", {
+	const ringCaption = "trailing-year share";
+	const barCaption = "all-years share";
+	const ringCx = right - measureMono(ringCaption, 9.5) - 6 - RING_R;
+	const barTextX = ringCx - RING_R - 16;
+	return horizontalBar(barTextX - measureMono(barCaption, 9.5) - 18, baseline - 8, 14, 8, theme.contribRamp[3]) + el("text", {
 		x: barTextX,
 		y: baseline,
 		class: "t-tick",
 		"text-anchor": "end"
-	}, textNode(barCaption)) + el("rect", {
-		x: tickMarkX,
-		y: baseline - 11,
-		width: TICK_WIDTH,
-		height: 14,
-		fill: theme.fg
-	}) + el("text", {
-		x: tickTextX,
+	}, textNode(barCaption)) + ring(ringCx, baseline - 3, theme) + el("text", {
+		x: right,
 		y: baseline,
 		class: "t-tick",
 		"text-anchor": "end"
-	}, textNode(tickCaption));
+	}, textNode(ringCaption));
+}
+/** The trailing-year marker: a solid dot outlined in the canvas color, legible on a track and on a bar alike. */
+function ring(cx, cy, theme) {
+	return el("circle", {
+		cx,
+		cy,
+		r: RING_R,
+		fill: theme.fg,
+		stroke: theme.bg,
+		"stroke-width": 1.5
+	});
+}
+/** Each value as a share of `total`; all zero when there is nothing to share. */
+function sharesOf(values, total) {
+	return values.map((value) => total === 0 ? 0 : value / total);
 }
 /** Round a path/transform coordinate to 2 decimals — mirrors the dsl's num(). */
 function coord(value) {
@@ -60720,74 +61067,72 @@ function renderRhythm(data, theme, fontFaceCss) {
 	const rhythm = computeRhythm(data.lifetimeDays);
 	const recent = computeRhythm(data.trailing.days);
 	const comparable = data.lifetimeDays.length >= MIN_HISTORY_DAYS;
-	const recentWeekdayMax = Math.max(0, ...recent.weekday);
-	const recentMonthMax = Math.max(0, ...recent.month);
+	const weekdayShares = sharesOf(rhythm.weekday, rhythm.total);
+	const recentWeekdayShares = sharesOf(recent.weekday, recent.total);
+	const monthShares = sharesOf(rhythm.month, rhythm.total);
+	const recentMonthShares = sharesOf(recent.month, recent.total);
+	const showRecent = comparable && recent.total > 0;
+	const weekdayAxis = Math.max(0, ...weekdayShares, ...showRecent ? recentWeekdayShares : []);
+	const monthAxis = Math.max(0, ...monthShares, ...showRecent ? recentMonthShares : []);
 	const weekdayMax = Math.max(0, ...rhythm.weekday);
 	const weekdayLabels = [];
-	const weekdayValues = [];
+	const weekdayTracks = [];
 	const weekdayBars = [];
+	const weekdayMarkers = [];
 	WEEKDAY_LABELS.forEach((label, index) => {
 		const value = rhythm.weekday[index] ?? 0;
 		const rowCenter = BAND_TOP + index * ROW_H + ROW_H / 2;
-		const scaled = weekdayMax === 0 ? 0 : value / weekdayMax * WEEKDAY_MAX_LEN;
+		const top = rowCenter - WEEKDAY_BAR_H / 2;
+		const scaled = weekdayAxis === 0 ? 0 : (weekdayShares[index] ?? 0) / weekdayAxis * WEEKDAY_MAX_LEN;
 		const length = value === 0 ? 0 : Math.max(MIN_BAR, scaled);
 		weekdayLabels.push(el("text", {
-			x: 52,
+			x: 50,
 			y: rowCenter + 4,
 			class: "t-label",
 			"text-anchor": "end"
-		}, textNode(label)));
+		}, textNode(label)), el("text", {
+			x: 359,
+			y: rowCenter + 3.3,
+			class: "t-num",
+			"text-anchor": "end"
+		}, textNode(formatCompact(value))));
+		weekdayTracks.push(horizontalBar(BAR_START_X, top, WEEKDAY_MAX_LEN, WEEKDAY_BAR_H, theme.track));
 		if (length > 0) weekdayBars.push(el("g", {
 			class: "hbar",
 			style: `animation-delay:${index * 55}ms;transform-origin:${coord(BAR_START_X)}px ${coord(rowCenter)}px`
-		}, horizontalBar(BAR_START_X, rowCenter - WEEKDAY_BAR_H / 2, length, WEEKDAY_BAR_H, barFill(theme, value, weekdayMax))));
-		if (comparable && recentWeekdayMax > 0) {
-			const share = (recent.weekday[index] ?? 0) / recentWeekdayMax;
-			weekdayLabels.push(el("rect", {
-				x: BAR_START_X + share * WEEKDAY_MAX_LEN - TICK_WIDTH / 2,
-				y: rowCenter - WEEKDAY_BAR_H / 2 - TICK_OVERHANG,
-				width: TICK_WIDTH,
-				height: 16,
-				fill: theme.fg
-			}));
+		}, horizontalBar(BAR_START_X, top, length, WEEKDAY_BAR_H, barPaint(theme, barFill(theme, value, weekdayMax), "x", length))));
+		if (showRecent && weekdayAxis > 0) {
+			const share = (recentWeekdayShares[index] ?? 0) / weekdayAxis;
+			weekdayMarkers.push(ring(BAR_START_X + share * WEEKDAY_MAX_LEN, rowCenter, theme));
 		}
-		weekdayValues.push(el("text", {
-			x: BAR_START_X + length + VALUE_GAP,
-			y: rowCenter + 3.3,
-			class: "t-tick"
-		}, textNode(formatCompact(value))));
 	});
 	const monthMax = Math.max(0, ...rhythm.month);
+	const monthTracks = [];
 	const monthBars = [];
-	const monthTicks = [];
+	const monthMarkers = [];
+	const monthLabels = [];
 	MONTH_LETTERS.forEach((letter, index) => {
 		const value = rhythm.month[index] ?? 0;
 		const center = RIGHT_X + index * MONTH_BAND + MONTH_BAND / 2;
-		const scaled = monthMax === 0 ? 0 : value / monthMax * MONTH_MAX_HEIGHT;
+		const left = center - MONTH_BAR_W / 2;
+		const scaled = monthAxis === 0 ? 0 : (monthShares[index] ?? 0) / monthAxis * MONTH_MAX_HEIGHT;
 		const height = value === 0 ? 0 : Math.max(MIN_BAR, scaled);
-		if (height > 0) {
-			monthBars.push(el("g", {
-				class: "vbar",
-				style: `animation-delay:${index * 40}ms;transform-origin:${coord(center)}px ${coord(BASELINE_Y)}px`
-			}, verticalBar(center - MONTH_BAR_W / 2, BASELINE_Y, MONTH_BAR_W, height, barFill(theme, value, monthMax))));
-			monthTicks.push(el("text", {
-				x: center,
-				y: BASELINE_Y - height - MONTH_VALUE_GAP,
-				class: "t-tick",
-				"text-anchor": "middle"
-			}, textNode(formatCompact(value))));
+		monthTracks.push(verticalBar(left, BASELINE_Y, MONTH_BAR_W, MONTH_MAX_HEIGHT, theme.track));
+		if (height > 0) monthBars.push(el("g", {
+			class: "vbar",
+			style: `animation-delay:${index * 40}ms;transform-origin:${coord(center)}px ${coord(BASELINE_Y)}px`
+		}, verticalBar(left, BASELINE_Y, MONTH_BAR_W, height, barPaint(theme, barFill(theme, value, monthMax), "y", height))));
+		if (showRecent && monthAxis > 0) {
+			const share = (recentMonthShares[index] ?? 0) / monthAxis;
+			const cy = Math.min(190.25, Math.max(93.75, BASELINE_Y - share * MONTH_MAX_HEIGHT));
+			monthMarkers.push(ring(center, cy, theme));
 		}
-		if (comparable && recentMonthMax > 0) {
-			const share = (recent.month[index] ?? 0) / recentMonthMax;
-			monthTicks.push(el("rect", {
-				x: center - MONTH_BAR_W / 2 - TICK_OVERHANG,
-				y: BASELINE_Y - share * MONTH_MAX_HEIGHT - TICK_WIDTH / 2,
-				width: 24,
-				height: TICK_WIDTH,
-				fill: theme.fg
-			}));
-		}
-		monthTicks.push(el("text", {
+		monthLabels.push(el("text", {
+			x: center,
+			y: MONTH_VALUE_BASELINE,
+			class: "t-num",
+			"text-anchor": "middle"
+		}, textNode(formatCompact(value))), el("text", {
 			x: center,
 			y: MONTH_TICK_BASELINE,
 			class: "t-tick",
@@ -60803,29 +61148,13 @@ function renderRhythm(data, theme, fontFaceCss) {
 		y: EYEBROW_BASELINE,
 		class: "t-mono"
 	}, textNode("BY MONTH"));
-	const weekdayAxis = el("line", {
-		x1: 59.5,
-		y1: BAND_TOP,
-		x2: 59.5,
-		y2: BASELINE_Y,
-		stroke: theme.border,
-		"stroke-width": 1
-	});
-	const monthBaseline = el("line", {
-		x1: RIGHT_X,
-		y1: 194.5,
-		x2: 822,
-		y2: 194.5,
-		stroke: theme.border,
-		"stroke-width": 1
-	});
 	const footerParts = [
-		el("tspan", { class: "t-stat" }, textNode(formatCompact(rhythm.total))),
+		el("tspan", { class: "t-stat" }, textNode(formatInt(rhythm.total))),
 		textNode(" contributions · "),
 		el("tspan", { class: "t-stat" }, textNode(`${Math.round(rhythm.activeDayRate * 100)}%`)),
 		textNode(" active days")
 	];
-	if (rhythm.busiestDay !== void 0) footerParts.push(textNode(" · busiest "), el("tspan", { class: "t-stat" }, textNode(rhythm.busiestDay.date)), textNode(` (${rhythm.busiestDay.count})`));
+	if (rhythm.busiestDay !== void 0) footerParts.push(textNode(" · busiest "), el("tspan", { class: "t-stat" }, textNode(formatDate(rhythm.busiestDay.date, true))), textNode(` (${rhythm.busiestDay.count})`));
 	footerParts.push(textNode(" · "), el("tspan", { class: "t-stat" }, textNode(pct(rhythm.weekendShare))));
 	if (comparable) footerParts.push(textNode(" → "), el("tspan", { class: "t-stat" }, textNode(pct(recent.weekendShare))));
 	footerParts.push(textNode(" on weekends"));
@@ -60840,11 +61169,11 @@ function renderRhythm(data, theme, fontFaceCss) {
 		icon: import_lucide.ChartColumn,
 		height: 262,
 		title: "Activity rhythm",
-		note: comparable ? "all contribution types · all years vs trailing year" : "all contribution types · all years",
+		note: comparable ? "all contribution types · share of all years vs trailing year" : "all contribution types · all years",
 		description: `Activity rhythm for ${data.login}: contributions by weekday and by month of year, busiest on ${WEEKDAY_LABELS[rhythm.peakWeekday] ?? "Mon"} and in ${MONTH_NAMES[rhythm.peakMonth] ?? "January"}.`,
 		extraCss: ".hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}.vbar{opacity:0;animation:grow .55s cubic-bezier(.2,.7,.3,1) forwards}",
 		fontFaceCss
-	}, el("g", { class: "fade" }, eyebrows, key, weekdayAxis, monthBaseline, ...weekdayLabels, ...weekdayValues, ...monthTicks, footer), ...weekdayBars, ...monthBars);
+	}, el("g", { class: "fade" }, eyebrows, key, ...weekdayTracks, ...monthTracks, ...weekdayLabels, ...monthLabels, footer), ...weekdayBars, ...monthBars, el("g", { class: "fade" }, ...weekdayMarkers, ...monthMarkers));
 }
 //#endregion
 //#region src/cards.ts

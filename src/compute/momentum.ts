@@ -96,10 +96,15 @@ export function computeMomentum(days: readonly DayContribution[], years: readonl
     undefined
   );
 
+  // The calendar starts each year on January 1 whether or not anything
+  // happened, so the first day IN the series is not the first day OF the work.
+  const since = days.find((day) => day.count > 0)?.date ?? first;
+
   // Only fully covered years can be compared. Both ends of a history are
   // partial unless they happen to fall on a year boundary, and a partial year
-  // wins "quietest" on length alone.
-  const firstComplete = first.slice(5) === '01-01' ? Number(first.slice(0, 4)) : Number(first.slice(0, 4)) + 1;
+  // wins "quietest" on length alone. The history starts at the first active
+  // day: the padded months before it would make the first year look complete.
+  const firstComplete = since.slice(5) === '01-01' ? Number(since.slice(0, 4)) : Number(since.slice(0, 4)) + 1;
   const lastComplete = last.slice(5) === '12-31' ? Number(last.slice(0, 4)) : Number(last.slice(0, 4)) - 1;
   const quietestYear = years
     .filter((year) => year.year >= firstComplete && year.year <= lastComplete)
@@ -107,10 +112,6 @@ export function computeMomentum(days: readonly DayContribution[], years: readonl
       (best, year) => (best === undefined || year.total < best.total ? { year: year.year, total: year.total } : best),
       undefined
     );
-
-  // The calendar starts each year on January 1 whether or not anything
-  // happened, so the first day IN the series is not the first day OF the work.
-  const since = days.find((day) => day.count > 0)?.date ?? first;
 
   return { points, peak, current: points.at(-1), since, lifetimeTotal, quietestYear };
 }

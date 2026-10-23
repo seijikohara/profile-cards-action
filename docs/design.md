@@ -539,3 +539,69 @@ as a minor release (v1.15.0).
   "C++" normalizes to C. Unlisted languages keep the dot. The simple-icons
   index moved to `src/svg/brands.ts`, shared with the badges, and a test fails
   if an upstream release drops a curated slug.
+
+## Addendum (2026-10-23): depth effects and a design review pass (v1.16.0)
+
+The owner asked for gradients, translucency, glow, and shadow, with a warning
+that overuse looks cheap and costs legibility. A first prototype applied them
+broadly; a review by three designer lenses (hierarchy and type, data
+visualization, contemporary polish) then cut the set back to what earns its
+place. Every number the cards showed is still shown.
+
+- **The effect budget.** Each mark type gets at most one effect, and only
+  where it says something. Glow belongs to the dark theme, where light reads
+  as emphasis; on white the same blur reads as a smudge, so the light theme
+  gets shadow instead.
+  - Bars fade from their base toward the canvas along OKLCH lightness (+0.07
+    light, −0.08 dark), never closer to the track than 0.10, and only when
+    longer than 48px: the fade spans the bar's own box, so on a short bar it
+    compressed into a blotch.
+  - Light-theme stat tiles carry a two-layer shadow and no hairline; dark
+    tiles carry the hairline and no shadow. Fill, hairline, and shadow
+    together read as three borders.
+  - The momentum line glows in dark only, softly (stroke-opacity 0.28).
+  - The 3D calendar stands on an 8px slab with a contact shadow (light) or a
+    faint ink glow (dark).
+  - The card's corner glow is dark-only and halved; on white it tinted every
+    card away from the page color it is meant to match.
+  - Removed after review: gradient text on the momentum value (an
+    out-of-contract hue on a quantity; the `inkAlt` token went with it) and
+    the treemap foot shade (it muddied the linguist colors that key the list).
+- **Values look like values.** A `.t-num` class (Roboto Mono 10.5px, `fg`)
+  now sets every printed data value; `.t-tick` (muted) is left to axes and
+  categories. `formatCompact` always prints one decimal below 100 of a unit
+  ("2.0k", "11.6k"): mixing "2k" with "1.9k" read as two precisions, and
+  "12k" for 11,581 overstated by 4%. Footers and legends with room use exact
+  integers.
+- **One "empty" color.** A `track` token, a step further from the canvas than
+  `bgInset`, now draws bar tracks and zero-count cadence dots; `bgInset` was
+  close enough to the canvas to read as "nothing drawn".
+- **Bar ends.** `horizontalBar` / `verticalBar` cap the end radius at 6px, so
+  wide bars no longer turn into domes.
+- **Rhythm, rebuilt.** Bars sit in tracks with a square baseline and a rounded
+  data end, and the trailing year is a dot. Both series are now shares of
+  their own total on one shared axis; before, each was normalised to its own
+  maximum yet drawn on the same track, which made a dot left of its bar read
+  as a decline it was not.
+- **3D calendar.** Day columns are inset into separate blocks, faces shade
+  along OKLCH lightness (gentler in dark so level-1 edges stay above the
+  slab), the busiest day carries a "PEAK n · date" callout whose headroom is
+  added only when the peak sits near the back, and Mon / Wed / Fri label the
+  right edge.
+- **Names and keys.** The profile's own login is dropped from repository
+  names (foreign owners stay), so names no longer truncate. Issues opened per
+  repository became a glyph and a count. Portfolio's note says commits and
+  pushes count every author, and its key names the recency thresholds. The
+  overview note keeps `@login` in its own case.
+- **Overview.** Tiles with a yearly series share the first row, which removes
+  an empty sparkline band from the second. The year-to-date change is signed
+  ("+804% YTD") and sits on the value line when it fits. A sparkline's last
+  point, a period still in progress, is dashed with a hollow dot.
+- **Start-date bugs.** The calendar series starts on January 1 of the first
+  year, so "quietest year" picked a two-month 2014, the history wall drew
+  January–October 2014 as idle, and the active-day rate counted those days.
+  All three now start at the first contribution.
+- **Deferred:** deck-wide spacing normalisation, a summary line for the
+  history card, a "repositories created" segment for composition (needs API
+  verification), an earlier-high annotation on momentum, and a lighter
+  Private grey (a contrast trade-off for the owner to decide).

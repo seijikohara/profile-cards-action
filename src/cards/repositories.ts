@@ -9,14 +9,16 @@
  * as the calendar cards instead of singling the leader out in a second hue.
  */
 
-import { FolderGit2 } from 'lucide';
+import { CircleDot, FolderGit2 } from 'lucide';
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeRepositories } from '../compute/repositories.js';
 import { range } from '../iter.js';
 import type { ProfileData } from '../model.js';
 import { horizontalBar } from '../svg/bars.js';
+import { barPaint } from '../svg/effects.js';
 import { el, num, textNode } from '../svg/dsl.js';
-import { formatCompact, measureMono } from '../svg/text.js';
+import { icon } from '../svg/icons.js';
+import { formatCompact, formatInt, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 import { languageMark } from './language-mark.js';
@@ -28,15 +30,15 @@ const BAND_TOP = 62;
 const ROW_H = 30;
 const BAR_H = 12;
 
-// Horizontal geometry: rank, language dot, name, stars, issues, then bars from
-// a shared axis.
+// Horizontal geometry: rank, language mark, name, then a two-column numeric
+// block (stars, issues) and the bars from a shared axis.
 const RANK_X = CARD_PADDING + 12; // right edge of the rank column
 const DOT_CX = CARD_PADDING + 25;
 const MARK_SIZE = 13;
 const LABEL_X = CARD_PADDING + 36;
-const STARS_RIGHT = CARD_PADDING + 316; // right edge of the star count
-const ISSUE_X = CARD_PADDING + 328;
-const ISSUE_SIZE = 10;
+const STARS_RIGHT = CARD_PADDING + 290; // right edge of the star count
+const ISSUES_RIGHT = CARD_PADDING + 336; // right edge of the issue count
+const ISSUE_ICON = 10;
 const BAR_START_X = CARD_PADDING + 352;
 const VALUE_GAP = 8;
 const BAR_MAX_LEN = CARD_WIDTH - CARD_PADDING - BAR_START_X - 86; // leaves room for "412 / 1,208"
@@ -44,6 +46,7 @@ const BAR_MAX_LEN = CARD_WIDTH - CARD_PADDING - BAR_START_X - 86; // leaves room
 const MIN_BAR = 3; // keep a tiny non-zero value visible
 const MAX_NAME = 36;
 const TICK_SIZE = 9.5;
+const NUM_SIZE = 10.5; // .t-num font-size, for measuring the counts
 const STAR_R = 4.6;
 
 /**
@@ -64,16 +67,30 @@ function star(cx: number, cy: number, radius: number, fill: string): string {
 function starCount(stars: number, right: number, baseline: number, theme: Theme): string {
   if (stars <= 0) return '';
   const label = formatCompact(stars);
-  const labelWidth = measureMono(label, TICK_SIZE);
+  const labelWidth = measureMono(label, NUM_SIZE);
   return (
     star(right - labelWidth - 4 - STAR_R, baseline - 3.4, STAR_R, theme.fgMuted) +
-    el('text', { x: right, y: baseline, class: 't-tick', 'text-anchor': 'end' }, textNode(label))
+    el('text', { x: right, y: baseline, class: 't-num', 'text-anchor': 'end' }, textNode(label))
+  );
+}
+
+/**
+ * Issues opened in the window, as a glyph and a count right-aligned at
+ * `right`; empty when there were none, the same way stars are. A count says
+ * how many; a shaded square could only say "some" or "more".
+ */
+function issueCount(issues: number, right: number, baseline: number, theme: Theme): string {
+  if (issues <= 0) return '';
+  const label = formatCompact(issues);
+  const labelWidth = measureMono(label, NUM_SIZE);
+  return (
+    icon(CircleDot, right - labelWidth - 4 - ISSUE_ICON, baseline - 3.4 - ISSUE_ICON / 2, ISSUE_ICON, theme.fgMuted) +
+    el('text', { x: right, y: baseline, class: 't-num', 'text-anchor': 'end' }, textNode(label))
   );
 }
 
 export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss: string): string {
   const ranking = computeRepositories(data.topRepositories);
-  const issueMax = Math.max(0, ...ranking.rows.map((row) => row.issues));
   // The bullet track is scaled to the deepest history on the card, so a bar's
   // share of its own track reads directly as "how much of this repository's
   // history is recent".
@@ -97,29 +114,13 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
       el(
         'text',
         { x: LABEL_X, y: rowCenter + 4, class: 't-label' },
-        ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME)
+        ...repoLabelSpans(row.nameWithOwner, theme.fg, MAX_NAME, data.login)
       ),
       starCount(row.stars, STARS_RIGHT, rowCenter + 3.3, theme),
-      // Issues opened here in the same window: a second contribution type in
-      // one 10px cell, ramped like everything else that carries a quantity.
-      el('rect', {
-        x: ISSUE_X,
-        y: rowCenter - ISSUE_SIZE / 2,
-        width: ISSUE_SIZE,
-        height: ISSUE_SIZE,
-        rx: 2,
-        fill: row.issues === 0 ? theme.bgInset : barFill(theme, row.issues, issueMax),
-      }),
-      trackLength <= length
-        ? ''
-        : el('rect', {
-            x: BAR_START_X,
-            y: rowCenter - BAR_H / 2,
-            width: trackLength,
-            height: BAR_H,
-            rx: BAR_H / 2,
-            fill: theme.bgInset,
-          })
+      // Issues opened here in the same window: a second contribution type,
+      // counted beside the stars.
+      issueCount(row.issues, ISSUES_RIGHT, rowCenter + 3.3, theme),
+      trackLength <= length ? '' : horizontalBar(BAR_START_X, rowCenter - BAR_H / 2, trackLength, BAR_H, theme.track)
     );
     bars.push(
       el(
@@ -128,13 +129,19 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
           class: 'hbar',
           style: `animation-delay:${index * 55}ms;transform-origin:${BAR_START_X}px ${rowCenter}px`,
         },
-        horizontalBar(BAR_START_X, rowCenter - BAR_H / 2, length, BAR_H, barFill(theme, row.commits, ranking.max))
+        horizontalBar(
+          BAR_START_X,
+          rowCenter - BAR_H / 2,
+          length,
+          BAR_H,
+          barPaint(theme, barFill(theme, row.commits, ranking.max), 'x', length)
+        )
       )
     );
     values.push(
       el(
         'text',
-        { x: BAR_START_X + Math.max(length, trackLength) + VALUE_GAP, y: rowCenter + 3.3, class: 't-tick' },
+        { x: BAR_START_X + Math.max(length, trackLength) + VALUE_GAP, y: rowCenter + 3.3, class: 't-num' },
         textNode(
           row.lifetimeCommits > row.commits
             ? `${formatCompact(row.commits)} / ${formatCompact(row.lifetimeCommits)}`
@@ -162,7 +169,7 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
   // large — and when the cut bites, that it did.
   const scope = data.trailingCommits;
   const footerParts: string[] = [
-    el('tspan', { class: 't-stat' }, textNode(formatCompact(scope.total))),
+    el('tspan', { class: 't-stat' }, textNode(formatInt(scope.total))),
     textNode(' commits across '),
     el('tspan', { class: 't-stat' }, textNode(String(scope.repositories))),
     textNode(' repositories'),
@@ -205,7 +212,7 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
       icon: FolderGit2,
       height,
       title: 'Top repositories',
-      note: 'trailing 12 months · by commits · bars over lifetime',
+      note: 'by commits · bar past 12 months · track all time',
       description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
       extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`,
       fontFaceCss,
@@ -219,7 +226,7 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
 function rowKey(baseline: number, theme: Theme, visible: boolean): string {
   if (!visible) return '';
   const right = CARD_WIDTH - CARD_PADDING;
-  const issuesWidth = ISSUE_SIZE + 5 + measureMono('issues opened', TICK_SIZE);
+  const issuesWidth = ISSUE_ICON + 5 + measureMono('issues opened', TICK_SIZE);
   const starsWidth = STAR_R * 2 + 5 + measureMono('stars', TICK_SIZE);
   const languageWidth = 9 + 5 + measureMono('primary language', TICK_SIZE);
   const issuesX = right - issuesWidth;
@@ -230,14 +237,7 @@ function rowKey(baseline: number, theme: Theme, visible: boolean): string {
     el('text', { x: languageX + 14, y: baseline, class: 't-tick' }, textNode('primary language')) +
     star(starsX + STAR_R, baseline - 3.4, STAR_R, theme.fgMuted) +
     el('text', { x: starsX + STAR_R * 2 + 5, y: baseline, class: 't-tick' }, textNode('stars')) +
-    el('rect', {
-      x: issuesX,
-      y: baseline - 8,
-      width: ISSUE_SIZE,
-      height: ISSUE_SIZE,
-      rx: 2,
-      fill: theme.contribRamp[3],
-    }) +
+    icon(CircleDot, issuesX, baseline - 3.4 - ISSUE_ICON / 2, ISSUE_ICON, theme.fgMuted) +
     el('text', { x: right, y: baseline, class: 't-tick', 'text-anchor': 'end' }, textNode('issues opened'))
   );
 }

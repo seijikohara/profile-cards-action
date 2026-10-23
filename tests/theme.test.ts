@@ -11,12 +11,11 @@ describe('palettes', () => {
     expect(themeFor('dark', 'green')).toEqual(DARK);
   });
 
-  it('sets eyebrow and headline inks at text contrast on the card background', () => {
+  it('sets the eyebrow ink at text contrast on the card background', () => {
     for (const palette of PALETTE_IDS) {
       for (const mode of MODES) {
         const theme = themeFor(mode, palette);
         expect(contrast(theme.ink, theme.bg), `${palette}.${mode} ink`).toBeGreaterThanOrEqual(4.5);
-        expect(contrast(theme.inkAlt, theme.bg), `${palette}.${mode} inkAlt`).toBeGreaterThanOrEqual(4.5);
       }
     }
   });

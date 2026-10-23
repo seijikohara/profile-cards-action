@@ -60,6 +60,9 @@ export function computeRhythm(days: readonly DayContribution[]): RhythmData {
   }
 
   const activeDays = days.filter((day) => day.count > 0).length;
+  // Days before the first contribution are calendar padding, not idle days.
+  const firstActive = days.findIndex((day) => day.count > 0);
+  const spanDays = firstActive < 0 ? days.length : days.length - firstActive;
   const busiestDay = days.reduce<RhythmData['busiestDay']>(
     (best, day) => (day.count > (best?.count ?? 0) ? { date: day.date, count: day.count } : best),
     undefined
@@ -74,7 +77,7 @@ export function computeRhythm(days: readonly DayContribution[]): RhythmData {
     month,
     peakWeekday: indexOfMax(weekday),
     peakMonth: indexOfMax(month),
-    activeDayRate: days.length === 0 ? 0 : activeDays / days.length,
+    activeDayRate: spanDays === 0 ? 0 : activeDays / spanDays,
     busiestDay,
     weekendShare: total === 0 ? 0 : weekendSum / total,
   };

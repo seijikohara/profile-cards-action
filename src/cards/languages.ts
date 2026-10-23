@@ -121,7 +121,7 @@ export function renderLanguages(
     const share = shares[rect.index];
     if (share === undefined) return '';
     const fill = cellFill(share, theme);
-    const rectEl = el('rect', {
+    const geometry = {
       x: rect.x + 1,
       y: rect.y + 1,
       width: Math.max(0, rect.width - 2),
@@ -129,8 +129,10 @@ export function renderLanguages(
       // Rounder than a hairline gap alone, but capped by the cell so a sliver
       // stays a rectangle instead of collapsing into a pill.
       rx: Math.max(0, Math.min(6, (rect.width - 2) / 4, (rect.height - 2) / 4)),
-      fill,
-    });
+    };
+    // Flat on purpose: the fill is the language's own color, and a shade would
+    // turn the gold, violet, and peach of the key into brown, grey, and tan.
+    const rectEl = el('rect', { ...geometry, fill });
 
     return el('g', { class: `fade c${rect.index}` }, rectEl, cellLabel(share, rect, fill));
   });
@@ -148,11 +150,11 @@ export function renderLanguages(
       // is the cheapest corrective to bytes-on-disk as a measure of effort.
       el(
         'text',
-        { x: LIST_REPOS_RIGHT, y, class: 't-tick', 'text-anchor': 'end' },
+        { x: LIST_REPOS_RIGHT, y, class: 't-num', 'text-anchor': 'end' },
         textNode(share.repos === 0 ? '—' : String(share.repos))
       ),
-      el('text', { x: LIST_BYTES_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(formatBytes(share.bytes))),
-      el('text', { x: LIST_PCT_RIGHT, y, class: 't-tick', 'text-anchor': 'end' }, textNode(pctLabel(share)))
+      el('text', { x: LIST_BYTES_RIGHT, y, class: 't-num', 'text-anchor': 'end' }, textNode(formatBytes(share.bytes))),
+      el('text', { x: LIST_PCT_RIGHT, y, class: 't-num', 'text-anchor': 'end' }, textNode(pctLabel(share)))
     );
   });
 

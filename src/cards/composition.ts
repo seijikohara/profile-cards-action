@@ -14,7 +14,7 @@ import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeComposition } from '../compute/composition.js';
 import type { ProfileData } from '../model.js';
 import { el, num, textNode } from '../svg/dsl.js';
-import { formatCompact, measureSans } from '../svg/text.js';
+import { formatInt, measureSans } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 import { privacyNote } from './legend.js';
@@ -129,13 +129,13 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
     const cx = CARD_PADDING + i * band + band / 2;
     const barTop = baseline - (maxSum === 0 ? 0 : (year.sum / maxSum) * MAX_BAR_HEIGHT);
     return [
-      el('text', { x: cx, y: barTop - 6, class: 't-tick', 'text-anchor': 'middle' }, textNode(formatCompact(year.sum))),
+      el('text', { x: cx, y: barTop - 6, class: 't-num', 'text-anchor': 'middle' }, textNode(formatInt(year.sum))),
     ];
   });
 
   // Legend packed left-to-right by measured label width, on one row.
   // Legend packed left-to-right by measured caption width.
-  const captions = SERIES.map((series) => `${series.label} · ${formatCompact(typeTotals[series.index])}`);
+  const captions = SERIES.map((series) => `${series.label} · ${formatInt(typeTotals[series.index])}`);
   const legendXs = SERIES.map((_, i) =>
     captions.slice(0, i).reduce((x, caption) => x + 16 + measureSans(caption, 12) + 20, CARD_PADDING)
   );
