@@ -1,8 +1,14 @@
 /** Read and validate the action's inputs into a typed configuration object. */
 
 import * as core from '@actions/core';
-import type { LegendStyle } from './cards.js';
-import { DEFAULT_COMMIT_SWEEP_LIMIT, DEFAULT_LANGUAGE_LIMIT, DEFAULT_LEGEND, DEFAULT_PALETTE } from './config.js';
+import type { CardLayout, LegendStyle } from './cards.js';
+import {
+  DEFAULT_COMMIT_SWEEP_LIMIT,
+  DEFAULT_LANGUAGE_LIMIT,
+  DEFAULT_LAYOUT,
+  DEFAULT_LEGEND,
+  DEFAULT_PALETTE,
+} from './config.js';
 import { PALETTE_IDS, type PaletteId } from './theme.js';
 
 /** Theme identifier accepted by the `themes` input. */
@@ -15,6 +21,8 @@ export interface ActionInputs {
   readonly username: string;
   /** Cards to render, in request order, deduped and validated. */
   readonly cards: readonly string[];
+  /** One SVG per card, or every card stacked into one SVG per theme in `cards` order. */
+  readonly layout: CardLayout;
   readonly outputDir: string;
   /** Themes to render, deduped and validated. */
   readonly themeIds: readonly ('light' | 'dark')[];
@@ -142,6 +150,19 @@ function parseCommitSweepLimit(raw: string): number {
   return value;
 }
 
+const LAYOUTS: readonly CardLayout[] = ['split', 'combined'];
+
+/** Parse `layout`: one of the known layouts, or the default when empty. */
+function parseLayout(raw: string): CardLayout {
+  const value = raw.trim().toLowerCase();
+  if (value === '') return DEFAULT_LAYOUT;
+  const layout = LAYOUTS.find((id) => id === value);
+  if (layout === undefined) {
+    throw new Error(`Unknown layout "${value}". Valid: ${LAYOUTS.join(', ')}.`);
+  }
+  return layout;
+}
+
 const LEGEND_STYLES: readonly LegendStyle[] = ['ramp', 'scale'];
 
 /** Parse `legend`: one of the known styles, or the default when empty. */
@@ -177,6 +198,7 @@ export function readInputs(): ActionInputs {
   const token = core.getInput('github-token', { required: true });
   const username = resolveUsername(core.getInput('username'));
   const cards = parseCards(core.getInput('cards'));
+  const layout = parseLayout(core.getInput('layout'));
   const outputDir = core.getInput('output-dir').trim() || DEFAULT_OUTPUT_DIR;
   const themeIds = parseThemes(core.getInput('themes'));
   const palette = parsePalette(core.getInput('palette'));
@@ -196,6 +218,7 @@ export function readInputs(): ActionInputs {
     token,
     username,
     cards,
+    layout,
     outputDir,
     themeIds,
     palette,

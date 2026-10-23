@@ -20,7 +20,7 @@ import { el, num, textNode } from '../svg/dsl.js';
 import { icon } from '../svg/icons.js';
 import { formatCompact, formatInt, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
-import { cardFrame } from './frame.js';
+import { type Card, cardFrame } from './frame.js';
 import { languageMark } from './language-mark.js';
 import { repoLabelSpans, truncate } from './labels.js';
 import { barFill } from './legend.js';
@@ -89,7 +89,7 @@ function issueCount(issues: number, right: number, baseline: number, theme: Them
   );
 }
 
-export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss: string): string {
+export function renderRepositories(data: ProfileData, theme: Theme): Card {
   const ranking = computeRepositories(data.topRepositories);
   // The bullet track is scaled to the deepest history on the card, so a bar's
   // share of its own track reads directly as "how much of this repository's
@@ -215,7 +215,6 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
       note: 'by commits · bar past 12 months · track all time',
       description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
       extraCss: `.hbar{opacity:0;animation:growX .55s cubic-bezier(.2,.7,.3,1) forwards}`,
-      fontFaceCss,
     },
     el('g', { class: 'fade' }, axis, ...labels, ...values, empty, footer, key, popularLine),
     ...bars

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cardSvg } from '../src/cards/frame.js';
 import { renderOverview } from '../src/cards/overview.js';
 import type { ProfileData } from '../src/model.js';
 import { deltaTriangle, sparkline } from '../src/svg/spark.js';
@@ -46,18 +47,18 @@ describe('renderOverview trends', () => {
   const data: ProfileData = makeFixture();
 
   it('compares year to date against the same window a year back', () => {
-    const svg = renderOverview(data, LIGHT, '');
+    const svg = cardSvg(renderOverview(data, LIGHT), '');
     expect(svg).toMatch(/\d+% YTD/);
   });
 
   it('withholds the whole trend band when there are too few years', () => {
     const short: ProfileData = { ...data, years: data.years.slice(-3) };
-    const svg = renderOverview(short, LIGHT, '');
+    const svg = cardSvg(renderOverview(short, LIGHT), '');
     expect(svg).not.toContain('YTD');
   });
 
   it('keeps each row even and gives the sparkline band only to the row that uses it', () => {
-    const svg = renderOverview(data, LIGHT, '');
+    const svg = cardSvg(renderOverview(data, LIGHT), '');
     // The tiles are the only rects painted on the inset background.
     const heights = [...svg.matchAll(new RegExp(`<rect [^>]*height="([\\d.]+)"[^>]*fill="${LIGHT.bgInset}"`, 'g'))].map(
       (match) => Number(match[1])

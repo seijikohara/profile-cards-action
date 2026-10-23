@@ -13,9 +13,18 @@ inputs:
     required: false
     default: ''
   cards:
-    description: 'Cards to render (comma/space/newline separated).'
+    description: >-
+      Cards to render (comma/space/newline separated). With `layout: combined`,
+      this order is the order the cards stack in.
     required: false
     default: 'overview,momentum,contributions,lifetime,composition,rhythm,cadence,repositories,portfolio,languages'
+  layout:
+    description: >-
+      "split" writes one SVG per card and theme (<card>.<theme>.svg).
+      "combined" stacks every card into one SVG per theme (cards.<theme>.svg),
+      separated by hairlines, with the fonts embedded once.
+    required: false
+    default: 'split'
   output-dir:
     description: 'Directory to write card SVGs into.'
     required: false

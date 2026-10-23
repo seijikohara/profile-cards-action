@@ -19,7 +19,7 @@ import { el, num, textNode } from '../svg/dsl.js';
 import { GROUND } from '../svg/effects.js';
 import { formatDate, formatDateRange, formatInt, formatUtcTimestamp } from '../svg/text.js';
 import { shiftLightness, type Theme } from '../theme.js';
-import { cardFrame, tileRow, type TileSpec } from './frame.js';
+import { type Card, cardFrame, tileRow, type TileSpec } from './frame.js';
 import { privacyNote, rampLegend, RAMP_SCALE_ROW } from './legend.js';
 
 // Axonometric tile: 24px wide, 8px tall footprint (3:1 — flatter than true
@@ -99,9 +99,8 @@ export function renderContributions(
   data: ProfileData,
   streaks: Streaks,
   theme: Theme,
-  fontFaceCss: string,
   legendStyle: LegendStyle = DEFAULT_LEGEND
-): string {
+): Card {
   const weeks = toWeeks(data.trailing.days);
   const weekCount = weeks.length;
   const maxCount = Math.max(1, ...data.trailing.days.map((day) => day.count));
@@ -291,7 +290,6 @@ export function renderContributions(
       note: `past 12 months · streaks over all years · ${privacyNote(data.trailing.includesPrivate)}`,
       description: `Contribution activity for ${data.login}: ${formatInt(data.trailing.total)} contributions in the past 12 months, current streak ${formatInt(streaks.current)} days, longest streak ${formatInt(streaks.longest)} days.`,
       extraCss: `.iso{opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}`,
-      fontFaceCss,
     },
     el('g', { class: 'fade' }, tilesSvg),
     el('g', { class: 'fade' }, groundShadow, slab),

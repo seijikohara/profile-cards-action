@@ -1,11 +1,11 @@
 /** Render every card in both themes and assert the shared SVG contract. */
 
 import { describe, expect, it } from 'vitest';
-import { renderCard } from '../src/cards.js';
+import { renderCard, renderCombined } from '../src/cards.js';
 import { computeStreaks } from '../src/compute/streaks.js';
 import { resolveFonts } from '../src/fonts.js';
 import type { ProfileData, Streaks } from '../src/model.js';
-import { DARK, LIGHT, PALETTE_IDS, THEMES, themeFor } from '../src/theme.js';
+import { DARK, LIGHT, PALETTE_IDS, THEMES, type Theme, themeFor } from '../src/theme.js';
 import { makeFixture } from './fixture.js';
 import { assertWellFormed } from './xml.js';
 
@@ -153,6 +153,84 @@ describe('card rendering', () => {
       expect(svg, name).toContain(name);
     }
     expect(svg).toContain('%');
+  });
+});
+
+/** Height a standalone document declares in its viewBox. */
+function heightOf(svg: string): number {
+  return Number(/viewBox="0 0 846 ([\d.]+)"/.exec(svg)?.[1]);
+}
+
+/** Every eyebrow title in document order. */
+function eyebrowsOf(svg: string): string[] {
+  return [...svg.matchAll(/class="t-title">([^<]*)</g)].map((match) => match[1] ?? '');
+}
+
+/** The hairlines drawn between neighbouring cards. */
+function hairlinesOf(svg: string, theme: Theme): string[] {
+  return [
+    ...svg.matchAll(new RegExp(`<rect x="24" y="[\\d.]+" width="798" height="1" fill="${theme.borderMuted}"/>`, 'g')),
+  ].map((match) => match[0]);
+}
+
+describe('combined layout', () => {
+  it('stacks every card into one well-formed document as tall as the cards together', () => {
+    for (const theme of THEMES) {
+      const svg = renderCombined(CARDS, data, streaks, theme, fontFaceCss);
+      assertWellFormed(svg);
+      const height = CARDS.reduce(
+        (sum, card) => sum + heightOf(renderCard(card, data, streaks, theme, fontFaceCss)),
+        0
+      );
+      expect(svg.startsWith(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 846 ${height}"`), theme.id).toBe(
+        true
+      );
+    }
+  });
+
+  it('stacks the cards in the order requested', () => {
+    const order = ['languages', 'overview', 'rhythm'];
+    const svg = renderCombined(order, data, streaks, LIGHT, fontFaceCss);
+    expect(eyebrowsOf(svg)).toEqual(
+      order.flatMap((card) => eyebrowsOf(renderCard(card, data, streaks, LIGHT, fontFaceCss)))
+    );
+  });
+
+  it('embeds the fonts and definitions once', () => {
+    const single = renderCard('overview', data, streaks, DARK, fontFaceCss);
+    const svg = renderCombined(CARDS, data, streaks, DARK, fontFaceCss);
+    expect(svg.split('@font-face').length).toBe(single.split('@font-face').length);
+    // A repeated id resolves to whichever copy comes first, so the copies
+    // must not exist at all rather than merely agree.
+    const ids = [...svg.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('keeps the paint, filter, and reduced-motion contracts of a single card', () => {
+    for (const theme of THEMES) {
+      const svg = renderCombined(CARDS, data, streaks, theme, fontFaceCss);
+      const ids = new Set([...svg.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]));
+      for (const ref of [...svg.matchAll(/url\(#([^)]+)\)/g)].map((match) => match[1])) {
+        expect(ids.has(ref), `${theme.id} -> #${ref}`).toBe(true);
+      }
+      expect(svg, theme.id).not.toMatch(/ (opacity|transform)="/);
+      expect(svg, theme.id).toContain('prefers-reduced-motion');
+    }
+  });
+
+  it('draws one canvas and one hairline between each pair of neighbours', () => {
+    for (const theme of THEMES) {
+      const svg = renderCombined(CARDS, data, streaks, theme, fontFaceCss);
+      expect(svg.split(`fill="${theme.bg}" stroke="${theme.border}"`).length - 1, theme.id).toBe(1);
+      expect(svg.split('fill="url(#glow)"').length - 1, theme.id).toBe(theme.id === 'dark' ? 1 : 0);
+      expect(hairlinesOf(svg, theme), theme.id).toHaveLength(CARDS.length - 1);
+    }
+    expect(hairlinesOf(renderCombined(['overview'], data, streaks, LIGHT, fontFaceCss), LIGHT)).toHaveLength(0);
+  });
+
+  it('refuses an empty card list', () => {
+    expect(() => renderCombined([], data, streaks, LIGHT, fontFaceCss)).toThrow(/at least one card/);
   });
 });
 

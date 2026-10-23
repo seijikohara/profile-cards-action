@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readInputs } from '../src/inputs.js';
+import { COMBINED_FILE_STEM } from '../src/config.js';
+import { KNOWN_CARDS, readInputs } from '../src/inputs.js';
 
 vi.mock('@actions/core');
 
@@ -22,6 +23,7 @@ const VALID_INPUTS: Record<string, string> = {
   'github-token': 'ghp_secret',
   username: 'octocat',
   cards: 'overview,lifetime,contributions,composition,rhythm,languages',
+  layout: 'split',
   'output-dir': 'assets',
   themes: 'light,dark',
   palette: 'green',
@@ -56,6 +58,7 @@ describe('readInputs', () => {
       token: 'ghp_secret',
       username: 'octocat',
       cards: ['overview', 'lifetime', 'contributions', 'composition', 'rhythm', 'languages'],
+      layout: 'split',
       outputDir: 'assets',
       themeIds: ['light', 'dark'],
       palette: 'green',
@@ -85,6 +88,7 @@ describe('readInputs', () => {
       'portfolio',
       'languages',
     ]);
+    expect(inputs.layout).toBe('split');
     expect(inputs.themeIds).toEqual(['light', 'dark']);
     expect(inputs.palette).toBe('green');
     expect(inputs.outputDir).toBe('assets');
@@ -168,6 +172,21 @@ describe('readInputs', () => {
   it('should reject an unknown palette', () => {
     setInputs({ ...VALID_INPUTS, palette: 'teal' });
     expect(() => readInputs()).toThrow(/palette/);
+  });
+
+  it('should parse the combined layout, case-insensitively', () => {
+    setInputs({ ...VALID_INPUTS, layout: ' Combined ' });
+    expect(readInputs().layout).toBe('combined');
+  });
+
+  it('should reject an unknown layout', () => {
+    setInputs({ ...VALID_INPUTS, layout: 'grid' });
+    expect(() => readInputs()).toThrow(/layout/);
+  });
+
+  it('should keep the combined file name clear of every card name', () => {
+    // A card named like the combined stem would overwrite one file with the other.
+    expect(KNOWN_CARDS).not.toContain(COMBINED_FILE_STEM);
   });
 
   it('should parse the scale legend style, case-insensitively', () => {

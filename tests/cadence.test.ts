@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderCadence } from '../src/cards/cadence.js';
+import { cardSvg } from '../src/cards/frame.js';
 import { computeCadence } from '../src/compute/cadence.js';
 import { range } from '../src/iter.js';
 import type { CommitSample, ProfileData } from '../src/model.js';
@@ -171,7 +172,7 @@ describe('renderCadence sweep disclosure', () => {
   const fixture: ProfileData = makeFixture();
 
   it('says nothing about scope when the sweep visited every candidate', () => {
-    const svg = renderCadence({ ...fixture, commitSweep: { swept: 18, candidates: 18 } }, LIGHT, '');
+    const svg = cardSvg(renderCadence({ ...fixture, commitSweep: { swept: 18, candidates: 18 } }, LIGHT), '');
     expect(svg).toContain('TRAILING 12 MONTHS · AUTHOR LOCAL TIME');
     expect(svg).not.toContain('REPOSITORIES');
     expect(svg).toContain('commits');
@@ -179,7 +180,7 @@ describe('renderCadence sweep disclosure', () => {
   });
 
   it('names the shortfall and softens the count when the cap bit', () => {
-    const svg = renderCadence({ ...fixture, commitSweep: { swept: 5, candidates: 18 } }, LIGHT, '');
+    const svg = cardSvg(renderCadence({ ...fixture, commitSweep: { swept: 5, candidates: 18 } }, LIGHT), '');
     expect(svg).toContain('5 OF 18 REPOSITORIES');
     expect(svg).toContain('commits swept');
   });

@@ -21,7 +21,7 @@ import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
 import { formatBytes, formatInt } from '../svg/text.js';
 import { contrast, type Theme } from '../theme.js';
-import { cardFrame } from './frame.js';
+import { type Card, cardFrame } from './frame.js';
 import { languageMark } from './language-mark.js';
 
 const CONTENT_TOP = 60;
@@ -83,12 +83,7 @@ function cellLabel(share: LanguageShare, rect: TreemapRect, fill: string): strin
   ].join('');
 }
 
-export function renderLanguages(
-  data: ProfileData,
-  theme: Theme,
-  fontFaceCss: string,
-  languageLimit: number = DEFAULT_LANGUAGE_LIMIT
-): string {
+export function renderLanguages(data: ProfileData, theme: Theme, languageLimit: number = DEFAULT_LANGUAGE_LIMIT): Card {
   const shares = languageShares(data.languages, languageLimit, data.languageTailBytes);
 
   if (shares.length === 0) {
@@ -99,7 +94,6 @@ export function renderLanguages(
         height: 96,
         title: 'Languages',
         description: `No language data for ${data.login}.`,
-        fontFaceCss,
       },
       el('text', { x: CARD_PADDING, y: 72, class: 't-label' }, textNode('No language data'))
     );
@@ -218,7 +212,6 @@ export function renderLanguages(
       note: 'public source repositories · by bytes',
       description: `Language breakdown for ${data.login} by bytes${lead}.`,
       extraCss,
-      fontFaceCss,
     },
     ...cells,
     el('g', { class: 'fade' }, listHead, ...list, footer)

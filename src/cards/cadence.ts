@@ -22,7 +22,7 @@ import { verticalBar } from '../svg/bars.js';
 import { barPaint } from '../svg/effects.js';
 import { formatCompact, formatInt, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
-import { cardFrame } from './frame.js';
+import { type Card, cardFrame } from './frame.js';
 import { barFill, rampLegend, rampLegendWidth, RAMP_SCALE_ROW } from './legend.js';
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
@@ -75,12 +75,7 @@ function columnX(hour: number): number {
   return GRID_LEFT + hour * COL_W;
 }
 
-export function renderCadence(
-  data: ProfileData,
-  theme: Theme,
-  fontFaceCss: string,
-  legendStyle: LegendStyle = DEFAULT_LEGEND
-): string {
+export function renderCadence(data: ProfileData, theme: Theme, legendStyle: LegendStyle = DEFAULT_LEGEND): Card {
   const cadence = computeCadence(data.commits);
   // One grid cell is one weekday-hour slot, so the scale counts commits in it.
   const scale = legendStyle === 'scale' ? { thresholds: cadence.thresholds, unit: 'per slot' } : undefined;
@@ -288,7 +283,6 @@ export function renderCadence(
         : 'trailing 12 months · author local time',
       description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
       extraCss: `.dot{opacity:0;animation:fade .45s ease forwards}`,
-      fontFaceCss,
     },
     el(
       'g',

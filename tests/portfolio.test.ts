@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cardSvg } from '../src/cards/frame.js';
 import { renderPortfolio } from '../src/cards/portfolio.js';
 import type { PortfolioRepo, ProfileData } from '../src/model.js';
 import { LIGHT } from '../src/theme.js';
@@ -13,18 +14,18 @@ function withRepos(repos: readonly PortfolioRepo[]): ProfileData {
 
 describe('renderPortfolio', () => {
   it('draws one lifeline per repository, capped at twelve', () => {
-    const svg = renderPortfolio(data, LIGHT, '');
+    const svg = cardSvg(renderPortfolio(data, LIGHT), '');
     assertWellFormed(svg);
     expect(svg.match(/class="life"/g)).toHaveLength(Math.min(12, data.repositories.length));
   });
 
   it('says how many repositories it left out', () => {
-    const svg = renderPortfolio(data, LIGHT, '');
+    const svg = cardSvg(renderPortfolio(data, LIGHT), '');
     expect(svg).toContain(data.repositories.length > 12 ? 'top 12 shown' : 'source repositories');
   });
 
   it('renders a self-explanatory stub with nothing to plot', () => {
-    const svg = renderPortfolio(withRepos([]), LIGHT, '');
+    const svg = cardSvg(renderPortfolio(withRepos([]), LIGHT), '');
     assertWellFormed(svg);
     expect(svg).toContain('No public source repositories');
   });
@@ -40,7 +41,7 @@ describe('renderPortfolio', () => {
       diskUsageKb: 0,
       license: null,
     };
-    const svg = renderPortfolio(withRepos([empty]), LIGHT, '');
+    const svg = cardSvg(renderPortfolio(withRepos([empty]), LIGHT), '');
     assertWellFormed(svg);
     expect(svg).toContain('<circle');
     expect(svg).not.toContain('<rect x="268"');
@@ -57,11 +58,11 @@ describe('renderPortfolio', () => {
       diskUsageKb: 10,
       license: null,
     };
-    expect(renderPortfolio(withRepos([unlicensed]), LIGHT, '')).toContain('>—<');
+    expect(cardSvg(renderPortfolio(withRepos([unlicensed]), LIGHT), '')).toContain('>—<');
   });
 
   it('never calls push recency health, and says whose pushes count', () => {
-    const svg = renderPortfolio(data, LIGHT, '');
+    const svg = cardSvg(renderPortfolio(data, LIGHT), '');
     expect(svg).toContain('PUSHES BY ALL AUTHORS');
     expect(svg).toContain('>last push<');
     for (const step of ['1y+', '&lt;1y', '&lt;90d', '&lt;30d']) expect(svg).toContain(`>${step}<`);
