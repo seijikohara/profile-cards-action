@@ -19,7 +19,8 @@ import type { ProfileData } from '../model.js';
 import { el, textNode } from '../svg/dsl.js';
 import { range } from '../iter.js';
 import { verticalBar } from '../svg/bars.js';
-import { formatCompact, measureMono } from '../svg/text.js';
+import { barPaint } from '../svg/effects.js';
+import { formatCompact, formatInt, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 import { barFill, rampLegend, rampLegendWidth, RAMP_SCALE_ROW } from './legend.js';
@@ -126,7 +127,7 @@ export function renderCadence(
       HIST_BASELINE,
       HIST_BAR_W,
       height,
-      barFill(theme, total, hourMax)
+      barPaint(theme, barFill(theme, total, hourMax), 'y', height)
     );
   });
 
@@ -139,7 +140,9 @@ export function renderCadence(
       const cy = GRID_TOP + weekday * ROW_H + ROW_H / 2;
       const isPeak = cadence.peak !== undefined && cadence.peak.weekday === weekday && cadence.peak.hour === hour;
       return (
-        el('circle', { cx, cy, r: DOT_RADIUS[level], fill: theme.contribRamp[level] }) +
+        // An empty slot takes the track color: the calendar's level-0 grey is
+        // a hair off the dark canvas and would read as a missing dot.
+        el('circle', { cx, cy, r: DOT_RADIUS[level], fill: level === 0 ? theme.track : theme.contribRamp[level] }) +
         (isPeak ? peakRing(cx, cy, level, theme) : '')
       );
     });
@@ -173,12 +176,20 @@ export function renderCadence(
     const x = GRID_LEFT + index * (SIZE_BAR_W + SIZE_BAR_GAP);
     const height = count === 0 || sizeMax === 0 ? 0 : Math.max(2, (count / sizeMax) * SIZE_MAX_HEIGHT);
     return [
-      height === 0 ? '' : verticalBar(x, SIZE_BASELINE, SIZE_BAR_W, height, barFill(theme, count, sizeMax)),
+      height === 0
+        ? ''
+        : verticalBar(
+            x,
+            SIZE_BASELINE,
+            SIZE_BAR_W,
+            height,
+            barPaint(theme, barFill(theme, count, sizeMax), 'y', height)
+          ),
       count === 0
         ? ''
         : el(
             'text',
-            { x: x + SIZE_BAR_W / 2, y: SIZE_BASELINE - height - 5, class: 't-tick', 'text-anchor': 'middle' },
+            { x: x + SIZE_BAR_W / 2, y: SIZE_BASELINE - height - 5, class: 't-num', 'text-anchor': 'middle' },
             textNode(formatCompact(count))
           ),
       el(
@@ -197,17 +208,25 @@ export function renderCadence(
     stroke: theme.border,
     'stroke-width': 1,
   });
+  // The buckets' unit sits right after the last bucket label, where the eye
+  // ends up after reading them; across the card it read as part of the stat.
+  const sizeAxisEnd = GRID_LEFT + SIZE_BUCKETS.length * SIZE_BAR_W + (SIZE_BUCKETS.length - 1) * SIZE_BAR_GAP;
+  const sizeUnit = el(
+    'text',
+    { x: sizeAxisEnd + 16, y: SIZE_LABEL_BASELINE, class: 't-tick' },
+    textNode('lines changed per commit')
+  );
   // Lines per file is the one churn figure that means something on its own,
-  // and it sits beside the distribution it explains rather than in the footer.
+  // so it stands as its own phrase beside the distribution it explains.
   const perFileNote =
     cadence.medianLinesPerFile === undefined
       ? ''
       : el(
           'text',
           { x: CARD_WIDTH - CARD_PADDING, y: SIZE_LABEL_BASELINE, class: 't-label', 'text-anchor': 'end' },
-          textNode('lines per commit · median '),
+          textNode('median '),
           el('tspan', { class: 't-stat' }, textNode(String(Math.round(cadence.medianLinesPerFile)))),
-          textNode(' per file')
+          textNode(' lines per file')
         );
 
   // A capped sweep undercounts, so the card says so rather than presenting a
@@ -217,7 +236,7 @@ export function renderCadence(
   const capped = swept < candidates;
 
   const footerParts: string[] = [
-    el('tspan', { class: 't-stat' }, textNode(formatCompact(cadence.totalCommits))),
+    el('tspan', { class: 't-stat' }, textNode(formatInt(cadence.totalCommits))),
     textNode(capped ? ' commits swept' : ' commits'),
   ];
   if (cadence.peak !== undefined) {
@@ -230,7 +249,7 @@ export function renderCadence(
   if (cadence.medianLines !== undefined) {
     footerParts.push(
       textNode(' · median '),
-      el('tspan', { class: 't-stat' }, textNode(formatCompact(Math.round(cadence.medianLines)))),
+      el('tspan', { class: 't-stat' }, textNode(formatInt(Math.round(cadence.medianLines)))),
       textNode(' lines per commit')
     );
   }
@@ -283,6 +302,7 @@ export function renderCadence(
       sizeEyebrow,
       sizeBaselineRule,
       ...sizeBand,
+      sizeUnit,
       perFileNote
     ),
     ...columns,

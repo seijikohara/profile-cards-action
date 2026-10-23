@@ -9,6 +9,12 @@ export interface LifetimeYear {
   readonly weeks: readonly (0 | 1 | 2 | 3 | 4)[];
   /** Sum of the year's daily counts — the row's right-column total. */
   readonly total: number;
+  /**
+   * First week the row draws. Weeks before the first contribution ever are
+   * calendar padding, not inactivity, so they stay blank like future weeks;
+   * 0 for every year but the first active one.
+   */
+  readonly firstWeek: number;
 }
 
 export interface LifetimeData {
@@ -121,10 +127,17 @@ export function computeLifetime(days: readonly DayContribution[]): LifetimeData 
       .toSorted((a, b) => a - b)
   );
 
+  const firstActive = days
+    .filter((day) => day.count > 0)
+    .map((day) => day.date)
+    .toSorted()[0];
+  const start = firstActive === undefined ? undefined : bucketOf(firstActive);
+
   const years: LifetimeYear[] = yearEntries.map(({ year, weekSums, total }) => ({
     year,
     weeks: range(Math.max(0, ...weekSums.keys()) + 1).map((index) => levelOf(weekSums.get(index) ?? 0, thresholds)),
     total,
+    firstWeek: start !== undefined && start.year === year ? start.weekIndex : 0,
   }));
 
   return { years, thresholds };

@@ -56,13 +56,17 @@ describe('renderOverview trends', () => {
     expect(svg).not.toContain('YTD');
   });
 
-  it('gives every tile the same height, sparkline or not', () => {
+  it('keeps each row even and gives the sparkline band only to the row that uses it', () => {
     const svg = renderOverview(data, LIGHT, '');
     // The tiles are the only rects painted on the inset background.
     const heights = [...svg.matchAll(new RegExp(`<rect [^>]*height="([\\d.]+)"[^>]*fill="${LIGHT.bgInset}"`, 'g'))].map(
-      (match) => match[1]
+      (match) => Number(match[1])
     );
     expect(heights).toHaveLength(8);
-    expect(new Set(heights).size).toBe(1);
+    const [first, second] = [heights.slice(0, 4), heights.slice(4)];
+    expect(new Set(first).size).toBe(1);
+    expect(new Set(second).size).toBe(1);
+    // Every counter with a yearly series sits in the first row.
+    expect(first[0]).toBeGreaterThan(second[0] ?? 0);
   });
 });

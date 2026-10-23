@@ -83,7 +83,7 @@ export function renderLifetime(
   const columns = range(maxCols).map((c) => {
     const cells = life.years.flatMap((year, r) => {
       const level = year.weeks[c];
-      return level === undefined
+      return level === undefined || c < year.firstWeek
         ? []
         : [
             el('rect', {
@@ -134,7 +134,7 @@ export function renderLifetime(
       {
         x: CARD_PADDING + inner,
         y: gridTop + r * ROW_PITCH + CELL_H / 2 + 3.3,
-        class: 't-tick',
+        class: 't-num',
         'text-anchor': 'end',
       },
       textNode(formatInt(year.total))

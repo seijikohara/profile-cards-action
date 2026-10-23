@@ -17,6 +17,7 @@ import { computeMomentum, type MomentumPoint } from '../compute/momentum.js';
 import { range } from '../iter.js';
 import type { ProfileData } from '../model.js';
 import { el, num, textNode } from '../svg/dsl.js';
+import { GLOW } from '../svg/effects.js';
 import { hGuide, niceStep } from '../svg/guides.js';
 import { formatCompact, formatDate, formatInt, formatMonthYear, measureMono, measureSans } from '../svg/text.js';
 import type { Theme } from '../theme.js';
@@ -79,6 +80,21 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
     'stroke-linejoin': 'round',
     'stroke-linecap': 'round',
   });
+  // Dark theme only: a blurred copy of the line under it, so the trend glows
+  // faintly against the canvas the way a lit trace would.
+  const lineGlow =
+    theme.id === 'dark'
+      ? el('path', {
+          d: `M${vertices.join('L')}`,
+          fill: 'none',
+          stroke: theme.contribRamp[4],
+          'stroke-width': 4,
+          'stroke-opacity': 0.28,
+          'stroke-linejoin': 'round',
+          'stroke-linecap': 'round',
+          filter: GLOW,
+        })
+      : '';
   const area = el('path', {
     d: `M${num(PLOT_X)} ${num(PLOT_BOTTOM)}L${vertices.join('L')}L${num(x(points.length - 1))} ${num(PLOT_BOTTOM)}Z`,
     // The frame's vertical fade, painted with stop-opacity: the reduced-motion
@@ -95,7 +111,7 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
     .map(
       (value) =>
         hGuide(PLOT_X, plotRight, y(value), theme) +
-        el('text', { x: PLOT_X, y: y(value) - 5, class: 't-tick' }, textNode(formatCompact(value)))
+        el('text', { x: PLOT_X, y: y(value) - 5, class: 't-tick' }, textNode(guideLabel(value)))
     );
 
   const baselineRule = el('line', {
@@ -135,11 +151,22 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
   // The current value is the number a reader wants first, so it sits at the
   // line's end rather than in the footer. Clamped into the plot band.
   const currentY = Math.min(PLOT_BOTTOM - 4, Math.max(PLOT_TOP + 20, y(current.total) + 9));
+  // A halo marks "now" on the line. On the dark canvas it is blurred into a
+  // glow; on white a blur reads as a smudge, so it stays a crisp tint.
+  const dark = theme.id === 'dark';
   const currentValue =
+    el('circle', {
+      cx: x(points.length - 1),
+      cy: y(current.total),
+      r: dark ? 6 : 7,
+      fill: theme.contribRamp[4],
+      'fill-opacity': dark ? 0.4 : 0.16,
+      filter: dark ? GLOW : undefined,
+    }) +
     el('circle', { cx: x(points.length - 1), cy: y(current.total), r: 3.2, fill: theme.contribRamp[4] }) +
     el(
       'text',
-      { x: CARD_WIDTH - CARD_PADDING, y: currentY, class: 't-value t-hero', 'text-anchor': 'end' },
+      { x: CARD_WIDTH - CARD_PADDING, y: currentY, class: 't-value', 'text-anchor': 'end' },
       textNode(currentLabel)
     );
 
@@ -179,9 +206,14 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
       fontFaceCss,
     },
     el('g', { class: 'fade' }, ...guides, baselineRule, ...ticks),
-    el('g', { class: 'sweep' }, area, line),
+    el('g', { class: 'sweep' }, area, lineGlow, line),
     el('g', { class: 'fade' }, peakMark, currentValue, footer)
   );
+}
+
+/** A guide's label: a round value needs no trailing ".0" ("2k", "2.5k"). */
+function guideLabel(value: number): string {
+  return formatCompact(value).replace('.0', '');
 }
 
 /** Ringed peak plus its value, flipped inboard when it would leave the plot. */

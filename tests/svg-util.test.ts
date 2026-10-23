@@ -15,12 +15,16 @@ describe('formatCompact', () => {
   it('passes small values through and steps to k then m', () => {
     expect(formatCompact(0)).toBe('0');
     expect(formatCompact(999)).toBe('999');
-    expect(formatCompact(1000)).toBe('1k');
+    expect(formatCompact(1000)).toBe('1.0k');
+    expect(formatCompact(2000)).toBe('2.0k');
     expect(formatCompact(2450)).toBe('2.5k');
-    expect(formatCompact(45231)).toBe('45k');
+    expect(formatCompact(11_581)).toBe('11.6k');
+    expect(formatCompact(45_231)).toBe('45.2k');
+    expect(formatCompact(99_960)).toBe('100k');
+    expect(formatCompact(123_456)).toBe('123k');
     expect(formatCompact(999_499)).toBe('999k');
     expect(formatCompact(1_871_000)).toBe('1.9m');
-    expect(formatCompact(12_400_000)).toBe('12m');
+    expect(formatCompact(12_400_000)).toBe('12.4m');
   });
 });
 

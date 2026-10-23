@@ -154,3 +154,21 @@ describe('computeLifetime', () => {
     expect(result.years[0]?.total).toBe(0);
   });
 });
+
+describe('computeLifetime first week', () => {
+  it('starts the first active year at the week of the first contribution', () => {
+    const days: DayContribution[] = [
+      { date: '2014-01-01', count: 0, level: 0 },
+      { date: '2014-03-10', count: 0, level: 0 },
+      { date: '2014-11-04', count: 2, level: 1 },
+      { date: '2015-01-01', count: 0, level: 0 },
+      { date: '2015-01-02', count: 1, level: 1 },
+    ];
+    const { years } = computeLifetime(days);
+    // Nov 4 is day 308 of 2014, so its week bucket is floor(307 / 7) = 43.
+    expect(years.map((year) => [year.year, year.firstWeek])).toEqual([
+      [2014, 43],
+      [2015, 0],
+    ]);
+  });
+});

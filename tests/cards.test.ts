@@ -95,6 +95,22 @@ describe('card rendering', () => {
     }
   });
 
+  it('defines every paint server and filter a card references', () => {
+    // A dangling url(#id) paints nothing at all: a bar or a tile would vanish.
+    for (const { name, svg } of renderAll()) {
+      const ids = new Set([...svg.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]));
+      const refs = [...svg.matchAll(/url\(#([^)]+)\)/g)].map((match) => match[1]);
+      for (const ref of refs) expect(ids.has(ref), `${name} -> #${ref}`).toBe(true);
+    }
+  });
+
+  it('keeps glow on the dark canvas and shadow on the light one', () => {
+    expect(renderCard('momentum', data, streaks, DARK, fontFaceCss)).toContain('filter="url(#glow-blur)"');
+    expect(renderCard('momentum', data, streaks, LIGHT, fontFaceCss)).not.toContain('filter="url(#glow-blur)"');
+    expect(renderCard('overview', data, streaks, LIGHT, fontFaceCss)).toContain('filter="url(#lift)"');
+    expect(renderCard('overview', data, streaks, DARK, fontFaceCss)).not.toContain('filter="url(#lift)"');
+  });
+
   it('defines the area fade with stop-opacity in every card', () => {
     for (const { name, svg } of renderAll()) {
       expect(svg, name).toMatch(

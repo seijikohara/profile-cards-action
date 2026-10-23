@@ -82,3 +82,19 @@ describe('computeMomentum', () => {
     expect(result).toMatchObject({ points: [], lifetimeTotal: 0, since: undefined });
   });
 });
+
+/** A year whose only interesting field is its calendar total. */
+function yearOf(value: number, total: number): YearActivity {
+  return { year: value, total, commits: 0, pullRequests: 0, issues: 0, reviews: 0, restricted: 0 };
+}
+
+describe('computeMomentum quietest year', () => {
+  it('skips a first year that began after January 1, even though the calendar pads it', () => {
+    // The calendar series starts on 2014-01-01 regardless; the work starts in
+    // November, so 2014 is a partial year and must not win "quietest".
+    const days = series('2014-01-01', 3 * 365 + 120, (index) => (index >= 307 ? 1 : 0));
+    const result = computeMomentum(days, [yearOf(2014, 42), yearOf(2015, 365), yearOf(2016, 366), yearOf(2017, 120)]);
+    expect(result.since).toBe('2014-11-04');
+    expect(result.quietestYear?.year).toBe(2015);
+  });
+});

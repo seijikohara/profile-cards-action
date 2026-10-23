@@ -49,12 +49,21 @@ export function formatInt(v: number): string {
   return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-/** Compact magnitude: 999 -> "999", 45231 -> "45.2k", 1871000 -> "1.9m". */
+/**
+ * Compact magnitude: 999 -> "999", 2000 -> "2.0k", 11581 -> "11.6k",
+ * 123456 -> "123k", 1871000 -> "1.9m".
+ *
+ * One decimal below 100 of a unit, always printed: a column mixing "2k" with
+ * "1.9k" reads as two precisions, and rounding 11,581 to "12k" overstates it
+ * by 4%.
+ */
 export function formatCompact(value: number): string {
   if (value < 1000) return String(value);
   const scaled = value >= 1_000_000 ? value / 1_000_000 : value / 1000;
   const unit = value >= 1_000_000 ? 'm' : 'k';
-  return `${scaled >= 10 ? Math.round(scaled) : Math.round(scaled * 10) / 10}${unit}`;
+  // A value that rounds up to 100.0 drops its decimal along with the others.
+  const tenths = Math.round(scaled * 10) / 10;
+  return `${tenths >= 100 ? Math.round(scaled) : tenths.toFixed(1)}${unit}`;
 }
 
 /**

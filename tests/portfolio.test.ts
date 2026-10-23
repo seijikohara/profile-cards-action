@@ -62,7 +62,9 @@ describe('renderPortfolio', () => {
 
   it('never calls push recency health, and says whose pushes count', () => {
     const svg = renderPortfolio(data, LIGHT, '');
-    expect(svg).toContain('pushed recently, any author');
+    expect(svg).toContain('PUSHES BY ALL AUTHORS');
+    expect(svg).toContain('>last push<');
+    for (const step of ['1y+', '&lt;1y', '&lt;90d', '&lt;30d']) expect(svg).toContain(`>${step}<`);
     expect(svg.toLowerCase()).not.toContain('health');
     expect(svg.toLowerCase()).not.toContain('stale');
   });

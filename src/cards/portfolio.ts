@@ -125,11 +125,11 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
       el(
         'text',
         { x: NAME_X, y: baseline, class: 't-label' },
-        ...repoLabelSpans(repo.nameWithOwner, theme.fg, MAX_NAME)
+        ...repoLabelSpans(repo.nameWithOwner, theme.fg, MAX_NAME, data.login)
       ),
       el(
         'text',
-        { x: COMMITS_RIGHT, y: baseline - 0.7, class: 't-tick', 'text-anchor': 'end' },
+        { x: COMMITS_RIGHT, y: baseline - 0.7, class: 't-num', 'text-anchor': 'end' },
         textNode(formatCompact(repo.commits))
       ),
       el(
@@ -196,7 +196,10 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
       icon: ChartGantt,
       height: footerBaseline + CARD_PADDING,
       title: 'Portfolio',
-      note: 'public source repositories · by commits',
+      // Both columns count everyone: commits by all authors on the default
+      // branch, and the last push by anyone. Top repositories counts only the
+      // user's own commits, so the same repository can show two numbers.
+      note: 'public source repositories · commits and pushes by all authors',
       description:
         `Repository portfolio for ${data.login}: ${formatInt(totals.length)} public source repositories, ` +
         `${formatInt(recent)} pushed in the last 90 days.`,
@@ -208,27 +211,44 @@ export function renderPortfolio(data: ProfileData, theme: Theme, fontFaceCss: st
   );
 }
 
+// What each lifeline color means, oldest push first; the thresholds mirror
+// recencyLevel so the key states the rule rather than "recently".
+const RECENCY_STEPS = ['1y+', '<1y', '<90d', '<30d'] as const;
+
 /** Ramp key naming what the lifeline colors mean, right-aligned on `baseline`. */
 function recencyKey(theme: Theme, baseline: number): string {
-  const caption = 'pushed recently, any author';
+  const lead = 'last push';
   const swatch = 9;
-  const pitch = 12;
-  const captionWidth = measureMono(caption, 9.5);
+  const gap = 4;
+  const spacing = 12;
+  const steps = RECENCY_STEPS.map((caption, step) => ({
+    caption,
+    fill: theme.contribRamp[step + 1],
+    width: swatch + gap + measureMono(caption, 9.5),
+  }));
   const right = CARD_WIDTH - CARD_PADDING;
-  const firstX = right - captionWidth - 8 - pitch * 4;
+  const stepsWidth = steps.reduce((sum, step) => sum + step.width, 0) + spacing * (steps.length - 1);
+  const leadX = right - stepsWidth - spacing - measureMono(lead, 9.5);
+  // Each step starts where the ones before it, and their spacing, end.
+  const starts = steps.map(
+    (_, index) => right - stepsWidth + steps.slice(0, index).reduce((sum, before) => sum + before.width + spacing, 0)
+  );
   return (
-    range(4)
-      .map((step) =>
-        el('rect', {
-          x: firstX + step * pitch,
-          y: baseline - swatch + 1,
-          width: swatch,
-          height: swatch,
-          rx: 2,
-          fill: theme.contribRamp[step + 1],
-        })
+    el('text', { x: leadX, y: baseline, class: 't-tick' }, textNode(lead)) +
+    steps
+      .map(
+        (step, index) =>
+          el('rect', {
+            x: starts[index] ?? 0,
+            y: baseline - swatch + 1,
+            width: swatch,
+            height: swatch,
+            rx: 2,
+            fill: step.fill,
+          }) +
+          el('text', { x: (starts[index] ?? 0) + swatch + gap, y: baseline, class: 't-tick' }, textNode(step.caption))
       )
-      .join('') + el('text', { x: right, y: baseline, class: 't-tick', 'text-anchor': 'end' }, textNode(caption))
+      .join('')
   );
 }
 

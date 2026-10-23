@@ -10,9 +10,10 @@ import type { IconNode } from 'lucide';
 import { CARD_PADDING, CARD_RADIUS, CARD_WIDTH, PANEL_RADIUS } from '../config.js';
 import { FONT_MONO, FONT_SANS, type Theme } from '../theme.js';
 import { el, textNode } from '../svg/dsl.js';
+import { effectDefs, LIFT } from '../svg/effects.js';
 import { icon } from '../svg/icons.js';
 import { deltaTriangle, sparkline } from '../svg/spark.js';
-import { measureMono } from '../svg/text.js';
+import { measureMono, measureSans } from '../svg/text.js';
 
 export interface FrameOptions {
   readonly theme: Theme;
@@ -33,8 +34,21 @@ export interface FrameOptions {
 const TITLE_BASELINE = 43;
 const TITLE_ICON_SIZE = 15;
 
-/** Paint server for headline numbers: the palette's ink drifting to its neighbouring hue. */
-const INK_GRADIENT = 'url(#ink)';
+// The corner glow exists only on the dark canvas, where light reads as depth;
+// on white the same tint reads as a smudge and breaks the card's match with
+// the page.
+const CORNER_GLOW = 0.06;
+
+/**
+ * Uppercase a note for the mono caption, except `@login` handles: a login is
+ * an identifier, and GitHub shows it in its own case everywhere else.
+ */
+function noteCase(note: string): string {
+  return note
+    .split(' ')
+    .map((word) => (word.startsWith('@') ? word : word.toUpperCase()))
+    .join(' ');
+}
 
 export function cardFrame(options: FrameOptions, ...children: string[]): string {
   const { theme, height, title, note, description, extraCss, fontFaceCss } = options;
@@ -45,12 +59,12 @@ ${fontFaceCss ?? ''}
 text{font-family:'CardSans',${FONT_SANS};font-weight:400}
 .t-title{font-family:'CardMono',${FONT_MONO};font-size:11px;font-weight:400;letter-spacing:1.6px;fill:${theme.ink}}
 .t-value{font-size:30px;font-weight:600;letter-spacing:-.4px;fill:${theme.fg}}
-.t-hero{fill:${INK_GRADIENT}}
 .t-unit{font-size:14px;font-weight:400;fill:${theme.fgMuted}}
 .t-label{font-size:12px;font-weight:400;fill:${theme.fgMuted}}
 .t-stat{font-weight:600;fill:${theme.fg}}
 .t-mono{font-family:'CardMono',${FONT_MONO};font-weight:400;font-size:10px;fill:${theme.fgMuted};letter-spacing:.4px}
 .t-tick{font-family:'CardMono',${FONT_MONO};font-weight:400;font-size:9.5px;fill:${theme.fgMuted}}
+.t-num{font-family:'CardMono',${FONT_MONO};font-weight:400;font-size:10.5px;fill:${theme.fg}}
 .fade{opacity:0;animation:fade .5s ease .1s forwards}
 @keyframes fade{to{opacity:1}}
 @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
@@ -77,18 +91,14 @@ ${extraCss ?? ''}`;
       {},
       // stop-opacity, not opacity: the reduced-motion reset forces opacity to 1
       // on every element, which would turn the glow into a solid wash.
-      el(
-        'radialGradient',
-        { id: 'glow', gradientUnits: 'userSpaceOnUse', cx: CARD_WIDTH, cy: 0, r: 460 },
-        el('stop', { offset: 0, 'stop-color': theme.ink, 'stop-opacity': theme.id === 'light' ? 0.07 : 0.1 }),
-        el('stop', { offset: 1, 'stop-color': theme.ink, 'stop-opacity': 0 })
-      ),
-      el(
-        'linearGradient',
-        { id: 'ink', x1: 0, y1: 0, x2: 1, y2: 0 },
-        el('stop', { offset: 0, 'stop-color': theme.ink }),
-        el('stop', { offset: 1, 'stop-color': theme.inkAlt })
-      ),
+      theme.id === 'dark'
+        ? el(
+            'radialGradient',
+            { id: 'glow', gradientUnits: 'userSpaceOnUse', cx: CARD_WIDTH, cy: 0, r: 460 },
+            el('stop', { offset: 0, 'stop-color': theme.ink, 'stop-opacity': CORNER_GLOW }),
+            el('stop', { offset: 1, 'stop-color': theme.ink, 'stop-opacity': 0 })
+          )
+        : '',
       // Area fills fade toward their baseline, which keeps the line on top as
       // the subject and the fill as a hint of volume.
       el(
@@ -96,7 +106,8 @@ ${extraCss ?? ''}`;
         { id: 'area', x1: 0, y1: 0, x2: 0, y2: 1 },
         el('stop', { offset: 0, 'stop-color': theme.contribRamp[3], 'stop-opacity': 0.32 }),
         el('stop', { offset: 1, 'stop-color': theme.contribRamp[3], 'stop-opacity': 0.02 })
-      )
+      ),
+      effectDefs(theme)
     ),
     el('rect', {
       x: 0.5,
@@ -107,14 +118,16 @@ ${extraCss ?? ''}`;
       fill: theme.bg,
       stroke: theme.border,
     }),
-    el('rect', {
-      x: 0.5,
-      y: 0.5,
-      width: CARD_WIDTH - 1,
-      height: height - 1,
-      rx: CARD_RADIUS,
-      fill: 'url(#glow)',
-    }),
+    theme.id === 'dark'
+      ? el('rect', {
+          x: 0.5,
+          y: 0.5,
+          width: CARD_WIDTH - 1,
+          height: height - 1,
+          rx: CARD_RADIUS,
+          fill: 'url(#glow)',
+        })
+      : '',
     icon(options.icon, CARD_PADDING, TITLE_BASELINE - 12, TITLE_ICON_SIZE, theme.ink),
     el(
       'text',
@@ -131,16 +144,16 @@ ${extraCss ?? ''}`;
             class: 't-mono',
             'text-anchor': 'end',
           },
-          textNode(note.toUpperCase())
+          textNode(noteCase(note))
         ),
     ...children
   );
 }
 
-/** Change against a comparable earlier window, shown beside the caption. */
+/** Change against a comparable earlier window, shown beside the value. */
 export interface TileDelta {
   readonly rising: boolean;
-  /** Short caption, e.g. "38% YTD". */
+  /** Short signed caption, e.g. "+38% YTD". */
   readonly text: string;
 }
 
@@ -155,7 +168,12 @@ export interface TileSpec {
   readonly sub?: string | undefined;
   /** Optional series drawn as a sparkline along the tile's foot. */
   readonly spark?: readonly number[] | undefined;
-  /** Optional change chip, right-aligned on the caption baseline. */
+  /** The sparkline's last point covers a period still in progress (this year, this month). */
+  readonly sparkPartial?: boolean;
+  /**
+   * Optional change chip, right-aligned on the value baseline — clear of the
+   * caption, where it used to run into the caption's own words.
+   */
   readonly delta?: TileDelta | undefined;
 }
 
@@ -183,6 +201,16 @@ export function tileRow(theme: Theme, tiles: readonly TileSpec[], y: number): { 
   const parts = tiles.map((tile, index) => {
     const x = CARD_PADDING + index * (width + TILE_GAP);
     const deltaRight = x + width - 16;
+    // .t-mono adds .4px of letter-spacing per character, which measureMono
+    // does not model; the extra clearance keeps the triangle off the text.
+    const deltaWidth =
+      tile.delta === undefined ? 0 : measureMono(tile.delta.text, 10) + tile.delta.text.length * 0.4 + 11;
+    // The chip sits on the value line when it clears the number (measured
+    // conservatively, so the real gap is wider than this margin), and
+    // falls back to the caption line for a value too wide to share its row.
+    const valueRight = x + 16 + measureSans(tile.value, 30, 'semibold');
+    const deltaOnValue = deltaRight - deltaWidth >= valueRight + 6;
+    const deltaBaseline = deltaOnValue ? y + 59 : y + 80;
     return el(
       'g',
       {},
@@ -193,21 +221,22 @@ export function tileRow(theme: Theme, tiles: readonly TileSpec[], y: number): { 
         height: height - 1,
         rx: PANEL_RADIUS,
         fill: theme.bgInset,
-        stroke: theme.borderMuted,
+        // One separator per theme: a soft lift on white, a hairline on the
+        // dark canvas, where a shadow has nothing to darken. Fill, hairline,
+        // and shadow together read as three borders.
+        stroke: theme.id === 'dark' ? theme.borderMuted : undefined,
+        filter: theme.id === 'light' ? LIFT : undefined,
       }),
       icon(tile.icon, x + 16, y + 15, TILE_ICON_SIZE, theme.ink),
       el('text', { x: x + 16 + TILE_ICON_SIZE + 7, y: y + 26, class: 't-label' }, textNode(tile.label)),
       tile.delta === undefined
         ? ''
-        : // .t-mono adds .4px of letter-spacing per character, which measureMono
-          // does not model; the extra clearance keeps the triangle off the text.
-          deltaTriangle(
-            deltaRight - measureMono(tile.delta.text, 10) - tile.delta.text.length * 0.4 - 11,
-            y + 76,
-            tile.delta.rising,
-            theme.fg
-          ) +
-            el('text', { x: deltaRight, y: y + 80, class: 't-mono', 'text-anchor': 'end' }, textNode(tile.delta.text)),
+        : deltaTriangle(deltaRight - deltaWidth, deltaBaseline - 4, tile.delta.rising, theme.fg) +
+            el(
+              'text',
+              { x: deltaRight, y: deltaBaseline, class: 't-mono', 'text-anchor': 'end' },
+              textNode(tile.delta.text)
+            ),
       el(
         'text',
         { x: x + 16, y: y + 61, class: 't-value' },
@@ -217,7 +246,9 @@ export function tileRow(theme: Theme, tiles: readonly TileSpec[], y: number): { 
       tile.sub === undefined
         ? ''
         : el('text', { x: x + 16, y: y + 80, class: 't-mono' }, textNode(tile.sub.toUpperCase())),
-      tile.spark === undefined ? '' : sparkline(tile.spark, x + 16, y + height - 12, width - 32, SPARK_HEIGHT, theme)
+      tile.spark === undefined
+        ? ''
+        : sparkline(tile.spark, x + 16, y + height - 12, width - 32, SPARK_HEIGHT, theme, tile.sparkPartial ?? false)
     );
   });
   return { svg: parts.join(''), height };

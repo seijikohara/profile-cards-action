@@ -145,9 +145,9 @@ describe('renderRhythm trailing comparison', () => {
   it('marks the trailing year against the record and names both marks', () => {
     const svg = renderRhythm(data, LIGHT, '');
     assertWellFormed(svg);
-    expect(svg).toContain('ALL YEARS VS TRAILING YEAR');
-    expect(svg).toContain('>all years<');
-    expect(svg).toContain('>trailing year<');
+    expect(svg).toContain('SHARE OF ALL YEARS VS TRAILING YEAR');
+    expect(svg).toContain('>all-years share<');
+    expect(svg).toContain('>trailing-year share<');
   });
 
   it('pairs the weekend share with its trailing-year counterpart', () => {
@@ -159,11 +159,23 @@ describe('renderRhythm trailing comparison', () => {
     const svg = renderRhythm(short, LIGHT, '');
     expect(svg).toContain('ALL CONTRIBUTION TYPES · ALL YEARS');
     expect(svg).not.toContain('VS TRAILING YEAR');
-    expect(svg).not.toContain('>trailing year<');
+    expect(svg).not.toContain('>trailing-year share<');
   });
 
   it('names the busiest weekday and month for a screen reader', () => {
     const svg = renderRhythm(data, LIGHT, '');
     expect(svg).toMatch(/busiest on (Mon|Tue|Wed|Thu|Fri|Sat|Sun) and in [A-Z][a-z]+/);
+  });
+});
+
+describe('computeRhythm active-day rate', () => {
+  it('counts from the first contribution, not from the padded start of the calendar', () => {
+    const days = [
+      { date: '2014-01-01', count: 0, level: 0 as const },
+      { date: '2014-01-02', count: 0, level: 0 as const },
+      { date: '2014-01-03', count: 3, level: 1 as const },
+      { date: '2014-01-04', count: 0, level: 0 as const },
+    ];
+    expect(computeRhythm(days).activeDayRate).toBe(0.5);
   });
 });

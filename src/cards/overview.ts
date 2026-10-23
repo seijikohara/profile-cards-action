@@ -67,18 +67,21 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
       ? undefined
       : {
           rising: currentYtd >= priorYtd,
-          text: `${Math.abs(Math.round(((currentYtd - priorYtd) / priorYtd) * 100))}% YTD`,
+          // Signed: "804%" alone reads as either +804% or 804% of last year.
+          text: `${currentYtd >= priorYtd ? '+' : '-'}${Math.abs(Math.round(((currentYtd - priorYtd) / priorYtd) * 100))}% YTD`,
         };
 
   // Peak year of a per-year series; undefined when every year is zero.
-  const peakOf = (pick: (year: (typeof data.years)[number]) => number): string | undefined => {
+  const peakOf = (pick: (year: (typeof data.years)[number]) => number, what = 'Peak'): string | undefined => {
     const best = data.years.reduce(
       (winner, year) => (pick(year) > winner.count ? { year: year.year, count: pick(year) } : winner),
       { year: 0, count: 0 }
     );
-    return best.count === 0 ? undefined : `Peak ${best.year} · ${formatInt(best.count)}`;
+    return best.count === 0 ? undefined : `${what} ${best.year} · ${formatInt(best.count)}`;
   };
 
+  // Counters with a yearly series share the first row, so their sparkline band
+  // is never empty space under a tile that has no series.
   const rowA: TileSpec[] = [
     {
       label: 'Contributions (all time)',
@@ -86,6 +89,7 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
       value: formatInt(lifetime),
       sub: firstYear === undefined ? undefined : `Since ${firstYear}`,
       spark: seriesOf((year) => year.total),
+      sparkPartial: true,
     },
     {
       label: `Contributions (${latestYear?.year ?? 'this year'})`,
@@ -93,23 +97,20 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
       value: formatInt(thisYearTotal),
       sub: dailyAverage,
       spark: monthsThisYear(),
+      sparkPartial: true,
       delta: ytdDelta,
     },
-    // Scope note, not a second statistic: the number counts every owned public
-    // repository including archived ones, which is the first thing a reader
-    // wonders about a star total.
-    { label: 'Stars earned', icon: Star, value: formatInt(data.starsEarned), sub: 'Forks excluded' },
-    { label: 'Followers', icon: Users, value: formatInt(data.followers) },
-  ];
-  const rowB: TileSpec[] = [
     // Yearly peaks pair with the opened/typed per-year series — the closest
-    // honest caption the API offers for these lifetime counters.
+    // honest caption the API offers for these lifetime counters. The headline
+    // counts merged pull requests, the series counts opened ones, and the
+    // caption says which.
     {
       label: 'Pull requests merged',
       icon: GitMerge,
       value: formatInt(data.mergedPullRequests),
-      sub: peakOf((year) => year.pullRequests),
+      sub: peakOf((year) => year.pullRequests, 'Peak opened'),
       spark: seriesOf((year) => year.pullRequests),
+      sparkPartial: true,
     },
     {
       label: 'Issues opened',
@@ -117,7 +118,15 @@ export function renderOverview(data: ProfileData, theme: Theme, fontFaceCss: str
       value: formatInt(data.issues),
       sub: peakOf((year) => year.issues),
       spark: seriesOf((year) => year.issues),
+      sparkPartial: true,
     },
+  ];
+  const rowB: TileSpec[] = [
+    // Scope note, not a second statistic: the number counts every owned public
+    // repository including archived ones, which is the first thing a reader
+    // wonders about a star total.
+    { label: 'Stars earned', icon: Star, value: formatInt(data.starsEarned), sub: 'Forks excluded' },
+    { label: 'Followers', icon: Users, value: formatInt(data.followers) },
     {
       label: 'Public repositories',
       icon: FolderGit2,

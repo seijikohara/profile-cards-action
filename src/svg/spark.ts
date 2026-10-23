@@ -19,7 +19,8 @@ export function sparkline(
   baseline: number,
   width: number,
   height: number,
-  theme: Theme
+  theme: Theme,
+  partialLast = false
 ): string {
   const max = Math.max(0, ...values);
   if (values.length < 2 || max === 0) return '';
@@ -31,6 +32,13 @@ export function sparkline(
   }));
   const path = points.map((point) => `${num(point.x)} ${num(point.y)}`).join('L');
   const last = points.at(-1);
+  // A period still in progress (this year, this month) always looks like a
+  // drop. Its segment is dashed and its dot hollow, so the shape reads as
+  // "so far" rather than as a collapse.
+  const settled = partialLast ? points.slice(0, -1) : points;
+  const settledPath = settled.map((point) => `${num(point.x)} ${num(point.y)}`).join('L');
+  const before = settled.at(-1);
+  const stroke = { fill: 'none', stroke: theme.contribRamp[3], 'stroke-width': 1.5, 'stroke-linejoin': 'round' };
 
   return (
     el('path', {
@@ -39,14 +47,26 @@ export function sparkline(
       // reset forces opacity to 1 on every element.
       fill: 'url(#area)',
     }) +
-    el('path', {
-      d: `M${path}`,
-      fill: 'none',
-      stroke: theme.contribRamp[3],
-      'stroke-width': 1.5,
-      'stroke-linejoin': 'round',
-    }) +
-    (last === undefined ? '' : el('circle', { cx: last.x, cy: last.y, r: 2.2, fill: theme.contribRamp[4] }))
+    el('path', { d: `M${settledPath}`, ...stroke }) +
+    (!partialLast || before === undefined || last === undefined
+      ? ''
+      : el('path', {
+          d: `M${num(before.x)} ${num(before.y)}L${num(last.x)} ${num(last.y)}`,
+          ...stroke,
+          'stroke-dasharray': '2 2',
+        })) +
+    (last === undefined
+      ? ''
+      : partialLast
+        ? el('circle', {
+            cx: last.x,
+            cy: last.y,
+            r: 2.2,
+            fill: theme.bgInset,
+            stroke: theme.contribRamp[4],
+            'stroke-width': 1.2,
+          })
+        : el('circle', { cx: last.x, cy: last.y, r: 2.2, fill: theme.contribRamp[4] }))
   );
 }
 
