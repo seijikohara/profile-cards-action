@@ -80,6 +80,43 @@ jobs:
           # specifically the mandatory [skip ci] marker below.
           commit: false
 
+      # One card per non-default palette for the README's palette table. The
+      # contributions card carries everything a palette changes: the eyebrow,
+      # the tile icons, and the magnitude ramp. Each step is one more profile
+      # fetch, so the previews stop at a single card.
+      - name: Render the blue palette preview
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          username: seijikohara
+          output-dir: examples/palettes/blue
+          cards: contributions
+          themes: light,dark
+          palette: blue
+          commit: false
+
+      - name: Render the purple palette preview
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          username: seijikohara
+          output-dir: examples/palettes/purple
+          cards: contributions
+          themes: light,dark
+          palette: purple
+          commit: false
+
+      - name: Render the orange palette preview
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          username: seijikohara
+          output-dir: examples/palettes/orange
+          cards: contributions
+          themes: light,dark
+          palette: orange
+          commit: false
+
       - name: Commit refreshed examples
         # `on:` already limits this workflow to these three triggers; restating
         # the guard here keeps it next to the only step that writes to the repo.

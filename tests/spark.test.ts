@@ -26,9 +26,9 @@ describe('sparkline', () => {
     expect(svg).toContain('<circle cx="100" cy="20"');
   });
 
-  it('uses fill-opacity, which the reduced-motion reset cannot override', () => {
+  it('fills from the frame gradient, whose stop-opacity the reduced-motion reset cannot override', () => {
     const svg = sparkline([1, 2, 3], 0, 40, 100, 20, LIGHT);
-    expect(svg).toContain('fill-opacity');
+    expect(svg).toContain('fill="url(#area)"');
     expect(svg).not.toContain(' opacity=');
   });
 });

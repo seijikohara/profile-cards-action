@@ -11,12 +11,14 @@
  * is marked with a foreground-ink ring, never a second hue.
  */
 
+import { TrendingUp } from 'lucide';
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeMomentum, type MomentumPoint } from '../compute/momentum.js';
 import { range } from '../iter.js';
 import type { ProfileData } from '../model.js';
 import { el, num, textNode } from '../svg/dsl.js';
-import { formatDate, formatInt, formatMonthYear, measureMono } from '../svg/text.js';
+import { hGuide, niceStep } from '../svg/guides.js';
+import { formatCompact, formatDate, formatInt, formatMonthYear, measureMono, measureSans } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
 
@@ -27,10 +29,7 @@ const PLOT_BOTTOM = PLOT_TOP + PLOT_HEIGHT;
 const TICK_BASELINE = PLOT_BOTTOM + 17;
 const FOOTER_BASELINE = TICK_BASELINE + 28;
 
-// The right gutter holds the current value, so the line stops short of it.
-const VALUE_GUTTER = 66;
 const PLOT_X = CARD_PADDING;
-const PLOT_WIDTH = CARD_WIDTH - CARD_PADDING * 2 - VALUE_GUTTER;
 
 /** Headroom above the peak so its ring and label are not clipped by the frame. */
 const Y_HEADROOM = 1.12;
@@ -51,6 +50,7 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
     return cardFrame(
       {
         theme,
+        icon: TrendingUp,
         height: STUB_HEIGHT,
         title: 'Momentum',
         note: 'rolling 12 months',
@@ -64,7 +64,11 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
   const maxTotal = Math.max(...points.map((point) => point.total));
   const scaleY = maxTotal === 0 ? 0 : PLOT_HEIGHT / (maxTotal * Y_HEADROOM);
   const y = (total: number): number => PLOT_BOTTOM - total * scaleY;
-  const x = (index: number): number => PLOT_X + (index / (points.length - 1)) * PLOT_WIDTH;
+  // The right gutter holds the current value at headline size, so the line
+  // stops short of it by exactly as much as the number needs.
+  const currentLabel = formatInt(current.total);
+  const plotRight = CARD_WIDTH - CARD_PADDING - measureSans(currentLabel, 30, 'semibold') - 14;
+  const x = (index: number): number => PLOT_X + (index / (points.length - 1)) * (plotRight - PLOT_X);
 
   const vertices = points.map((point, index) => `${num(x(index))} ${num(y(point.total))}`);
   const line = el('path', {
@@ -77,11 +81,22 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
   });
   const area = el('path', {
     d: `M${num(PLOT_X)} ${num(PLOT_BOTTOM)}L${vertices.join('L')}L${num(x(points.length - 1))} ${num(PLOT_BOTTOM)}Z`,
-    fill: theme.contribRamp[2],
-    // fill-opacity, not opacity: the frame's reduced-motion reset forces
-    // `opacity: 1` on every element, which would flood the plot solid green.
-    'fill-opacity': 0.16,
+    // The frame's vertical fade, painted with stop-opacity: the reduced-motion
+    // reset forces `opacity: 1` on every element, which would flood the plot.
+    fill: 'url(#area)',
   });
+
+  // Guides at round values give the curve a scale without an axis column. They
+  // stop short of the value gutter, whose number is its own label.
+  const guideStep = niceStep(maxTotal * Y_HEADROOM, 3);
+  const guides = range(guideStep === 0 ? 0 : Math.floor((maxTotal * Y_HEADROOM) / guideStep))
+    .map((index) => (index + 1) * guideStep)
+    .filter((value) => y(value) >= PLOT_TOP)
+    .map(
+      (value) =>
+        hGuide(PLOT_X, plotRight, y(value), theme) +
+        el('text', { x: PLOT_X, y: y(value) - 5, class: 't-tick' }, textNode(formatCompact(value)))
+    );
 
   const baselineRule = el('line', {
     x1: PLOT_X,
@@ -115,14 +130,18 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
 
   // Mark the all-time peak — unless it is where the line already ends, where
   // the ring would sit under the end cap and repeat the number beside it.
-  const peakMark = peak.date === current.date ? '' : peakMarker(peak, points, theme, x, y);
+  const peakMark = peak.date === current.date ? '' : peakMarker(peak, points, theme, x, y, plotRight);
 
   // The current value is the number a reader wants first, so it sits at the
   // line's end rather than in the footer. Clamped into the plot band.
   const currentY = Math.min(PLOT_BOTTOM - 4, Math.max(PLOT_TOP + 20, y(current.total) + 9));
   const currentValue =
     el('circle', { cx: x(points.length - 1), cy: y(current.total), r: 3.2, fill: theme.contribRamp[4] }) +
-    el('text', { x: PLOT_X + PLOT_WIDTH + 12, y: currentY, class: 't-value' }, textNode(formatInt(current.total)));
+    el(
+      'text',
+      { x: CARD_WIDTH - CARD_PADDING, y: currentY, class: 't-value t-hero', 'text-anchor': 'end' },
+      textNode(currentLabel)
+    );
 
   const footerParts: string[] = [
     el('tspan', { class: 't-stat' }, textNode(formatInt(momentum.lifetimeTotal))),
@@ -149,6 +168,7 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
   return cardFrame(
     {
       theme,
+      icon: TrendingUp,
       height: FOOTER_BASELINE + CARD_PADDING,
       title: 'Momentum',
       note: 'rolling 12 months · all contribution types',
@@ -158,7 +178,7 @@ export function renderMomentum(data: ProfileData, theme: Theme, fontFaceCss: str
       extraCss,
       fontFaceCss,
     },
-    el('g', { class: 'fade' }, baselineRule, ...ticks),
+    el('g', { class: 'fade' }, ...guides, baselineRule, ...ticks),
     el('g', { class: 'sweep' }, area, line),
     el('g', { class: 'fade' }, peakMark, currentValue, footer)
   );
@@ -170,12 +190,13 @@ function peakMarker(
   points: readonly MomentumPoint[],
   theme: Theme,
   x: (index: number) => number,
-  y: (total: number) => number
+  y: (total: number) => number,
+  plotRight: number
 ): string {
   const cx = x(points.indexOf(peak));
   const cy = y(peak.total);
   const label = `peak ${formatInt(peak.total)}`;
-  const flip = cx + measureMono(label, 9.5) + 14 > PLOT_X + PLOT_WIDTH;
+  const flip = cx + measureMono(label, 9.5) + 14 > plotRight;
   return (
     el('circle', { cx, cy, r: 4.5, fill: 'none', stroke: theme.fg, 'stroke-width': 1.4 }) +
     el(

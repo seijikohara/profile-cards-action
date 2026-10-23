@@ -17,9 +17,7 @@ import { fetchProfile } from './github/fetch-profile.js';
 import { changedPaths, commitAndPush } from './git.js';
 import { readInputs, type ActionInputs } from './inputs.js';
 import type { ProfileData } from './model.js';
-import { DARK, LIGHT, type Theme } from './theme.js';
-
-const THEME_BY_ID: Record<'light' | 'dark', Theme> = { light: LIGHT, dark: DARK };
+import { themeFor } from './theme.js';
 
 /** Commit when asked, otherwise just detect pending changes — either way report whether anything changed. */
 async function resolveChanged(inputs: ActionInputs): Promise<boolean> {
@@ -43,7 +41,7 @@ async function run(): Promise<void> {
   const data: ProfileData = { ...fetched, generatedAt: new Date().toISOString() };
   const streaks = computeStreaks(data.lifetimeDays);
   const fontFaceCss = await resolveFonts(inputs.font, inputs.monoFont);
-  const themes = inputs.themeIds.map((id) => THEME_BY_ID[id]);
+  const themes = inputs.themeIds.map((id) => themeFor(id, inputs.palette));
 
   // Relative path -> SVG. Cards first, then badges under `badges/`.
   const files = new Map<string, string>();

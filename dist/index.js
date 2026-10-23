@@ -17301,6 +17301,452 @@ function info(message) {
 	process.stdout.write(message + os$1.EOL);
 }
 //#endregion
+//#region src/svg/dsl.ts
+/** Escape text nodes and attribute values. */
+function esc(value) {
+	return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\"", "&quot;").replaceAll("'", "&#39;");
+}
+/** Render a number with at most 2 decimals, no trailing zeros — keeps output compact and deterministic. */
+function num(v) {
+	if (!Number.isFinite(v)) throw new Error(`non-finite SVG coordinate: ${v}`);
+	return String(Math.round(v * 100) / 100);
+}
+function renderAttrs(attrs) {
+	return Object.entries(attrs).filter((entry) => entry[1] !== void 0).map(([key, value]) => ` ${key}="${typeof value === "number" ? num(value) : esc(value)}"`).join("");
+}
+/** Build an element. Children are pre-rendered strings (from el/text helpers only). */
+function el(name, attrs = {}, ...children) {
+	const body = children.join("");
+	return body === "" ? `<${name}${renderAttrs(attrs)}/>` : `<${name}${renderAttrs(attrs)}>${body}</${name}>`;
+}
+/** Escaped text node. */
+function textNode(value) {
+	return esc(value);
+}
+//#endregion
+//#region src/svg/text.ts
+/**
+* Text measurement and number formatting for SVG layout.
+*
+* SVG-in-<img> renders with the viewer's system font, so exact metrics are
+* unknowable. Layout uses Helvetica AFM advance widths (the narrowest common
+* member of the stack is close to these) plus a small safety factor applied by
+* callers that truncate.
+*/
+/** Helvetica advance widths for ASCII 32..126, in 1/1000 em. */
+const HELVETICA_WIDTHS = [
+	278,
+	278,
+	355,
+	556,
+	556,
+	889,
+	667,
+	191,
+	333,
+	333,
+	389,
+	584,
+	278,
+	333,
+	278,
+	278,
+	556,
+	556,
+	556,
+	556,
+	556,
+	556,
+	556,
+	556,
+	556,
+	556,
+	278,
+	278,
+	584,
+	584,
+	584,
+	556,
+	1015,
+	667,
+	667,
+	722,
+	722,
+	667,
+	611,
+	778,
+	722,
+	278,
+	500,
+	667,
+	556,
+	833,
+	722,
+	778,
+	667,
+	778,
+	722,
+	667,
+	611,
+	722,
+	667,
+	944,
+	667,
+	667,
+	611,
+	278,
+	278,
+	278,
+	469,
+	556,
+	333,
+	556,
+	556,
+	500,
+	556,
+	556,
+	278,
+	556,
+	556,
+	222,
+	222,
+	500,
+	222,
+	833,
+	556,
+	556,
+	556,
+	556,
+	333,
+	500,
+	278,
+	556,
+	500,
+	722,
+	500,
+	500,
+	500,
+	334,
+	260,
+	334,
+	584
+];
+const DEFAULT_EM = .6;
+const BOLD_FACTOR = 1.08;
+/** Estimated rendered width of `text` at `size` px in the sans stack. */
+function measureSans(text, size, weight = "regular") {
+	return Array.from(text).reduce((total, ch) => {
+		const code = ch.codePointAt(0) ?? 0;
+		return total + ((code >= 32 && code <= 126 ? HELVETICA_WIDTHS[code - 32] : void 0) ?? DEFAULT_EM * 1e3) / 1e3;
+	}, 0) * size * (weight === "semibold" ? BOLD_FACTOR : 1);
+}
+/**
+* Advance width of the mono stack, in em. Every member of the stack is
+* monospaced, so one constant covers all of them.
+*/
+const MONO_EM = .6;
+/** Estimated rendered width of `text` at `size` px in the mono stack. */
+function measureMono(text, size) {
+	return Array.from(text).length * size * MONO_EM;
+}
+/** 12345 -> "12,345". Hand-rolled so output never depends on ICU data. */
+function formatInt(v) {
+	return (v < 0 ? "-" : "") + String(Math.trunc(Math.abs(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+/** Compact magnitude: 999 -> "999", 45231 -> "45.2k", 1871000 -> "1.9m". */
+function formatCompact(value) {
+	if (value < 1e3) return String(value);
+	const scaled = value >= 1e6 ? value / 1e6 : value / 1e3;
+	const unit = value >= 1e6 ? "m" : "k";
+	return `${scaled >= 10 ? Math.round(scaled) : Math.round(scaled * 10) / 10}${unit}`;
+}
+/**
+* Bytes in decimal units: 912 -> "912 B", 708082 -> "708 KB", 7036949 -> "7.0 MB".
+* One decimal below 10 so small magnitudes keep a significant digit.
+*/
+function formatBytes(bytes) {
+	if (bytes < 1e3) return `${bytes} B`;
+	const scaled = bytes >= 1e6 ? bytes / 1e6 : bytes / 1e3;
+	const unit = bytes >= 1e6 ? "MB" : "KB";
+	return `${scaled >= 10 ? String(Math.round(scaled)) : (Math.round(scaled * 10) / 10).toFixed(1)} ${unit}`;
+}
+const MONTHS$1 = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec"
+];
+/** "2026-07-22" -> "Jul 22" or "Jul 22, 2026". */
+function formatDate(date, withYear) {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+	const month = m ? MONTHS$1[Number(m[2]) - 1] : void 0;
+	if (!m || month === void 0) throw new Error(`invalid calendar date: ${date}`);
+	const day = Number(m[3]);
+	return withYear ? `${month} ${day}, ${m[1]}` : `${month} ${day}`;
+}
+/** "2026-08-12" -> "Aug 2026". */
+function formatMonthYear(date) {
+	const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
+	const month = m ? MONTHS$1[Number(m[2]) - 1] : void 0;
+	if (!m || month === void 0) throw new Error(`invalid calendar date: ${date}`);
+	return `${month} ${m[1]}`;
+}
+/** Inclusive range, collapsing a shared year: "May 31 – Jul 22, 2026". */
+function formatDateRange(start, end) {
+	if (start === end) return formatDate(end, true);
+	return `${formatDate(start, !(start.slice(0, 4) === end.slice(0, 4)))} – ${formatDate(end, true)}`;
+}
+/** "2026-07-22T03:17:45.123Z" -> "2026-07-22 03:17 UTC". */
+function formatUtcTimestamp(iso) {
+	const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(iso);
+	if (!m) throw new Error(`invalid ISO timestamp: ${iso}`);
+	return `${m[1]} ${m[2]} UTC`;
+}
+//#endregion
+//#region src/theme.ts
+/** Palettes the `palette` input accepts; `green` is GitHub's own and the default. */
+const PALETTE_IDS = [
+	"green",
+	"blue",
+	"purple",
+	"orange"
+];
+const PALETTES = {
+	green: {
+		light: {
+			ink: "#1a7f37",
+			inkAlt: "#097a78",
+			contribRamp: [
+				"#ebedf0",
+				"#9be9a8",
+				"#40c463",
+				"#30a14e",
+				"#216e39"
+			]
+		},
+		dark: {
+			ink: "#3fb950",
+			inkAlt: "#08b4ae",
+			contribRamp: [
+				"#161b22",
+				"#0e4429",
+				"#006d32",
+				"#26a641",
+				"#39d353"
+			]
+		}
+	},
+	blue: {
+		light: {
+			ink: "#0969da",
+			inkAlt: "#764fd1",
+			contribRamp: [
+				"#ebedf0",
+				"#b7d6ff",
+				"#66a9fe",
+				"#3d89e4",
+				"#2f5d9b"
+			]
+		},
+		dark: {
+			ink: "#4493f8",
+			inkAlt: "#957cf1",
+			contribRamp: [
+				"#161b22",
+				"#22385f",
+				"#205a9f",
+				"#0f8ef1",
+				"#70b7ff"
+			]
+		}
+	},
+	purple: {
+		light: {
+			ink: "#8250df",
+			inkAlt: "#b933a4",
+			contribRamp: [
+				"#ebedf0",
+				"#dbc8fe",
+				"#b78bfe",
+				"#976fd8",
+				"#694c91"
+			]
+		},
+		dark: {
+			ink: "#ab7df8",
+			inkAlt: "#df68bf",
+			contribRamp: [
+				"#161b22",
+				"#422e57",
+				"#664695",
+				"#966fe9",
+				"#b89fff"
+			]
+		}
+	},
+	orange: {
+		light: {
+			ink: "#bc4c00",
+			inkAlt: "#bf4155",
+			contribRamp: [
+				"#ebedf0",
+				"#fec5a5",
+				"#fc7f26",
+				"#d06619",
+				"#8d4715"
+			]
+		},
+		dark: {
+			ink: "#db6d28",
+			inkAlt: "#e0626a",
+			contribRamp: [
+				"#161b22",
+				"#552d0d",
+				"#8e4103",
+				"#de5f0a",
+				"#ff905c"
+			]
+		}
+	}
+};
+/** The palette-independent part of each mode. */
+const SURFACES = {
+	light: {
+		bg: "#ffffff",
+		bgInset: "#f6f8fa",
+		border: "#d1d9e0",
+		borderMuted: "#e4e8ec",
+		fg: "#1f2328",
+		fgMuted: "#59636e",
+		accent: "#0969da",
+		seriesRamp: [
+			"#0969da",
+			"#1a7f37",
+			"#8250df",
+			"#bc4c00",
+			"#8b949e"
+		]
+	},
+	dark: {
+		bg: "#0d1117",
+		bgInset: "#151b23",
+		border: "#3d444d",
+		borderMuted: "#262c34",
+		fg: "#f0f6fc",
+		fgMuted: "#9198a1",
+		accent: "#4493f8",
+		seriesRamp: [
+			"#4493f8",
+			"#3fb950",
+			"#a371f7",
+			"#db6d28",
+			"#6e7681"
+		]
+	}
+};
+/** Build the theme for one color mode in one palette. */
+function themeFor(id, palette) {
+	return {
+		id,
+		palette,
+		...SURFACES[id],
+		...PALETTES[palette][id]
+	};
+}
+themeFor("light", "green");
+themeFor("dark", "green");
+const FONT_SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif";
+const FONT_MONO = "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace";
+/** Parse #rrggbb into channels. Throws on malformed input (all inputs are first-party constants or linguist colors). */
+function hexToRgb(hex) {
+	const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+	if (!m || m[1] === void 0) throw new Error(`invalid hex color: ${hex}`);
+	const v = Number.parseInt(m[1], 16);
+	return [
+		v >> 16 & 255,
+		v >> 8 & 255,
+		v & 255
+	];
+}
+function channelHex(n) {
+	return Math.min(255, Math.max(0, Math.round(n))).toString(16).padStart(2, "0");
+}
+function toHex(r, g, b) {
+	return `#${channelHex(r)}${channelHex(g)}${channelHex(b)}`;
+}
+/** Mix a color toward black (amount 0..1). Used for isometric side-face shading. */
+function shade(hex, amount) {
+	const [r, g, b] = hexToRgb(hex);
+	const k = 1 - amount;
+	return toHex(r * k, g * k, b * k);
+}
+/** Convert one 0..255 sRGB channel to linear light (WCAG). */
+function srgbToLinear(channel) {
+	const s = channel / 255;
+	return s <= .03928 ? s / 12.92 : ((s + .055) / 1.055) ** 2.4;
+}
+/** WCAG relative luminance, for picking readable icon fills per theme. */
+function luminance(hex) {
+	const [r, g, b] = hexToRgb(hex);
+	return .2126 * srgbToLinear(r) + .7152 * srgbToLinear(g) + .0722 * srgbToLinear(b);
+}
+/** WCAG contrast ratio between two colors. */
+function contrast(a, b) {
+	const la = luminance(a);
+	const lb = luminance(b);
+	const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+	return (hi + .05) / (lo + .05);
+}
+//#endregion
+//#region src/cards/badge.ts
+/**
+* Link badge: a quiet Primer pill with an optional brand glyph.
+*
+* Brands absent from simple-icons render text-only — never a lookalike mark
+* (LinkedIn's icon was removed from the icon set for legal reasons).
+*/
+const HEIGHT = 32;
+const PAD_X = 14;
+const ICON_SIZE = 16;
+const LABEL_SIZE = 13;
+function renderBadge(label, icon, theme) {
+	const labelWidth = Math.ceil(measureSans(label, LABEL_SIZE, "semibold"));
+	const iconSpan = icon ? 24 : 0;
+	const width = PAD_X + iconSpan + labelWidth + PAD_X;
+	const iconFill = icon === void 0 ? theme.fg : contrast(icon.hex, theme.bgInset) >= 1.6 ? icon.hex : theme.fg;
+	const glyph = icon === void 0 ? "" : el("g", { transform: `translate(${PAD_X},8) scale(${ICON_SIZE / 24})` }, el("path", {
+		d: icon.path,
+		fill: iconFill
+	}));
+	return el("svg", {
+		xmlns: "http://www.w3.org/2000/svg",
+		viewBox: `0 0 ${width} ${HEIGHT}`,
+		width,
+		height: HEIGHT,
+		role: "img",
+		"aria-label": label
+	}, el("title", {}, textNode(label)), el("style", {}, `text{font-family:${FONT_SANS};font-size:${LABEL_SIZE}px;font-weight:600;fill:${theme.fg}}`), el("rect", {
+		x: .5,
+		y: .5,
+		width: width - 1,
+		height: 31,
+		rx: 6,
+		fill: theme.bgInset,
+		stroke: theme.border
+	}), glyph, el("text", {
+		x: PAD_X + iconSpan,
+		y: 20.5
+	}, textNode(label)));
+}
+//#endregion
 //#region node_modules/.pnpm/simple-icons@16.35.0/node_modules/simple-icons/index.mjs
 var simple_icons_exports = /* @__PURE__ */ __exportAll({
 	si1001tracklists: () => si1001tracklists,
@@ -57168,356 +57614,12 @@ const siZyte = {
 	hex: "B02CCE"
 };
 //#endregion
-//#region src/svg/dsl.ts
-/** Escape text nodes and attribute values. */
-function esc(value) {
-	return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\"", "&quot;").replaceAll("'", "&#39;");
-}
-/** Render a number with at most 2 decimals, no trailing zeros — keeps output compact and deterministic. */
-function num(v) {
-	if (!Number.isFinite(v)) throw new Error(`non-finite SVG coordinate: ${v}`);
-	return String(Math.round(v * 100) / 100);
-}
-function renderAttrs(attrs) {
-	return Object.entries(attrs).filter((entry) => entry[1] !== void 0).map(([key, value]) => ` ${key}="${typeof value === "number" ? num(value) : esc(value)}"`).join("");
-}
-/** Build an element. Children are pre-rendered strings (from el/text helpers only). */
-function el(name, attrs = {}, ...children) {
-	const body = children.join("");
-	return body === "" ? `<${name}${renderAttrs(attrs)}/>` : `<${name}${renderAttrs(attrs)}>${body}</${name}>`;
-}
-/** Escaped text node. */
-function textNode(value) {
-	return esc(value);
-}
-//#endregion
-//#region src/svg/text.ts
+//#region src/svg/brands.ts
 /**
-* Text measurement and number formatting for SVG layout.
+* simple-icons lookup shared by the badges and the language marks.
 *
-* SVG-in-<img> renders with the viewer's system font, so exact metrics are
-* unknowable. Layout uses Helvetica AFM advance widths (the narrowest common
-* member of the stack is close to these) plus a small safety factor applied by
-* callers that truncate.
-*/
-/** Helvetica advance widths for ASCII 32..126, in 1/1000 em. */
-const HELVETICA_WIDTHS = [
-	278,
-	278,
-	355,
-	556,
-	556,
-	889,
-	667,
-	191,
-	333,
-	333,
-	389,
-	584,
-	278,
-	333,
-	278,
-	278,
-	556,
-	556,
-	556,
-	556,
-	556,
-	556,
-	556,
-	556,
-	556,
-	556,
-	278,
-	278,
-	584,
-	584,
-	584,
-	556,
-	1015,
-	667,
-	667,
-	722,
-	722,
-	667,
-	611,
-	778,
-	722,
-	278,
-	500,
-	667,
-	556,
-	833,
-	722,
-	778,
-	667,
-	778,
-	722,
-	667,
-	611,
-	722,
-	667,
-	944,
-	667,
-	667,
-	611,
-	278,
-	278,
-	278,
-	469,
-	556,
-	333,
-	556,
-	556,
-	500,
-	556,
-	556,
-	278,
-	556,
-	556,
-	222,
-	222,
-	500,
-	222,
-	833,
-	556,
-	556,
-	556,
-	556,
-	333,
-	500,
-	278,
-	556,
-	500,
-	722,
-	500,
-	500,
-	500,
-	334,
-	260,
-	334,
-	584
-];
-const DEFAULT_EM = .6;
-const BOLD_FACTOR = 1.08;
-/** Estimated rendered width of `text` at `size` px in the sans stack. */
-function measureSans(text, size, weight = "regular") {
-	return Array.from(text).reduce((total, ch) => {
-		const code = ch.codePointAt(0) ?? 0;
-		return total + ((code >= 32 && code <= 126 ? HELVETICA_WIDTHS[code - 32] : void 0) ?? DEFAULT_EM * 1e3) / 1e3;
-	}, 0) * size * (weight === "semibold" ? BOLD_FACTOR : 1);
-}
-/**
-* Advance width of the mono stack, in em. Every member of the stack is
-* monospaced, so one constant covers all of them.
-*/
-const MONO_EM = .6;
-/** Estimated rendered width of `text` at `size` px in the mono stack. */
-function measureMono(text, size) {
-	return Array.from(text).length * size * MONO_EM;
-}
-/** 12345 -> "12,345". Hand-rolled so output never depends on ICU data. */
-function formatInt(v) {
-	return (v < 0 ? "-" : "") + String(Math.trunc(Math.abs(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-/** Compact magnitude: 999 -> "999", 45231 -> "45.2k", 1871000 -> "1.9m". */
-function formatCompact(value) {
-	if (value < 1e3) return String(value);
-	const scaled = value >= 1e6 ? value / 1e6 : value / 1e3;
-	const unit = value >= 1e6 ? "m" : "k";
-	return `${scaled >= 10 ? Math.round(scaled) : Math.round(scaled * 10) / 10}${unit}`;
-}
-/**
-* Bytes in decimal units: 912 -> "912 B", 708082 -> "708 KB", 7036949 -> "7.0 MB".
-* One decimal below 10 so small magnitudes keep a significant digit.
-*/
-function formatBytes(bytes) {
-	if (bytes < 1e3) return `${bytes} B`;
-	const scaled = bytes >= 1e6 ? bytes / 1e6 : bytes / 1e3;
-	const unit = bytes >= 1e6 ? "MB" : "KB";
-	return `${scaled >= 10 ? String(Math.round(scaled)) : (Math.round(scaled * 10) / 10).toFixed(1)} ${unit}`;
-}
-const MONTHS$1 = [
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec"
-];
-/** "2026-07-22" -> "Jul 22" or "Jul 22, 2026". */
-function formatDate(date, withYear) {
-	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-	const month = m ? MONTHS$1[Number(m[2]) - 1] : void 0;
-	if (!m || month === void 0) throw new Error(`invalid calendar date: ${date}`);
-	const day = Number(m[3]);
-	return withYear ? `${month} ${day}, ${m[1]}` : `${month} ${day}`;
-}
-/** "2026-08-12" -> "Aug 2026". */
-function formatMonthYear(date) {
-	const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
-	const month = m ? MONTHS$1[Number(m[2]) - 1] : void 0;
-	if (!m || month === void 0) throw new Error(`invalid calendar date: ${date}`);
-	return `${month} ${m[1]}`;
-}
-/** Inclusive range, collapsing a shared year: "May 31 – Jul 22, 2026". */
-function formatDateRange(start, end) {
-	if (start === end) return formatDate(end, true);
-	return `${formatDate(start, !(start.slice(0, 4) === end.slice(0, 4)))} – ${formatDate(end, true)}`;
-}
-/** "2026-07-22T03:17:45.123Z" -> "2026-07-22 03:17 UTC". */
-function formatUtcTimestamp(iso) {
-	const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(iso);
-	if (!m) throw new Error(`invalid ISO timestamp: ${iso}`);
-	return `${m[1]} ${m[2]} UTC`;
-}
-//#endregion
-//#region src/theme.ts
-const LIGHT = {
-	id: "light",
-	bg: "#ffffff",
-	bgInset: "#f6f8fa",
-	border: "#d1d9e0",
-	fg: "#1f2328",
-	fgMuted: "#59636e",
-	accent: "#0969da",
-	contribRamp: [
-		"#ebedf0",
-		"#9be9a8",
-		"#40c463",
-		"#30a14e",
-		"#216e39"
-	],
-	seriesRamp: [
-		"#0969da",
-		"#1a7f37",
-		"#8250df",
-		"#bc4c00",
-		"#8b949e"
-	]
-};
-const DARK = {
-	id: "dark",
-	bg: "#0d1117",
-	bgInset: "#151b23",
-	border: "#3d444d",
-	fg: "#f0f6fc",
-	fgMuted: "#9198a1",
-	accent: "#4493f8",
-	contribRamp: [
-		"#161b22",
-		"#0e4429",
-		"#006d32",
-		"#26a641",
-		"#39d353"
-	],
-	seriesRamp: [
-		"#4493f8",
-		"#3fb950",
-		"#a371f7",
-		"#db6d28",
-		"#6e7681"
-	]
-};
-const FONT_SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif";
-const FONT_MONO = "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace";
-/** Parse #rrggbb into channels. Throws on malformed input (all inputs are first-party constants or linguist colors). */
-function hexToRgb(hex) {
-	const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-	if (!m || m[1] === void 0) throw new Error(`invalid hex color: ${hex}`);
-	const v = Number.parseInt(m[1], 16);
-	return [
-		v >> 16 & 255,
-		v >> 8 & 255,
-		v & 255
-	];
-}
-function channelHex(n) {
-	return Math.min(255, Math.max(0, Math.round(n))).toString(16).padStart(2, "0");
-}
-function toHex(r, g, b) {
-	return `#${channelHex(r)}${channelHex(g)}${channelHex(b)}`;
-}
-/** Mix a color toward black (amount 0..1). Used for isometric side-face shading. */
-function shade(hex, amount) {
-	const [r, g, b] = hexToRgb(hex);
-	const k = 1 - amount;
-	return toHex(r * k, g * k, b * k);
-}
-/** Convert one 0..255 sRGB channel to linear light (WCAG). */
-function srgbToLinear(channel) {
-	const s = channel / 255;
-	return s <= .03928 ? s / 12.92 : ((s + .055) / 1.055) ** 2.4;
-}
-/** WCAG relative luminance, for picking readable icon fills per theme. */
-function luminance(hex) {
-	const [r, g, b] = hexToRgb(hex);
-	return .2126 * srgbToLinear(r) + .7152 * srgbToLinear(g) + .0722 * srgbToLinear(b);
-}
-/** WCAG contrast ratio between two colors. */
-function contrast(a, b) {
-	const la = luminance(a);
-	const lb = luminance(b);
-	const [hi, lo] = la > lb ? [la, lb] : [lb, la];
-	return (hi + .05) / (lo + .05);
-}
-//#endregion
-//#region src/cards/badge.ts
-/**
-* Link badge: a quiet Primer pill with an optional brand glyph.
-*
-* Brands absent from simple-icons render text-only — never a lookalike mark
-* (LinkedIn's icon was removed from the icon set for legal reasons).
-*/
-const HEIGHT = 32;
-const PAD_X = 14;
-const ICON_SIZE = 16;
-const LABEL_SIZE = 13;
-function renderBadge(label, icon, theme) {
-	const labelWidth = Math.ceil(measureSans(label, LABEL_SIZE, "semibold"));
-	const iconSpan = icon ? 24 : 0;
-	const width = PAD_X + iconSpan + labelWidth + PAD_X;
-	const iconFill = icon === void 0 ? theme.fg : contrast(icon.hex, theme.bgInset) >= 1.6 ? icon.hex : theme.fg;
-	const glyph = icon === void 0 ? "" : el("g", { transform: `translate(${PAD_X},8) scale(${ICON_SIZE / 24})` }, el("path", {
-		d: icon.path,
-		fill: iconFill
-	}));
-	return el("svg", {
-		xmlns: "http://www.w3.org/2000/svg",
-		viewBox: `0 0 ${width} ${HEIGHT}`,
-		width,
-		height: HEIGHT,
-		role: "img",
-		"aria-label": label
-	}, el("title", {}, textNode(label)), el("style", {}, `text{font-family:${FONT_SANS};font-size:${LABEL_SIZE}px;font-weight:600;fill:${theme.fg}}`), el("rect", {
-		x: .5,
-		y: .5,
-		width: width - 1,
-		height: 31,
-		rx: 6,
-		fill: theme.bgInset,
-		stroke: theme.border
-	}), glyph, el("text", {
-		x: PAD_X + iconSpan,
-		y: 20.5
-	}, textNode(label)));
-}
-//#endregion
-//#region src/badges.ts
-/**
-* Brand-badge rendering: resolve arbitrary link names to simple-icons glyphs
-* and emit one pill SVG per theme.
-*
-* Lookup is by free-form display name, so the entire simple-icons set must stay
-* reachable at runtime — the package is bundled whole (dynamic lookup defeats
-* tree-shaking), which is an accepted cost. Names with no matching icon render
-* text-only rather than a lookalike mark.
+* The package is bundled whole: badge names are free-form, so every glyph must
+* stay reachable at runtime and tree-shaking cannot help.
 */
 /**
 * Narrow an arbitrary module export to an icon object.
@@ -57534,28 +57636,46 @@ function isIcon(value) {
 function normalizeKey(value) {
 	return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
+const ICONS = Object.values(simple_icons_exports).filter(isIcon);
+/**
+* Every glyph by the normalized form of both its title and its slug. Earlier
+* entries win on key collision to keep the mapping deterministic across the
+* fixed export order.
+*/
+const BY_NAME = (() => {
+	const index = /* @__PURE__ */ new Map();
+	for (const icon of ICONS) for (const key of [normalizeKey(icon.title), normalizeKey(icon.slug)]) if (key !== "" && !index.has(key)) index.set(key, icon);
+	return index;
+})();
+const BY_SLUG = new Map(ICONS.map((icon) => [icon.slug, icon]));
+/** Find a glyph by free-form display name (badges). */
+function findBrand(name) {
+	return BY_NAME.get(normalizeKey(name));
+}
+/** Find a glyph by its exact simple-icons slug. */
+function brandBySlug(slug) {
+	return BY_SLUG.get(slug);
+}
+//#endregion
+//#region src/badges.ts
+/**
+* Brand-badge rendering: resolve arbitrary link names to simple-icons glyphs
+* and emit one pill SVG per theme.
+*
+* Lookup is by free-form display name, so the entire simple-icons set must stay
+* reachable at runtime — the package is bundled whole (dynamic lookup defeats
+* tree-shaking), which is an accepted cost. Names with no matching icon render
+* text-only rather than a lookalike mark.
+*/
 /** Reduce a name to a filename stem: lowercase, collapse non-alphanumeric runs to '-', trim edges. */
 function slug(value) {
 	return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
-/**
-* Index every simple-icons glyph by the normalized form of both its title and
-* its slug. Built once at module load; earlier entries win on key collision to
-* keep the mapping deterministic across the fixed export order.
-*/
-const ICON_INDEX = (() => {
-	const index = /* @__PURE__ */ new Map();
-	for (const value of Object.values(simple_icons_exports)) {
-		if (!isIcon(value)) continue;
-		for (const key of [normalizeKey(value.title), normalizeKey(value.slug)]) if (key !== "" && !index.has(key)) index.set(key, value);
-	}
-	return index;
-})();
 /** Render brand-badge pill SVGs. Returns a map of relative filename -> SVG string. */
 function renderBadges(names, themes) {
 	const out = /* @__PURE__ */ new Map();
 	for (const name of names) {
-		const found = ICON_INDEX.get(normalizeKey(name));
+		const found = findBrand(name);
 		const icon = found ? {
 			path: found.path,
 			hex: `#${found.hex}`
@@ -57567,14 +57687,226 @@ function renderBadges(names, themes) {
 }
 //#endregion
 //#region src/config.ts
+/** Hue family for magnitude marks and chrome. Mirrors action.yml's `palette` default. */
+const DEFAULT_PALETTE = "green";
 /**
 * How the magnitude ramp is labelled. Mirrors action.yml's `legend` default:
 * "ramp" keeps the calendar's familiar Less…More, "scale" prints the counts
 * each step stands for.
 */
 const DEFAULT_LEGEND = "ramp";
+/**
+* @license lucide v1.61.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 //#endregion
 //#region src/iter.ts
+var import_lucide = (/* @__PURE__ */ __commonJSMin(((exports) => {
+	const CalendarCheck = [
+		["path", { d: "M8 2v3" }],
+		["path", { d: "M16 2v3" }],
+		["rect", {
+			x: "3",
+			y: "3",
+			width: "18",
+			height: "18",
+			rx: "2"
+		}],
+		["path", { d: "M3 9h18" }],
+		["path", { d: "m9 15 2 2 4-4" }]
+	];
+	const CalendarDays = [
+		["path", { d: "M8 2v3" }],
+		["path", { d: "M16 2v3" }],
+		["rect", {
+			x: "3",
+			y: "3",
+			width: "18",
+			height: "18",
+			rx: "2"
+		}],
+		["path", { d: "M3 9h18" }],
+		["path", { d: "M8 13h.01" }],
+		["path", { d: "M12 13h.01" }],
+		["path", { d: "M16 13h.01" }],
+		["path", { d: "M8 17h.01" }],
+		["path", { d: "M12 17h.01" }],
+		["path", { d: "M16 17h.01" }]
+	];
+	const CalendarRange = [
+		["rect", {
+			x: "3",
+			y: "3",
+			width: "18",
+			height: "18",
+			rx: "2"
+		}],
+		["path", { d: "M16 2v3" }],
+		["path", { d: "M3 9h18" }],
+		["path", { d: "M8 2v3" }],
+		["path", { d: "M17 13h-6" }],
+		["path", { d: "M13 17H7" }],
+		["path", { d: "M7 13h.01" }],
+		["path", { d: "M17 17h.01" }]
+	];
+	const ChartColumn = [
+		["path", { d: "M3 3v16a2 2 0 0 0 2 2h16" }],
+		["path", { d: "M18 17V9" }],
+		["path", { d: "M13 17V5" }],
+		["path", { d: "M8 17v-3" }]
+	];
+	const ChartGantt = [
+		["path", { d: "M10 6h8" }],
+		["path", { d: "M12 16h6" }],
+		["path", { d: "M3 3v16a2 2 0 0 0 2 2h16" }],
+		["path", { d: "M8 11h7" }]
+	];
+	const CircleDot = [["circle", {
+		cx: "12",
+		cy: "12",
+		r: "1"
+	}], ["circle", {
+		cx: "12",
+		cy: "12",
+		r: "10"
+	}]];
+	const Clock = [["circle", {
+		cx: "12",
+		cy: "12",
+		r: "10"
+	}], ["path", { d: "M12 6v6l4 2" }]];
+	const CodeXml = [
+		["path", { d: "m18 16 4-4-4-4" }],
+		["path", { d: "m6 8-4 4 4 4" }],
+		["path", { d: "m14.5 4-5 16" }]
+	];
+	const Flame = [["path", { d: "M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" }]];
+	const FolderGit2 = [
+		["path", { d: "M18 19a5 5 0 0 1-5-5v8" }],
+		["path", { d: "M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5" }],
+		["circle", {
+			cx: "13",
+			cy: "12",
+			r: "2"
+		}],
+		["circle", {
+			cx: "20",
+			cy: "19",
+			r: "2"
+		}]
+	];
+	const GitMerge = [
+		["circle", {
+			cx: "18",
+			cy: "18",
+			r: "3"
+		}],
+		["circle", {
+			cx: "6",
+			cy: "6",
+			r: "3"
+		}],
+		["path", { d: "M6 21V9a9 9 0 0 0 9 9" }]
+	];
+	const GitPullRequestArrow = [
+		["circle", {
+			cx: "5",
+			cy: "6",
+			r: "3"
+		}],
+		["path", { d: "M5 9v12" }],
+		["circle", {
+			cx: "19",
+			cy: "18",
+			r: "3"
+		}],
+		["path", { d: "m15 9-3-3 3-3" }],
+		["path", { d: "M12 6h5a2 2 0 0 1 2 2v7" }]
+	];
+	const Layers = [
+		["path", { d: "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" }],
+		["path", { d: "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" }],
+		["path", { d: "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" }]
+	];
+	const LayoutDashboard = [
+		["rect", {
+			width: "7",
+			height: "9",
+			x: "3",
+			y: "3",
+			rx: "1"
+		}],
+		["rect", {
+			width: "7",
+			height: "5",
+			x: "14",
+			y: "3",
+			rx: "1"
+		}],
+		["rect", {
+			width: "7",
+			height: "9",
+			x: "14",
+			y: "12",
+			rx: "1"
+		}],
+		["rect", {
+			width: "7",
+			height: "5",
+			x: "3",
+			y: "16",
+			rx: "1"
+		}]
+	];
+	const RotateCcwClock = [
+		["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" }],
+		["path", { d: "M3 3v5h5" }],
+		["path", { d: "M12 7v5l4 2" }]
+	];
+	const Sigma = [["path", { d: "M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2" }]];
+	const Star = [["path", { d: "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" }]];
+	const TrendingUp = [["path", { d: "M16 7h6v6" }], ["path", { d: "m22 7-8.5 8.5-5-5L2 17" }]];
+	const Trophy = [
+		["path", { d: "M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" }],
+		["path", { d: "M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" }],
+		["path", { d: "M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" }],
+		["path", { d: "M4 22h16" }],
+		["path", { d: "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" }],
+		["path", { d: "M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" }]
+	];
+	const Users = [
+		["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" }],
+		["path", { d: "M16 3.128a4 4 0 0 1 0 7.744" }],
+		["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87" }],
+		["circle", {
+			cx: "9",
+			cy: "7",
+			r: "4"
+		}]
+	];
+	exports.CalendarCheck = CalendarCheck;
+	exports.CalendarDays = CalendarDays;
+	exports.CalendarRange = CalendarRange;
+	exports.ChartColumn = ChartColumn;
+	exports.ChartGantt = ChartGantt;
+	exports.CircleDot = CircleDot;
+	exports.Clock = Clock;
+	exports.CodeXml = CodeXml;
+	exports.Flame = Flame;
+	exports.FolderGit2 = FolderGit2;
+	exports.GitMerge = GitMerge;
+	exports.GitPullRequestArrow = GitPullRequestArrow;
+	exports.History = RotateCcwClock;
+	exports.Layers = Layers;
+	exports.LayoutDashboard = LayoutDashboard;
+	exports.Sigma = Sigma;
+	exports.Star = Star;
+	exports.TrendingUp = TrendingUp;
+	exports.Trophy = Trophy;
+	exports.Users = Users;
+})))();
 /** Immutable integer sequences for index-free iteration. */
 /** [start, start + 1, …, start + length - 1]; empty when length <= 0. */
 function range(length, start = 0) {
@@ -57742,6 +58074,33 @@ function verticalBar(x, baseline, width, height, fill) {
 	});
 }
 //#endregion
+//#region src/svg/icons.ts
+/**
+* Draw a Lucide icon in a `size`-pixel box whose top-left corner is (x, y).
+*
+* A nested <svg> places and scales the 24-unit icon grid instead of a
+* `transform` attribute: the frame's reduced-motion rule sets the CSS
+* `transform` property to none on every element, and that property overrides
+* the attribute, which would drop every icon at the origin at full size.
+*
+* Stroke color is set explicitly; `currentColor` has no `color` to inherit
+* inside an image.
+*/
+function icon(node, x, y, size, color) {
+	return el("svg", {
+		x,
+		y,
+		width: size,
+		height: size,
+		viewBox: "0 0 24 24",
+		fill: "none",
+		stroke: color,
+		"stroke-width": 2,
+		"stroke-linecap": "round",
+		"stroke-linejoin": "round"
+	}, ...node.map(([tag, attrs]) => el(tag, attrs)));
+}
+//#endregion
 //#region src/svg/spark.ts
 /**
 * Baseline-anchored sparkline of `values`, left to right.
@@ -57765,8 +58124,7 @@ function sparkline(values, x, baseline, width, height, theme) {
 	const last = points.at(-1);
 	return el("path", {
 		d: `M${num(x)} ${num(baseline)}L${path}L${num(x + width)} ${num(baseline)}Z`,
-		fill: theme.contribRamp[2],
-		"fill-opacity": .28
+		fill: "url(#area)"
 	}) + el("path", {
 		d: `M${path}`,
 		fill: "none",
@@ -57796,21 +58154,17 @@ function deltaTriangle(cx, cy, rising, fill) {
 }
 //#endregion
 //#region src/cards/frame.ts
-/**
-* Shared card chrome: canvas, border, title row, typography classes, motion.
-*
-* Everything visual is embedded in the SVG itself (system font stacks, one
-* <style> block); GitHub's image proxy allows inline styles and blocks
-* scripts/external resources, so this is the entire budget.
-*/
-const TITLE_BASELINE = 43;
+const TITLE_ICON_SIZE = 15;
+/** Paint server for headline numbers: the palette's ink drifting to its neighbouring hue. */
+const INK_GRADIENT = "url(#ink)";
 function cardFrame(options, ...children) {
 	const { theme, height, title, note, description, extraCss, fontFaceCss } = options;
 	const css = `
 ${fontFaceCss ?? ""}
 text{font-family:'CardSans',${FONT_SANS};font-weight:400}
-.t-title{font-size:15px;font-weight:600;fill:${theme.fg}}
-.t-value{font-size:28px;font-weight:600;fill:${theme.fg}}
+.t-title{font-family:'CardMono',${FONT_MONO};font-size:11px;font-weight:400;letter-spacing:1.6px;fill:${theme.ink}}
+.t-value{font-size:30px;font-weight:600;letter-spacing:-.4px;fill:${theme.fg}}
+.t-hero{fill:${INK_GRADIENT}}
 .t-unit{font-size:14px;font-weight:400;fill:${theme.fgMuted}}
 .t-label{font-size:12px;font-weight:400;fill:${theme.fgMuted}}
 .t-stat{font-weight:600;fill:${theme.fg}}
@@ -57830,19 +58184,66 @@ ${extraCss ?? ""}`;
 		height,
 		role: "img",
 		"aria-label": description
-	}, el("title", {}, textNode(title)), el("desc", {}, textNode(description)), el("style", {}, css), el("rect", {
+	}, el("title", {}, textNode(title)), el("desc", {}, textNode(description)), el("style", {}, css), el("defs", {}, el("radialGradient", {
+		id: "glow",
+		gradientUnits: "userSpaceOnUse",
+		cx: 846,
+		cy: 0,
+		r: 460
+	}, el("stop", {
+		offset: 0,
+		"stop-color": theme.ink,
+		"stop-opacity": theme.id === "light" ? .07 : .1
+	}), el("stop", {
+		offset: 1,
+		"stop-color": theme.ink,
+		"stop-opacity": 0
+	})), el("linearGradient", {
+		id: "ink",
+		x1: 0,
+		y1: 0,
+		x2: 1,
+		y2: 0
+	}, el("stop", {
+		offset: 0,
+		"stop-color": theme.ink
+	}), el("stop", {
+		offset: 1,
+		"stop-color": theme.inkAlt
+	})), el("linearGradient", {
+		id: "area",
+		x1: 0,
+		y1: 0,
+		x2: 0,
+		y2: 1
+	}, el("stop", {
+		offset: 0,
+		"stop-color": theme.contribRamp[3],
+		"stop-opacity": .32
+	}), el("stop", {
+		offset: 1,
+		"stop-color": theme.contribRamp[3],
+		"stop-opacity": .02
+	}))), el("rect", {
 		x: .5,
 		y: .5,
 		width: 845,
 		height: height - 1,
-		rx: 6,
+		rx: 12,
 		fill: theme.bg,
 		stroke: theme.border
-	}), el("text", {
-		x: 24,
-		y: TITLE_BASELINE,
+	}), el("rect", {
+		x: .5,
+		y: .5,
+		width: 845,
+		height: height - 1,
+		rx: 12,
+		fill: "url(#glow)"
+	}), icon(options.icon, 24, 31, TITLE_ICON_SIZE, theme.ink), el("text", {
+		x: 47,
+		y: 42,
 		class: "t-title"
-	}, textNode(title)), note === void 0 ? "" : el("text", {
+	}, textNode(title.toUpperCase())), note === void 0 ? "" : el("text", {
 		x: 822,
 		y: 42,
 		class: "t-mono",
@@ -57851,6 +58252,7 @@ ${extraCss ?? ""}`;
 }
 const TILE_GAP = 12;
 const TILE_BASE_HEIGHT = 76;
+const TILE_ICON_SIZE = 14;
 const SUB_ROW = 18;
 const SPARK_ROW = 30;
 const SPARK_HEIGHT = 20;
@@ -57872,14 +58274,15 @@ function tileRow(theme, tiles, y) {
 			const x = 24 + index * (width + TILE_GAP);
 			const deltaRight = x + width - 16;
 			return el("g", {}, el("rect", {
-				x,
-				y,
-				width,
-				height,
-				rx: 6,
-				fill: theme.bgInset
-			}), el("text", {
-				x: x + 16,
+				x: x + .5,
+				y: y + .5,
+				width: width - 1,
+				height: height - 1,
+				rx: 10,
+				fill: theme.bgInset,
+				stroke: theme.borderMuted
+			}), icon(tile.icon, x + 16, y + 15, TILE_ICON_SIZE, theme.ink), el("text", {
+				x: x + 16 + TILE_ICON_SIZE + 7,
 				y: y + 26,
 				class: "t-label"
 			}, textNode(tile.label)), tile.delta === void 0 ? "" : deltaTriangle(deltaRight - measureMono(tile.delta.text, 10) - tile.delta.text.length * .4 - 11, y + 76, tile.delta.rising, theme.fg) + el("text", {
@@ -57889,7 +58292,7 @@ function tileRow(theme, tiles, y) {
 				"text-anchor": "end"
 			}, textNode(tile.delta.text)), el("text", {
 				x: x + 16,
-				y: y + 60,
+				y: y + 61,
 				class: "t-value"
 			}, textNode(tile.value), tile.unit === void 0 ? "" : el("tspan", {
 				class: "t-unit",
@@ -58031,6 +58434,18 @@ function privacyNote(includesPrivate) {
 }
 //#endregion
 //#region src/cards/cadence.ts
+/**
+* Commit cadence card: a weekday × hour punch card over the trailing-year
+* commit sweep, with the marginal day curve as a histogram above it.
+*
+* Dot size and fill both encode the quantile level of each cell, so the grid
+* speaks the same green as the calendar cards; the busiest cell is ringed
+* rather than recolored, because a second hue here would collide with the
+* composition card's categorical accent. Hours are the author's local clock
+* (GitTimestamp keeps the commit's UTC offset), so the card answers "when does
+* this person commit" on their own clock — and the night hours the footer
+* quantifies are shaded under the histogram.
+*/
 const WEEKDAY_LABELS$1 = [
 	"Mon",
 	"Tue",
@@ -58224,9 +58639,11 @@ function renderCadence(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) {
 	const legendX = 822 - rampLegendWidth(legendOptions);
 	const legend = rampLegend(theme, legendX, FOOTER_BASELINE$2, legendOptions);
 	const peakKey = cadence.peak === void 0 ? "" : peakKeyChip(legendX - 18 - measureMono("peak", 9.5) - 14, FOOTER_BASELINE$2, theme);
+	const height = FOOTER_BASELINE$2 + (scale === void 0 ? 0 : 12) + 24;
 	return cardFrame({
 		theme,
-		height: FOOTER_BASELINE$2 + (scale === void 0 ? 0 : 12) + 24,
+		icon: import_lucide.Clock,
+		height,
 		title: "Commit cadence",
 		note: capped ? `trailing 12 months · author local time · ${swept} of ${candidates} repositories` : "trailing 12 months · author local time",
 		description: `Commit cadence for ${data.login}: commits by weekday and hour of day over the trailing year.`,
@@ -58326,6 +58743,8 @@ function computeComposition(years) {
 */
 const MAX_BAR_HEIGHT = 110;
 const BAR_WIDTH = 30;
+const BAR_CAP_RADIUS = 6;
+const SEAM = 1.5;
 const SERIES = [
 	{
 		label: "Commits",
@@ -58387,7 +58806,7 @@ function renderComposition(data, theme, fontFaceCss) {
 		const rects = segments.map((segment, k) => {
 			if (segment.h <= 0) return "";
 			const top = tops[k] ?? baseline;
-			return k === topIndex ? barCap(x, top, barWidth, segment.h, 6, segment.color) : el("rect", {
+			return k === topIndex ? barCap(x, top, barWidth, segment.h, BAR_CAP_RADIUS, segment.color) : el("rect", {
 				x,
 				y: top,
 				width: barWidth,
@@ -58395,10 +58814,17 @@ function renderComposition(data, theme, fontFaceCss) {
 				fill: segment.color
 			});
 		});
+		const seams = segments.map((segment, k) => segment.h <= 0 || k >= topIndex ? "" : el("rect", {
+			x,
+			y: (tops[k] ?? baseline) - SEAM / 2,
+			width: barWidth,
+			height: SEAM,
+			fill: theme.bg
+		}));
 		return el("g", {
 			class: "bar",
 			style: `animation-delay:${Math.round(step * i)}ms;transform-origin:${num(cx)}px ${num(baseline)}px`
-		}, ...rects);
+		}, ...rects, ...seams);
 	});
 	const ticks = years.map((year, i) => {
 		return el("text", {
@@ -58450,6 +58876,7 @@ function renderComposition(data, theme, fontFaceCss) {
 	});
 	return cardFrame({
 		theme,
+		icon: import_lucide.Layers,
 		height,
 		title: "Contribution composition",
 		note: `by type · ${privacyNote(data.includesPrivate)}`,
@@ -58489,6 +58916,16 @@ function calendarThresholds(days) {
 }
 //#endregion
 //#region src/cards/contributions.ts
+/**
+* Contributions card: streak tiles plus the trailing-12-month contribution
+* calendar as an isometric 3D graph (flat axonometric projection, pure static
+* polygons).
+*
+* Color carries the API's exact quartile encoding; column height reinforces it
+* on a square-root scale, chosen so one spike day cannot flatten every typical
+* day to invisibility. Height is redundant decoration over the honest color
+* channel, never the primary encoding.
+*/
 const HW = 12;
 const HH = 4;
 const MAX_COLUMN = 40;
@@ -58576,18 +59013,21 @@ function renderContributions(data, streaks, theme, fontFaceCss, legendStyle = DE
 	const tiles = [
 		{
 			label: "Current streak",
+			icon: import_lucide.Flame,
 			value: formatInt(streaks.current),
 			unit: streaks.current === 1 ? "day" : "days",
 			sub: streaks.currentRange ? formatDateRange(streaks.currentRange.start, streaks.currentRange.end) : "No active streak"
 		},
 		{
 			label: "Longest streak",
+			icon: import_lucide.Trophy,
 			value: formatInt(streaks.longest),
 			unit: streaks.longest === 1 ? "day" : "days",
 			sub: streaks.longestRange ? formatDateRange(streaks.longestRange.start, streaks.longestRange.end) : "No contributions yet"
 		},
 		{
 			label: "Contributions (past 12 months)",
+			icon: import_lucide.CalendarRange,
 			value: formatInt(data.trailing.total),
 			sub: trailingDayCount === 0 ? void 0 : `Avg ${(data.trailing.total / trailingDayCount).toFixed(1)} / day · peak ${formatInt(peakDay)}`
 		}
@@ -58634,9 +59074,11 @@ function renderContributions(data, streaks, theme, fontFaceCss, legendStyle = DE
 		class: "t-mono",
 		"text-anchor": "end"
 	}, textNode(`REFRESHED ${formatUtcTimestamp(data.generatedAt)}`));
+	const height = legendY + (scale === void 0 ? 0 : 12) + 24 - 8;
 	return cardFrame({
 		theme,
-		height: legendY + (scale === void 0 ? 0 : 12) + 24 - 8,
+		icon: import_lucide.CalendarDays,
+		height,
 		title: "Contributions",
 		note: `past 12 months · streaks over all years · ${privacyNote(data.trailing.includesPrivate)}`,
 		description: `Contribution activity for ${data.login}: ${formatInt(data.trailing.total)} contributions in the past 12 months, current streak ${formatInt(streaks.current)} days, longest streak ${formatInt(streaks.longest)} days.`,
@@ -58789,6 +59231,116 @@ function layoutRow(row, free, fill) {
 	};
 }
 //#endregion
+//#region src/cards/language-mark.ts
+/** A language's mark beside a name: its logo where one exists, else a dot. */
+/**
+* Linguist language name -> simple-icons slug, curated by hand.
+*
+* Matching by name is unsafe: simple-icons is a set of brands, not languages,
+* so "Shell" finds an oil company and "C++" normalizes to plain C. A language
+* missing here keeps its dot rather than risk a wrong mark.
+*/
+const LANGUAGE_SLUGS = {
+	Astro: "astro",
+	C: "c",
+	"C++": "cplusplus",
+	CMake: "cmake",
+	CSS: "css",
+	Clojure: "clojure",
+	CoffeeScript: "coffeescript",
+	"Common Lisp": "commonlisp",
+	Crystal: "crystal",
+	D: "d",
+	Dart: "dart",
+	Dockerfile: "docker",
+	EJS: "ejs",
+	Elixir: "elixir",
+	Elm: "elm",
+	"Emacs Lisp": "gnuemacs",
+	Erlang: "erlang",
+	"F#": "fsharp",
+	Fortran: "fortran",
+	GDScript: "godotengine",
+	Gherkin: "cucumber",
+	Gleam: "gleam",
+	Go: "go",
+	GraphQL: "graphql",
+	Groovy: "apachegroovy",
+	HTML: "html5",
+	Haskell: "haskell",
+	Haxe: "haxe",
+	Java: "openjdk",
+	JavaScript: "javascript",
+	Jinja: "jinja",
+	"Jupyter Notebook": "jupyter",
+	Julia: "julia",
+	Kotlin: "kotlin",
+	Less: "less",
+	Lua: "lua",
+	MDX: "mdx",
+	Markdown: "markdown",
+	Mermaid: "mermaid",
+	Nim: "nim",
+	Nix: "nixos",
+	Nunjucks: "nunjucks",
+	Nushell: "nushell",
+	OCaml: "ocaml",
+	PHP: "php",
+	Perl: "perl",
+	Prisma: "prisma",
+	Pug: "pug",
+	PureScript: "purescript",
+	Python: "python",
+	R: "r",
+	Racket: "racket",
+	ReScript: "rescript",
+	Reason: "reason",
+	Ruby: "ruby",
+	Rust: "rust",
+	SCSS: "sass",
+	Sass: "sass",
+	Scala: "scala",
+	Shell: "gnubash",
+	Solidity: "solidity",
+	Stylus: "stylus",
+	Svelte: "svelte",
+	Swift: "swift",
+	TeX: "latex",
+	Typst: "typst",
+	TypeScript: "typescript",
+	V: "v",
+	"Vim Script": "vim",
+	Vue: "vuedotjs",
+	WebAssembly: "webassembly",
+	YAML: "yaml",
+	Zig: "zig"
+};
+/**
+* Draw the mark for `name` centered on (cx, cy) in a `size`-pixel box, filled
+* with the language's own color so it still keys the treemap and the rows.
+* A nested <svg> scales the 24-unit glyph; see icons.ts for why not a transform.
+*/
+function languageMark(name, color, cx, cy, size) {
+	const slug = name === void 0 ? void 0 : LANGUAGE_SLUGS[name];
+	const brand = slug === void 0 ? void 0 : brandBySlug(slug);
+	if (brand === void 0) return el("circle", {
+		cx,
+		cy,
+		r: size * .35,
+		fill: color
+	});
+	return el("svg", {
+		x: cx - size / 2,
+		y: cy - size / 2,
+		width: size,
+		height: size,
+		viewBox: "0 0 24 24"
+	}, el("path", {
+		d: brand.path,
+		fill: color
+	}));
+}
+//#endregion
 //#region src/cards/languages.ts
 /**
 * Languages card: a squarified treemap beside a ranked list, both by bytes.
@@ -58860,6 +59412,7 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 	const shares = languageShares(data.languages, languageLimit, data.languageTailBytes);
 	if (shares.length === 0) return cardFrame({
 		theme,
+		icon: import_lucide.CodeXml,
 		height: 96,
 		title: "Languages",
 		description: `No language data for ${data.login}.`,
@@ -58880,19 +59433,14 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 			y: rect.y + 1,
 			width: Math.max(0, rect.width - 2),
 			height: Math.max(0, rect.height - 2),
-			rx: 2,
+			rx: Math.max(0, Math.min(6, (rect.width - 2) / 4, (rect.height - 2) / 4)),
 			fill
 		});
 		return el("g", { class: `fade c${rect.index}` }, rectEl, cellLabel(share, rect, fill));
 	});
 	const list = shares.map((share, index) => {
 		const y = LIST_FIRST_BASELINE + index * LIST_ROW_HEIGHT;
-		return el("g", {}, el("circle", {
-			cx: 527,
-			cy: y - 4,
-			r: 5,
-			fill: cellFill(share, theme)
-		}), el("text", {
+		return el("g", {}, languageMark(share.name, cellFill(share, theme), 527, y - 4, 14), el("text", {
 			x: LIST_NAME_X,
 			y,
 			class: "leg-name"
@@ -58949,6 +59497,7 @@ function renderLanguages(data, theme, fontFaceCss, languageLimit = 8) {
 	const lead = top ? `, led by ${top.name} at ${top.pct.toFixed(1)}%` : "";
 	return cardFrame({
 		theme,
+		icon: import_lucide.CodeXml,
 		height,
 		title: "Languages",
 		note: "public source repositories · by bytes",
@@ -59164,12 +59713,15 @@ function renderLifetime(data, theme, fontFaceCss, legendStyle = DEFAULT_LEGEND) 
 	});
 	const firstYear = life.years[0]?.year;
 	const privacy = privacyNote(data.includesPrivate);
+	const note = firstYear === void 0 ? "no activity yet · by week" : `${firstYear}–present · by week · ${privacy}`;
+	const description = firstYear === void 0 ? `Contribution history for ${data.login}: no activity yet.` : `Contribution history for ${data.login}, ${firstYear} to present, one row per year.`;
 	return cardFrame({
 		theme,
+		icon: import_lucide.History,
 		height,
 		title: "Contribution history",
-		note: firstYear === void 0 ? "no activity yet · by week" : `${firstYear}–present · by week · ${privacy}`,
-		description: firstYear === void 0 ? `Contribution history for ${data.login}: no activity yet.` : `Contribution history for ${data.login}, ${firstYear} to present, one row per year.`,
+		note,
+		description,
 		extraCss: `.wk{opacity:0;animation:fade .5s ease forwards}`,
 		fontFaceCss
 	}, ...columns, el("g", { class: "fade" }, ...monthTicks, ...yearLabels, ...yearTotals, legend));
@@ -59242,6 +59794,51 @@ function computeMomentum(days, years = []) {
 	};
 }
 //#endregion
+//#region src/svg/guides.ts
+const DASH = "2 4";
+/** Horizontal guide at `y`, snapped to the pixel grid so the hairline stays crisp. */
+function hGuide(x1, x2, y, theme) {
+	const crisp = Math.round(y) + .5;
+	return el("line", {
+		x1,
+		y1: crisp,
+		x2,
+		y2: crisp,
+		stroke: theme.borderMuted,
+		"stroke-width": 1,
+		"stroke-dasharray": DASH
+	});
+}
+/** Vertical guide at `x`, snapped to the pixel grid. */
+function vGuide(x, y1, y2, theme) {
+	const crisp = Math.round(x) + .5;
+	return el("line", {
+		x1: crisp,
+		y1,
+		x2: crisp,
+		y2,
+		stroke: theme.borderMuted,
+		"stroke-width": 1,
+		"stroke-dasharray": DASH
+	});
+}
+/**
+* A round step that splits `max` into about `count` intervals: 1, 2, 2.5, or 5
+* times a power of ten, so guide labels read as 500 / 1k / 1.5k, never 1,337.
+*/
+function niceStep(max, count) {
+	if (max <= 0 || count <= 0) return 0;
+	const raw = max / count;
+	const magnitude = 10 ** Math.floor(Math.log10(raw));
+	return ([
+		1,
+		2,
+		2.5,
+		5,
+		10
+	].find((candidate) => candidate * magnitude >= raw) ?? 10) * magnitude;
+}
+//#endregion
 //#region src/cards/momentum.ts
 /**
 * Momentum card: the trailing-twelve-month contribution total, sampled weekly
@@ -59255,12 +59852,12 @@ function computeMomentum(days, years = []) {
 * card sits in the same magnitude language as the calendars. The all-time peak
 * is marked with a foreground-ink ring, never a second hue.
 */
+const PLOT_TOP = 84;
 const PLOT_HEIGHT = 168;
 const PLOT_BOTTOM = 252;
 const TICK_BASELINE = 269;
 const FOOTER_BASELINE$1 = 297;
 const PLOT_X = 24;
-const PLOT_WIDTH = 732;
 /** Headroom above the peak so its ring and label are not clipped by the frame. */
 const Y_HEADROOM = 1.12;
 /** Year ticks closer than this collapse into their neighbour. */
@@ -59272,6 +59869,7 @@ function renderMomentum(data, theme, fontFaceCss) {
 	const { points, peak, current, since } = momentum;
 	if (points.length < 2 || peak === void 0 || current === void 0 || since === void 0) return cardFrame({
 		theme,
+		icon: import_lucide.TrendingUp,
 		height: STUB_HEIGHT$1,
 		title: "Momentum",
 		note: "rolling 12 months",
@@ -59285,7 +59883,9 @@ function renderMomentum(data, theme, fontFaceCss) {
 	const maxTotal = Math.max(...points.map((point) => point.total));
 	const scaleY = maxTotal === 0 ? 0 : PLOT_HEIGHT / (maxTotal * Y_HEADROOM);
 	const y = (total) => PLOT_BOTTOM - total * scaleY;
-	const x = (index) => PLOT_X + index / (points.length - 1) * PLOT_WIDTH;
+	const currentLabel = formatInt(current.total);
+	const plotRight = 822 - measureSans(currentLabel, 30, "semibold") - 14;
+	const x = (index) => PLOT_X + index / (points.length - 1) * (plotRight - PLOT_X);
 	const vertices = points.map((point, index) => `${num(x(index))} ${num(y(point.total))}`);
 	const line = el("path", {
 		d: `M${vertices.join("L")}`,
@@ -59297,9 +59897,14 @@ function renderMomentum(data, theme, fontFaceCss) {
 	});
 	const area = el("path", {
 		d: `M${num(PLOT_X)} ${num(PLOT_BOTTOM)}L${vertices.join("L")}L${num(x(points.length - 1))} ${num(PLOT_BOTTOM)}Z`,
-		fill: theme.contribRamp[2],
-		"fill-opacity": .16
+		fill: "url(#area)"
 	});
+	const guideStep = niceStep(maxTotal * Y_HEADROOM, 3);
+	const guides = range(guideStep === 0 ? 0 : Math.floor(maxTotal * Y_HEADROOM / guideStep)).map((index) => (index + 1) * guideStep).filter((value) => y(value) >= PLOT_TOP).map((value) => hGuide(PLOT_X, plotRight, y(value), theme) + el("text", {
+		x: PLOT_X,
+		y: y(value) - 5,
+		class: "t-tick"
+	}, textNode(formatCompact(value))));
 	const baselineRule = el("line", {
 		x1: PLOT_X,
 		y1: 252.5,
@@ -59324,7 +59929,7 @@ function renderMomentum(data, theme, fontFaceCss) {
 		marks: [],
 		lastX: Number.NEGATIVE_INFINITY
 	}).marks;
-	const peakMark = peak.date === current.date ? "" : peakMarker(peak, points, theme, x, y);
+	const peakMark = peak.date === current.date ? "" : peakMarker(peak, points, theme, x, y, plotRight);
 	const currentY = Math.min(248, Math.max(104, y(current.total) + 9));
 	const currentValue = el("circle", {
 		cx: x(points.length - 1),
@@ -59332,10 +59937,11 @@ function renderMomentum(data, theme, fontFaceCss) {
 		r: 3.2,
 		fill: theme.contribRamp[4]
 	}) + el("text", {
-		x: 768,
+		x: 822,
 		y: currentY,
-		class: "t-value"
-	}, textNode(formatInt(current.total)));
+		class: "t-value t-hero",
+		"text-anchor": "end"
+	}, textNode(currentLabel));
 	const footerParts = [
 		el("tspan", { class: "t-stat" }, textNode(formatInt(momentum.lifetimeTotal))),
 		textNode(` contributions since ${formatDate(since, true)} · trailing year `),
@@ -59351,20 +59957,21 @@ function renderMomentum(data, theme, fontFaceCss) {
 	}, ...footerParts);
 	return cardFrame({
 		theme,
+		icon: import_lucide.TrendingUp,
 		height: 321,
 		title: "Momentum",
 		note: "rolling 12 months · all contribution types",
 		description: `Momentum for ${data.login}: contributions in each trailing twelve months since ${formatDate(since, true)}, currently ${formatInt(current.total)}, peaking at ${formatInt(peak.total)}.`,
 		extraCss: ".sweep{clip-path:inset(0 100% 0 0);animation:sweep 1.1s cubic-bezier(.2,.7,.3,1) .1s forwards}@keyframes sweep{to{clip-path:inset(0 0 0 0)}}@media (prefers-reduced-motion: reduce){.sweep{clip-path:none!important}}",
 		fontFaceCss
-	}, el("g", { class: "fade" }, baselineRule, ...ticks), el("g", { class: "sweep" }, area, line), el("g", { class: "fade" }, peakMark, currentValue, footer));
+	}, el("g", { class: "fade" }, ...guides, baselineRule, ...ticks), el("g", { class: "sweep" }, area, line), el("g", { class: "fade" }, peakMark, currentValue, footer));
 }
 /** Ringed peak plus its value, flipped inboard when it would leave the plot. */
-function peakMarker(peak, points, theme, x, y) {
+function peakMarker(peak, points, theme, x, y, plotRight) {
 	const cx = x(points.indexOf(peak));
 	const cy = y(peak.total);
 	const label = `peak ${formatInt(peak.total)}`;
-	const flip = cx + measureMono(label, 9.5) + 14 > 756;
+	const flip = cx + measureMono(label, 9.5) + 14 > plotRight;
 	return el("circle", {
 		cx,
 		cy,
@@ -59435,12 +60042,14 @@ function renderOverview(data, theme, fontFaceCss) {
 	const rowA = [
 		{
 			label: "Contributions (all time)",
+			icon: import_lucide.Sigma,
 			value: formatInt(lifetime),
 			sub: firstYear === void 0 ? void 0 : `Since ${firstYear}`,
 			spark: seriesOf((year) => year.total)
 		},
 		{
 			label: `Contributions (${latestYear?.year ?? "this year"})`,
+			icon: import_lucide.CalendarCheck,
 			value: formatInt(thisYearTotal),
 			sub: dailyAverage,
 			spark: monthsThisYear(),
@@ -59448,34 +60057,40 @@ function renderOverview(data, theme, fontFaceCss) {
 		},
 		{
 			label: "Stars earned",
+			icon: import_lucide.Star,
 			value: formatInt(data.starsEarned),
 			sub: "Forks excluded"
 		},
 		{
 			label: "Followers",
+			icon: import_lucide.Users,
 			value: formatInt(data.followers)
 		}
 	];
 	const rowB = [
 		{
 			label: "Pull requests merged",
+			icon: import_lucide.GitMerge,
 			value: formatInt(data.mergedPullRequests),
 			sub: peakOf((year) => year.pullRequests),
 			spark: seriesOf((year) => year.pullRequests)
 		},
 		{
 			label: "Issues opened",
+			icon: import_lucide.CircleDot,
 			value: formatInt(data.issues),
 			sub: peakOf((year) => year.issues),
 			spark: seriesOf((year) => year.issues)
 		},
 		{
 			label: "Public repositories",
+			icon: import_lucide.FolderGit2,
 			value: formatInt(data.publicSourceRepos),
 			sub: `${formatInt(data.languages.length)} languages`
 		},
 		{
 			label: "Contributed to (recent)",
+			icon: import_lucide.GitPullRequestArrow,
 			value: formatInt(data.contributedTo),
 			sub: "Excludes own repositories"
 		}
@@ -59484,9 +60099,11 @@ function renderOverview(data, theme, fontFaceCss) {
 	const gap = 12;
 	const tilesA = tileRow(theme, rowA, top);
 	const tilesB = tileRow(theme, rowB, top + tilesA.height + gap);
+	const height = top + tilesA.height + gap + tilesB.height + 24;
 	return cardFrame({
 		theme,
-		height: top + tilesA.height + gap + tilesB.height + 24,
+		icon: import_lucide.LayoutDashboard,
+		height,
 		title: "Overview",
 		note: `@${data.login} · public activity`,
 		description: `GitHub overview for ${data.login}: ${formatInt(lifetime)} contributions all time, ${formatInt(data.starsEarned)} stars earned, ${formatInt(data.followers)} followers.`,
@@ -59533,6 +60150,7 @@ const HEAD_BASELINE = 62;
 const BAND_TOP$2 = 78;
 const ROW_H$2 = 24;
 const DOT_CX$1 = 29;
+const MARK_SIZE$1 = 13;
 const NAME_X = 42;
 const MAX_NAME$1 = 34;
 const TRACK_X = 268;
@@ -59561,6 +60179,7 @@ function renderPortfolio(data, theme, fontFaceCss) {
 	const totals = data.repositories;
 	if (rows.length === 0) return cardFrame({
 		theme,
+		icon: import_lucide.ChartGantt,
 		height: STUB_HEIGHT,
 		title: "Portfolio",
 		note: "public source repositories",
@@ -59602,12 +60221,7 @@ function renderPortfolio(data, theme, fontFaceCss) {
 	const labels = rows.flatMap((repo, index) => {
 		const baseline = BAND_TOP$2 + index * ROW_H$2 + ROW_H$2 / 2 + 4;
 		return [
-			el("circle", {
-				cx: DOT_CX$1,
-				cy: baseline - 4,
-				r: 4.5,
-				fill: repo.language?.color ?? theme.border
-			}),
+			languageMark(repo.language?.name, repo.language?.color ?? theme.border, DOT_CX$1, baseline - 4, MARK_SIZE$1),
 			el("text", {
 				x: NAME_X,
 				y: baseline,
@@ -59635,6 +60249,7 @@ function renderPortfolio(data, theme, fontFaceCss) {
 		class: "t-tick",
 		"text-anchor": "middle"
 	}, textNode(String(tick.year))));
+	const guides = yearTicks(startMs, nowMs).map((tick) => vGuide(x(tick.ms), BAND_TOP$2, bandBottom, theme));
 	const axisRule = el("line", {
 		x1: TRACK_X,
 		y1: bandBottom + .5,
@@ -59685,13 +60300,14 @@ function renderPortfolio(data, theme, fontFaceCss) {
 	const key = recencyKey(theme, footerBaseline);
 	return cardFrame({
 		theme,
+		icon: import_lucide.ChartGantt,
 		height: footerBaseline + 24,
 		title: "Portfolio",
 		note: "public source repositories · by commits",
 		description: `Repository portfolio for ${data.login}: ${formatInt(totals.length)} public source repositories, ${formatInt(recent)} pushed in the last 90 days.`,
 		extraCss: `.life{opacity:0;animation:fade .45s ease forwards}`,
 		fontFaceCss
-	}, el("g", { class: "fade" }, columnHeads, axisRule, ...ticks, ...labels, footer, key), ...lifelines);
+	}, el("g", { class: "fade" }, columnHeads, ...guides, axisRule, ...ticks, ...labels, footer, key), ...lifelines);
 }
 /** Ramp key naming what the lifeline colors mean, right-aligned on `baseline`. */
 function recencyKey(theme, baseline) {
@@ -59755,6 +60371,7 @@ const ROW_H$1 = 30;
 const BAR_H = 12;
 const RANK_X = 36;
 const DOT_CX = 49;
+const MARK_SIZE = 13;
 const LABEL_X = 60;
 const STARS_RIGHT = 340;
 const ISSUE_X = 352;
@@ -59808,12 +60425,7 @@ function renderRepositories(data, theme, fontFaceCss) {
 			y: rowCenter + 3.3,
 			class: "t-tick",
 			"text-anchor": "end"
-		}, textNode(String(index + 1))), el("circle", {
-			cx: DOT_CX,
-			cy: rowCenter,
-			r: 4.5,
-			fill: row.language?.color ?? theme.border
-		}), el("text", {
+		}, textNode(String(index + 1))), languageMark(row.language?.name, row.language?.color ?? theme.border, DOT_CX, rowCenter, MARK_SIZE), el("text", {
 			x: LABEL_X,
 			y: rowCenter + 4,
 			class: "t-label"
@@ -59879,9 +60491,11 @@ function renderRepositories(data, theme, fontFaceCss) {
 		stroke: theme.border,
 		"stroke-width": 1
 	});
+	const height = (popular === null ? footerBaseline : popularBaseline) + 24;
 	return cardFrame({
 		theme,
-		height: (popular === null ? footerBaseline : popularBaseline) + 24,
+		icon: import_lucide.FolderGit2,
+		height,
 		title: "Top repositories",
 		note: "trailing 12 months · by commits · bars over lifetime",
 		description: `Top repositories for ${data.login}: repositories ranked by commits over the trailing year.`,
@@ -60033,7 +60647,7 @@ const VALUE_GAP = 6;
 const WEEKDAY_MAX_LEN = 259;
 const ROW_H = 104 / WEEKDAY_LABELS.length;
 const MONTH_BAND = RIGHT_W / MONTH_LETTERS.length;
-const MONTH_BAR_W = 22;
+const MONTH_BAR_W = 18;
 const MONTH_VALUE_GAP = 6;
 const MIN_BAR = 3;
 const TICK_OVERHANG = 3;
@@ -60168,7 +60782,7 @@ function renderRhythm(data, theme, fontFaceCss) {
 			monthTicks.push(el("rect", {
 				x: center - MONTH_BAR_W / 2 - TICK_OVERHANG,
 				y: BASELINE_Y - share * MONTH_MAX_HEIGHT - TICK_WIDTH / 2,
-				width: 28,
+				width: 24,
 				height: TICK_WIDTH,
 				fill: theme.fg
 			}));
@@ -60223,6 +60837,7 @@ function renderRhythm(data, theme, fontFaceCss) {
 	const key = comparable ? trailingKey(theme, FOOTER_BASELINE) : "";
 	return cardFrame({
 		theme,
+		icon: import_lucide.ChartColumn,
 		height: 262,
 		title: "Activity rhythm",
 		note: comparable ? "all contribution types · all years vs trailing year" : "all contribution types · all years",
@@ -61144,6 +61759,14 @@ function parseThemes(raw) {
 	}
 	return themes;
 }
+/** Parse `palette`: one of the known palettes, or the default when empty. */
+function parsePalette(raw) {
+	const value = raw.trim().toLowerCase();
+	if (value === "") return DEFAULT_PALETTE;
+	const palette = PALETTE_IDS.find((id) => id === value);
+	if (palette === void 0) throw new Error(`Unknown palette "${value}". Valid: ${PALETTE_IDS.join(", ")}.`);
+	return palette;
+}
 /** Parse `language-limit`: a positive integer, or the default when empty. */
 function parseLanguageLimit(raw) {
 	const trimmed = raw.trim();
@@ -61187,6 +61810,7 @@ function readInputs() {
 		cards: parseCards(getInput("cards")),
 		outputDir: getInput("output-dir").trim() || DEFAULT_OUTPUT_DIR,
 		themeIds: parseThemes(getInput("themes")),
+		palette: parsePalette(getInput("palette")),
 		font: getInput("font").trim() || DEFAULT_FONT,
 		monoFont: getInput("mono-font").trim() || DEFAULT_MONO_FONT,
 		languageLimit: parseLanguageLimit(getInput("language-limit")),
@@ -61206,10 +61830,6 @@ function readInputs() {
 * render the selected cards (and any badges) -> write to the output directory ->
 * optionally commit and push -> set outputs.
 */
-const THEME_BY_ID = {
-	light: LIGHT,
-	dark: DARK
-};
 /** Commit when asked, otherwise just detect pending changes — either way report whether anything changed. */
 async function resolveChanged(inputs) {
 	if (!inputs.commit) return (await changedPaths(inputs.outputDir)).length > 0;
@@ -61233,7 +61853,7 @@ async function run() {
 	};
 	const streaks = computeStreaks(data.lifetimeDays);
 	const fontFaceCss = await resolveFonts(inputs.font, inputs.monoFont);
-	const themes = inputs.themeIds.map((id) => THEME_BY_ID[id]);
+	const themes = inputs.themeIds.map((id) => themeFor(id, inputs.palette));
 	const files = /* @__PURE__ */ new Map();
 	for (const theme of themes) for (const card of inputs.cards) files.set(`${card}.${theme.id}.svg`, renderCard(card, data, streaks, theme, fontFaceCss, {
 		languageLimit: inputs.languageLimit,

@@ -9,6 +9,7 @@
  * channel, never the primary encoding.
  */
 
+import { CalendarDays, CalendarRange, Flame, Trophy } from 'lucide';
 import type { LegendStyle } from '../cards.js';
 import { CARD_PADDING, CARD_WIDTH, DEFAULT_LEGEND } from '../config.js';
 import { calendarThresholds } from '../compute/thresholds.js';
@@ -96,6 +97,7 @@ export function renderContributions(
   const tiles: TileSpec[] = [
     {
       label: 'Current streak',
+      icon: Flame,
       value: formatInt(streaks.current),
       unit: streaks.current === 1 ? 'day' : 'days',
       sub: streaks.currentRange
@@ -104,6 +106,7 @@ export function renderContributions(
     },
     {
       label: 'Longest streak',
+      icon: Trophy,
       value: formatInt(streaks.longest),
       unit: streaks.longest === 1 ? 'day' : 'days',
       sub: streaks.longestRange
@@ -112,6 +115,7 @@ export function renderContributions(
     },
     {
       label: 'Contributions (past 12 months)',
+      icon: CalendarRange,
       value: formatInt(data.trailing.total),
       // The note already names the window; the caption carries rates instead.
       sub:
@@ -183,6 +187,7 @@ export function renderContributions(
   return cardFrame(
     {
       theme,
+      icon: CalendarDays,
       height,
       title: 'Contributions',
       note: `past 12 months · streaks over all years · ${privacyNote(data.trailing.includesPrivate)}`,

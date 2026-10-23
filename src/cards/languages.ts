@@ -12,6 +12,7 @@
  * the rest fold into "Other".
  */
 
+import { CodeXml } from 'lucide';
 import { CARD_PADDING, CARD_WIDTH, DEFAULT_LANGUAGE_LIMIT } from '../config.js';
 import { languageShares, type LanguageShare } from '../compute/languages.js';
 import type { TreemapRect } from '../compute/treemap.js';
@@ -21,6 +22,7 @@ import { el, textNode } from '../svg/dsl.js';
 import { formatBytes, formatInt } from '../svg/text.js';
 import { contrast, type Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
+import { languageMark } from './language-mark.js';
 
 const CONTENT_TOP = 60;
 
@@ -93,6 +95,7 @@ export function renderLanguages(
     return cardFrame(
       {
         theme,
+        icon: CodeXml,
         height: 96,
         title: 'Languages',
         description: `No language data for ${data.login}.`,
@@ -123,7 +126,9 @@ export function renderLanguages(
       y: rect.y + 1,
       width: Math.max(0, rect.width - 2),
       height: Math.max(0, rect.height - 2),
-      rx: 2,
+      // Rounder than a hairline gap alone, but capped by the cell so a sliver
+      // stays a rectangle instead of collapsing into a pill.
+      rx: Math.max(0, Math.min(6, (rect.width - 2) / 4, (rect.height - 2) / 4)),
       fill,
     });
 
@@ -137,7 +142,7 @@ export function renderLanguages(
     return el(
       'g',
       {},
-      el('circle', { cx: LIST_X + 5, cy: y - 4, r: 5, fill: cellFill(share, theme) }),
+      languageMark(share.name, cellFill(share, theme), LIST_X + 5, y - 4, 14),
       el('text', { x: LIST_NAME_X, y, class: 'leg-name' }, textNode(share.name)),
       // Reach, not rank: how many repositories the language turns up in, which
       // is the cheapest corrective to bytes-on-disk as a measure of effort.
@@ -205,6 +210,7 @@ export function renderLanguages(
   return cardFrame(
     {
       theme,
+      icon: CodeXml,
       height,
       title: 'Languages',
       note: 'public source repositories · by bytes',

@@ -35,10 +35,9 @@ export function sparkline(
   return (
     el('path', {
       d: `M${num(x)} ${num(baseline)}L${path}L${num(x + width)} ${num(baseline)}Z`,
-      fill: theme.contribRamp[2],
-      // fill-opacity, not opacity: the frame's reduced-motion reset forces
-      // opacity to 1 on every element.
-      'fill-opacity': 0.28,
+      // The frame's vertical fade, painted with stop-opacity: the reduced-motion
+      // reset forces opacity to 1 on every element.
+      fill: 'url(#area)',
     }) +
     el('path', {
       d: `M${path}`,

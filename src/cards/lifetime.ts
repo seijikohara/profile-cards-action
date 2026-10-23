@@ -9,6 +9,7 @@
  * animation per week column, which reads as time advancing through each year.
  */
 
+import { History } from 'lucide';
 import { computeLifetime } from '../compute/lifetime.js';
 import { range } from '../iter.js';
 import type { LegendStyle } from '../cards.js';
@@ -168,6 +169,7 @@ export function renderLifetime(
   return cardFrame(
     {
       theme,
+      icon: History,
       height,
       title: 'Contribution history',
       note,

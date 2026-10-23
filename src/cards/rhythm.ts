@@ -16,6 +16,7 @@
  * profile and a one-year window can honestly support.
  */
 
+import { ChartColumn } from 'lucide';
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeRhythm } from '../compute/rhythm.js';
 import type { ProfileData } from '../model.js';
@@ -54,7 +55,7 @@ const ROW_H = (BASELINE_Y - BAND_TOP) / WEEKDAY_LABELS.length;
 
 // Month panel geometry.
 const MONTH_BAND = RIGHT_W / MONTH_LETTERS.length;
-const MONTH_BAR_W = 22;
+const MONTH_BAR_W = 18;
 const MONTH_VALUE_GAP = 6;
 
 const MIN_BAR = 3; // keep a tiny non-zero value visible; zero renders nothing
@@ -276,6 +277,7 @@ export function renderRhythm(data: ProfileData, theme: Theme, fontFaceCss: strin
   return cardFrame(
     {
       theme,
+      icon: ChartColumn,
       height,
       title: 'Activity rhythm',
       note: comparable ? 'all contribution types · all years vs trailing year' : 'all contribution types · all years',

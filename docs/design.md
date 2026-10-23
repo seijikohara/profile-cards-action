@@ -473,3 +473,69 @@ card and _peak_ on three others, and nothing said so anywhere.
   chained into `pnpm run lint` but was not wired anywhere, and the local
   example gallery still rendered six of the eight cards. Both are fixed; the
   gallery list now mirrors `action.yml`'s `cards` default.
+
+## Addendum (2026-10-23): chrome pass and palettes
+
+A visual pass over the chrome every card shares. No data, card names, file
+names, or layout grids changed; the contract is the interface, so this ships
+as a minor release (v1.15.0).
+
+- **The title is a label; the numbers are the headline.** The 15px semibold
+  title is now an 11px tracked uppercase mono eyebrow in the palette ink,
+  led by a 15px icon. Tile values grew from 28px to 30px with slightly
+  negative tracking, so the eye lands on the figures first.
+- **Icons are Lucide, inlined as nested `<svg>` elements.** `src/svg/icons.ts`
+  maps Lucide's `IconNode` arrays through `el()`, so icon markup passes the
+  same escaping as everything else. A nested `<svg>` positions and scales the
+  24-unit grid instead of a `transform` attribute: the reduced-motion reset
+  sets the CSS `transform` property to `none` on every element, and the
+  property overrides the attribute. Stroke color is explicit because an image
+  has no `color` for `currentColor` to inherit. Lucide is ISC-licensed and
+  tree-shakes to the icons in use (about 11 KB of bundle); its notice ships in
+  `dist/licenses.txt`. Every card title and every stat-tile label carries one.
+- **Softer panels.** Card radius 6 → 12; tiles use radius 10 with a hairline
+  `borderMuted` stroke. The composition card's bar caps keep their 6px radius
+  through a constant of their own instead of borrowing the card's.
+- **A corner glow, painted with `stop-opacity`.** A radial gradient of the
+  palette ink — 7% (light) / 10% (dark) at the top-right corner, gone by
+  460px — gives the card depth without a shadow. `stop-opacity` rather than
+  `opacity`, for the same reset as above.
+- **One gradient headline per deck.** The momentum card's current value is
+  the only gradient text (ink → `inkAlt`, the ink rotated about 40° in OKLCH at
+  the same lightness). Painting every tile value that way was tried and
+  dropped: eight colored numbers flatten the tile hierarchy the eyebrow change
+  was meant to create. The momentum value gutter is now sized from the
+  measured number; the fixed 66px gutter let a five-digit total run past the
+  card padding.
+- **`palette` input: `green` (default), `blue`, `purple`, `orange`.** A theme
+  is now one mode in one palette (`themeFor(mode, palette)`); `LIGHT`/`DARK`
+  remain the green themes. Each non-green ramp keeps the OKLCH lightness and
+  chroma of the matching green level and swaps the hue, with chroma clamped
+  into sRGB. `tests/theme.test.ts` holds the consequences that the v1.1
+  contrast rules depend on: every step within 15% of green's contrast, ramps
+  monotonic away from the canvas, a shared empty level, and inks at 4.5:1 or
+  better. The palette changes the ramp and the ink only; the composition
+  card's series colors stay, because they encode type, not quantity.
+- **A contract test for the reset.** `tests/cards.test.ts` now fails any card
+  that emits an `opacity` or `transform` attribute, since the reduced-motion
+  rule silently overrides both.
+- **Palette previews.** The examples workflow renders the contributions card
+  once per non-default palette into `examples/palettes/`. Each preview is one
+  more profile fetch, so the previews stop at a single card.
+- **Charts, same data, lighter ink.** Area fills (momentum, overview
+  sparklines) fade toward their baseline through a frame-level `area`
+  gradient instead of a flat tint. Momentum gained dashed guides at round
+  values (`niceStep`: 1, 2, 2.5, or 5 × 10ⁿ) labelled in the tick face, so the
+  curve has a scale without an axis column. Portfolio gained a dashed guide per
+  year tick across all rows. Composition separates stacked segments with a
+  1.5px seam of card background. Treemap cells round to 6px, capped by the
+  cell so slivers stay rectangles. Rhythm's month columns narrowed 22 → 18px.
+  Bars keep their ramp-level fills: color still states quantity there.
+- **Language marks.** Repositories, portfolio, and the languages list draw a
+  language's logo (simple-icons, already bundled for badges) in place of its
+  dot, filled with the linguist color so it still keys the treemap. The
+  mapping is a curated table (`LANGUAGE_SLUGS`), never a name lookup:
+  simple-icons is a set of brands, so "Shell" resolves to an oil company and
+  "C++" normalizes to C. Unlisted languages keep the dot. The simple-icons
+  index moved to `src/svg/brands.ts`, shared with the badges, and a test fails
+  if an upstream release drops a curated slug.

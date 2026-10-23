@@ -9,7 +9,8 @@
  * with the drawn rectangles.
  */
 
-import { CARD_PADDING, CARD_RADIUS, CARD_WIDTH } from '../config.js';
+import { Layers } from 'lucide';
+import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeComposition } from '../compute/composition.js';
 import type { ProfileData } from '../model.js';
 import { el, num, textNode } from '../svg/dsl.js';
@@ -20,6 +21,9 @@ import { privacyNote } from './legend.js';
 
 const MAX_BAR_HEIGHT = 110;
 const BAR_WIDTH = 30;
+// Softens the top of a 30px stack without turning it into a pill.
+const BAR_CAP_RADIUS = 6;
+const SEAM = 1.5;
 
 // Stack + legend order, paired with the seriesRamp index. Literal indices keep
 // tuple access non-optional under noUncheckedIndexedAccess.
@@ -86,9 +90,17 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
       if (segment.h <= 0) return '';
       const top = tops[k] ?? baseline;
       return k === topIndex
-        ? barCap(x, top, barWidth, segment.h, CARD_RADIUS, segment.color)
+        ? barCap(x, top, barWidth, segment.h, BAR_CAP_RADIUS, segment.color)
         : el('rect', { x, y: top, width: barWidth, height: segment.h, fill: segment.color });
     });
+
+    // A hairline of card background between stacked segments, so adjacent
+    // types read as separate blocks rather than one bar that changes color.
+    const seams = segments.map((segment, k) =>
+      segment.h <= 0 || k >= topIndex
+        ? ''
+        : el('rect', { x, y: (tops[k] ?? baseline) - SEAM / 2, width: barWidth, height: SEAM, fill: theme.bg })
+    );
 
     return el(
       'g',
@@ -96,7 +108,8 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
         class: 'bar',
         style: `animation-delay:${Math.round(step * i)}ms;transform-origin:${num(cx)}px ${num(baseline)}px`,
       },
-      ...rects
+      ...rects,
+      ...seams
     );
   });
 
@@ -152,6 +165,7 @@ export function renderComposition(data: ProfileData, theme: Theme, fontFaceCss: 
   return cardFrame(
     {
       theme,
+      icon: Layers,
       height,
       title: 'Contribution composition',
       note: `by type · ${privacyNote(data.includesPrivate)}`,

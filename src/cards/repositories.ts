@@ -9,6 +9,7 @@
  * as the calendar cards instead of singling the leader out in a second hue.
  */
 
+import { FolderGit2 } from 'lucide';
 import { CARD_PADDING, CARD_WIDTH } from '../config.js';
 import { computeRepositories } from '../compute/repositories.js';
 import { range } from '../iter.js';
@@ -18,6 +19,7 @@ import { el, num, textNode } from '../svg/dsl.js';
 import { formatCompact, measureMono } from '../svg/text.js';
 import type { Theme } from '../theme.js';
 import { cardFrame } from './frame.js';
+import { languageMark } from './language-mark.js';
 import { repoLabelSpans, truncate } from './labels.js';
 import { barFill } from './legend.js';
 
@@ -30,6 +32,7 @@ const BAR_H = 12;
 // a shared axis.
 const RANK_X = CARD_PADDING + 12; // right edge of the rank column
 const DOT_CX = CARD_PADDING + 25;
+const MARK_SIZE = 13;
 const LABEL_X = CARD_PADDING + 36;
 const STARS_RIGHT = CARD_PADDING + 316; // right edge of the star count
 const ISSUE_X = CARD_PADDING + 328;
@@ -90,7 +93,7 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
 
     labels.push(
       el('text', { x: RANK_X, y: rowCenter + 3.3, class: 't-tick', 'text-anchor': 'end' }, textNode(String(index + 1))),
-      el('circle', { cx: DOT_CX, cy: rowCenter, r: 4.5, fill: row.language?.color ?? theme.border }),
+      languageMark(row.language?.name, row.language?.color ?? theme.border, DOT_CX, rowCenter, MARK_SIZE),
       el(
         'text',
         { x: LABEL_X, y: rowCenter + 4, class: 't-label' },
@@ -199,6 +202,7 @@ export function renderRepositories(data: ProfileData, theme: Theme, fontFaceCss:
   return cardFrame(
     {
       theme,
+      icon: FolderGit2,
       height,
       title: 'Top repositories',
       note: 'trailing 12 months · by commits · bars over lifetime',
