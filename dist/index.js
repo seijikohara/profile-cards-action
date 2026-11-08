@@ -57674,7 +57674,7 @@ const DEFAULT_LAYOUT = "split";
 */
 const COMBINED_FILE_STEM = "cards";
 /**
-* @license lucide v1.66.0 - ISC
+* @license lucide v1.69.0 - ISC
 *
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
