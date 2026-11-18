@@ -118,7 +118,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-simple-icons@16.37.0 — CC0-1.0
+simple-icons@16.38.0 — CC0-1.0
 https://simpleicons.org
 
 # CC0 1.0 Universal
