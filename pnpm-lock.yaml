@@ -182,8 +182,8 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
       lucide:
-        specifier: 1.73.0
-        version: 1.73.0
+        specifier: 1.74.0
+        version: 1.74.0
       simple-icons:
         specifier: ^16.27.0
         version: 16.38.0
@@ -1132,8 +1132,8 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
-  lucide@1.73.0:
-    resolution: {integrity: sha512-qiNin5j7qEflnAdLG/9Yb4d5N9qnnP8TOMdn6e66399fgX25Y0eYEPS3PUPWGIPLloOj4X+xLTdF2lk9gSgWpA==}
+  lucide@1.74.0:
+    resolution: {integrity: sha512-jFklpbqbUN+lZtOVHojkJ+AL5AHF9F6ShtedFIcmEsdDATVzdxlHYnTRZu4aexmJ8DrrneXaDJpaRTxlrclMJQ==}
 
   magic-string@1.4.5:
     resolution: {integrity: sha512-oLLC2+YvQUfAa+vxoufE/yc1icb87M9iXIRqAoR/2EhE/8cb3SF/+Gi0c2By1B+5Vz2e2vQtUvHiu1+63Znh+w==}
@@ -1983,7 +1983,7 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
 
-  lucide@1.73.0: {}
+  lucide@1.74.0: {}
 
   magic-string@1.4.5:
     dependencies:
