@@ -39,7 +39,7 @@
   "dependencies": {
     "@actions/core": "^3.0.1",
     "@actions/exec": "^3.0.0",
-    "lucide": "1.74.0",
+    "lucide": "1.76.0",
     "simple-icons": "^16.27.0"
   },
   "devDependencies": {
